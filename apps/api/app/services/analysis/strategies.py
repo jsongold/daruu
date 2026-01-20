@@ -70,14 +70,17 @@ class BaseAnalysisStrategy:
             "messages": [
                 {
                     "role": "system",
-                    "content": "You return JSON only. Do not include markdown or extra text.",
+                    "content": "You are a helpful assistant that returns valid JSON only. Do not include markdown or extra text. Always return pure JSON.",
                 },
                 {"role": "user", "content": content},
             ],
             "temperature": 0.2,
-            "response_format": {"type": "json_object"},
             "max_tokens": 4096,
         }
+
+        # Only use structured output for models that support it
+        if model in ("gpt-4", "gpt-4-turbo", "gpt-4o", "gpt-4o-2024-05-13"):
+            payload["response_format"] = {"type": "json_object"}
 
         if DEBUG:
             logger.debug(f"%s: %s" % ("llm_request_payload.json", json.dumps({
