@@ -24,21 +24,6 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 
-def _write_debug_file(filename: str, data: Any) -> None:
-    """Write debug data to /tmp directory."""
-    if not DEBUG:
-        return
-    try:
-        filepath = f"/tmp/{filename}"
-        with open(filepath, 'w', encoding='utf-8') as f:
-            if isinstance(data, str):
-                f.write(data)
-            else:
-                json.dump(data, f, ensure_ascii=False, indent=2, default=str)
-        logger.info(f"DEBUG: Wrote {filename}")
-    except Exception as e:
-        logger.error(f"Failed to write debug file {filename}: {e}")
-
 
 @dataclass
 class PipelineResult:
@@ -69,21 +54,14 @@ def check_acroform(pdf_bytes: bytes) -> PipelineResult:
         fields = reader.get_fields()
 
         if DEBUG:
-            _write_debug_file("01_acroform_check.json", {
-                "step": "AcroForm Check",
-                "pdf_size_bytes": len(pdf_bytes),
-                "num_pages": len(reader.pages),
-                "has_acroform": fields is not None and len(fields) > 0,
-                "raw_fields_count": len(fields) if fields else 0,
-                "field_names": list(fields.keys()) if fields else []
-            })
+            logger.debug(f"AcroForm Check: pdf_size={len(pdf_bytes)}, pages={len(reader.pages)}, has_acroform={fields is not None and len(fields) > 0}, field_count={len(fields) if fields else 0}, fields={list(fields.keys()) if fields else []}")
 
         if fields and len(fields) > 0:
             # Has AcroForm - extract directly
             template = _acroform_to_template(reader)
             if template and template['fields']:
                 if DEBUG:
-                    _write_debug_file("02_acroform_extracted_template.json", template)
+                    logger.debug(f"AcroForm extracted template: {json.dumps(template, default=str)}")
 
                 logger.info(f"AcroForm extraction success: {len(template['fields'])} fields")
                 return PipelineResult(
@@ -95,7 +73,7 @@ def check_acroform(pdf_bytes: bytes) -> PipelineResult:
     except Exception as e:
         logger.error(f"Error in check_acroform: {e}", exc_info=True)
         if DEBUG:
-            _write_debug_file("02_acroform_error.json", {"error": str(e), "type": type(e).__name__})
+            logger.debug(f"AcroForm error: {type(e).__name__}: {str(e)}")
 
     # No AcroForm or extraction failed - continue to next step
     logger.info("No AcroForm fields found - continuing to next step")
@@ -116,12 +94,13 @@ def check_visual_structure(pdf_bytes: bytes) -> PipelineResult:
     from app.services.pdf_render import render_pdf_pages
 
     logger.info("Checking visual structure...")
-    pages = render_pdf_pages(pdf_bytes, dpi=150, include_text_blocks=False)
+    # Optimize: Only render first page for structure check (cache hit on subsequent full renders)
+    pages = render_pdf_pages(pdf_bytes, dpi=150, include_text_blocks=False, page_indices=[0])
 
     if not pages:
         logger.warning("No pages found in PDF")
         if DEBUG:
-            _write_debug_file("03_visual_structure_error.json", {"error": "No pages found"})
+            logger.debug("Visual structure error: No pages found")
         return PipelineResult(
             success=False,
             reason="No pages found",
@@ -133,17 +112,7 @@ def check_visual_structure(pdf_bytes: bytes) -> PipelineResult:
     anchor_count = len(first_page.visual_anchors or [])
 
     if DEBUG:
-        _write_debug_file("03_visual_structure_analysis.json", {
-            "step": "Visual Structure Check",
-            "num_pages": len(pages),
-            "first_page_analysis": {
-                "page_index": first_page.index,
-                "width": first_page.width,
-                "height": first_page.height,
-                "visual_anchors_count": anchor_count,
-                "visual_anchors": first_page.visual_anchors or []
-            }
-        })
+        logger.debug(f"Visual structure analysis: pages={len(pages)}, page_0_size=({first_page.width}x{first_page.height}), anchors={anchor_count}, anchors_data={json.dumps(first_page.visual_anchors or [], default=str)}")
 
     MIN_ANCHORS = 15
 
@@ -172,7 +141,7 @@ def check_visual_structure(pdf_bytes: bytes) -> PipelineResult:
     )
 
 
-def classify_with_llm(pdf_bytes: bytes) -> PipelineResult:
+async def classify_with_llm(pdf_bytes: bytes) -> PipelineResult:
     """
     Step 3: Use LLM to classify if this is a form.
 
@@ -183,12 +152,13 @@ def classify_with_llm(pdf_bytes: bytes) -> PipelineResult:
     from app.services.analysis.strategies import DocumentClassifier
 
     logger.info("Running LLM classification...")
-    pages = render_pdf_pages(pdf_bytes, dpi=150, include_text_blocks=False)
+    # Optimize: Only render first page for classification (cache hit on subsequent full renders)
+    pages = render_pdf_pages(pdf_bytes, dpi=150, include_text_blocks=False, page_indices=[0])
 
     if not pages:
         logger.warning("No pages to classify")
         if DEBUG:
-            _write_debug_file("04_classification_error.json", {"error": "No pages to classify"})
+            logger.debug("Classification error: No pages to classify")
         return PipelineResult(
             success=False,
             reason="No pages to classify",
@@ -196,14 +166,10 @@ def classify_with_llm(pdf_bytes: bytes) -> PipelineResult:
         )
 
     classifier = DocumentClassifier()
-    is_form = classifier.classify(pages[0])
+    is_form = await classifier.classify(pages[0])
 
     if DEBUG:
-        _write_debug_file("04_classification_result.json", {
-            "step": "LLM Classification",
-            "is_form": is_form,
-            "page_index": pages[0].index
-        })
+        logger.debug(f"LLM Classification result: is_form={is_form}, page_index={pages[0].index}")
 
     if not is_form:
         # LLM says not a form
@@ -243,21 +209,8 @@ async def extract_fields_vision(pdf_bytes: bytes, strategy: str = "hybrid") -> P
     pages = render_pdf_pages(pdf_bytes, dpi=150, include_text_blocks=True)
 
     if DEBUG:
-        _write_debug_file("05_vision_extraction_start.json", {
-            "step": "Vision Field Extraction",
-            "strategy": strategy,
-            "num_pages": len(pages),
-            "pages_info": [
-                {
-                    "index": p.index,
-                    "width": p.width,
-                    "height": p.height,
-                    "text_blocks_count": len(p.text_blocks) if p.text_blocks else 0,
-                    "visual_anchors_count": len(p.visual_anchors) if p.visual_anchors else 0
-                }
-                for p in pages
-            ]
-        })
+        pages_info = [f"page_{p.index}({p.width}x{p.height},text_blocks={len(p.text_blocks) if p.text_blocks else 0},anchors={len(p.visual_anchors) if p.visual_anchors else 0})" for p in pages]
+        logger.debug(f"Vision extraction start: strategy={strategy}, pages={pages_info}")
 
     # Choose strategy
     if strategy == "vision_low_res":
@@ -272,11 +225,7 @@ async def extract_fields_vision(pdf_bytes: bytes, strategy: str = "hybrid") -> P
     template_dict = template.model_dump()
 
     if DEBUG:
-        _write_debug_file("05_vision_extraction_complete.json", {
-            "step": "Vision Field Extraction",
-            "fields_count": len(template.fields),
-            "template": template_dict
-        })
+        logger.debug(f"Vision extraction complete: fields_count={len(template.fields)}, template={json.dumps(template_dict, default=str)}")
 
     logger.info(f"Vision extraction complete: {len(template.fields)} fields found")
     return PipelineResult(
@@ -308,11 +257,7 @@ async def analyze_pdf(pdf_bytes: bytes, strategy: str = "auto") -> dict[str, Any
     logger.info(f"Starting PDF analysis pipeline - strategy: {strategy}")
 
     if DEBUG:
-        _write_debug_file("00_pipeline_start.json", {
-            "strategy": strategy,
-            "pdf_size_bytes": len(pdf_bytes),
-            "timestamp": datetime.now().isoformat()
-        })
+        logger.debug(f"Pipeline start: strategy={strategy}, pdf_size={len(pdf_bytes)} bytes")
 
     steps: list[tuple[str, Callable[[bytes], PipelineResult | Any]]] = []
 
@@ -333,7 +278,7 @@ async def analyze_pdf(pdf_bytes: bytes, strategy: str = "auto") -> dict[str, Any
         steps = [
             ("AcroForm Extraction", check_acroform),
             ("Visual Structure Check", check_visual_structure),
-            ("LLM Classification", lambda b: classify_with_llm(b)),
+            ("LLM Classification", classify_with_llm),
             ("Vision Field Extraction", lambda b: extract_fields_vision(b, "hybrid")),
         ]
 
@@ -373,7 +318,7 @@ async def analyze_pdf(pdf_bytes: bytes, strategy: str = "auto") -> dict[str, Any
                     current_template = enriched_template.model_dump()
 
                     if DEBUG:
-                        _write_debug_file("06_enrichment_complete.json", current_template)
+                        logger.debug(f"Enrichment complete: {json.dumps(current_template, default=str)}")
 
                     logger.info("AcroForm enrichment successful")
                     # After successful enrichment, we are DONE for AcroForm
@@ -381,17 +326,14 @@ async def analyze_pdf(pdf_bytes: bytes, strategy: str = "auto") -> dict[str, Any
                 except Exception as e:
                     logger.error(f"Failed to enrich AcroForm: {e}", exc_info=True)
                     if DEBUG:
-                        _write_debug_file("06_enrichment_error.json", {
-                            "error": str(e),
-                            "type": type(e).__name__
-                        })
+                        logger.debug(f"Enrichment error: {type(e).__name__}: {str(e)}")
                     # Return non-enriched version if enrichment fails
                     return current_template
 
             # For other steps (like Vision), we return immediately
             logger.info(f"Returning template from step '{step_name}'")
             if DEBUG:
-                _write_debug_file("06_final_template.json", current_template)
+                logger.debug(f"Final template: {json.dumps(current_template, default=str)}")
             return current_template
 
         if not result.should_continue:
@@ -405,7 +347,7 @@ async def analyze_pdf(pdf_bytes: bytes, strategy: str = "auto") -> dict[str, Any
                 "description": f"Pipeline stopped at: {step_name} - {result.reason}"
             }
             if DEBUG:
-                _write_debug_file("06_final_template.json", final_template)
+                logger.debug(f"Final template (stopped): {json.dumps(final_template, default=str)}")
             return final_template
 
     # Should never reach here, but fallback
@@ -417,7 +359,7 @@ async def analyze_pdf(pdf_bytes: bytes, strategy: str = "auto") -> dict[str, Any
         "description": "Pipeline completed without result"
     }
     if DEBUG:
-        _write_debug_file("06_final_template.json", final_template)
+        logger.debug(f"Final template (no result): {json.dumps(final_template, default=str)}")
     return final_template
 
 

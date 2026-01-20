@@ -1,0 +1,664 @@
+{
+    "enrichedFields": [
+        {
+            "id": "Text1",
+            "label": "あなたの氏名",
+            "section": "Taxpayer Information",
+            "notes": "Your name"
+        },
+        {
+            "id": "Text2",
+            "label": "フリガナ",
+            "section": "Taxpayer Information",
+            "notes": "Phonetic spelling of your name"
+        },
+        {
+            "id": "Text3",
+            "label": "生年月日",
+            "section": "Taxpayer Information",
+            "notes": "Date of birth"
+        },
+        {
+            "id": "Text4",
+            "label": "住民票の住所",
+            "section": "Taxpayer Information",
+            "notes": "Address on resident record"
+        },
+        {
+            "id": "Text5",
+            "label": "配偶者の氏名",
+            "section": "Spouse Information",
+            "notes": "Spouse's name"
+        },
+        {
+            "id": "Text6",
+            "label": "年",
+            "section": "Date Information",
+            "notes": "Year"
+        },
+        {
+            "id": "Text7",
+            "label": "月",
+            "section": "Date Information",
+            "notes": "Month"
+        },
+        {
+            "id": "Text8",
+            "label": "日",
+            "section": "Date Information",
+            "notes": "Day"
+        },
+        {
+            "id": "Text10",
+            "label": "非課税者の氏名",
+            "section": "Exemption Information",
+            "notes": "Name of non-taxable person"
+        },
+        {
+            "id": "Text11",
+            "label": "年",
+            "section": "Date Information",
+            "notes": "Year"
+        },
+        {
+            "id": "Text12",
+            "label": "月",
+            "section": "Date Information",
+            "notes": "Month"
+        },
+        {
+            "id": "Text13",
+            "label": "日",
+            "section": "Date Information",
+            "notes": "Day"
+        },
+        {
+            "id": "Text14",
+            "label": "氏名",
+            "section": "Taxpayer Information",
+            "notes": "Name"
+        },
+        {
+            "id": "Text15",
+            "label": "フリガナ",
+            "section": "Taxpayer Information",
+            "notes": "Phonetic spelling of name"
+        },
+        {
+            "id": "Text16",
+            "label": "個人番号",
+            "section": "Taxpayer Information",
+            "notes": "Personal identification number"
+        },
+        {
+            "id": "Text17",
+            "label": "生年月日",
+            "section": "Taxpayer Information",
+            "notes": "Date of birth"
+        },
+        {
+            "id": "Text18",
+            "label": "住民票の住所",
+            "section": "Taxpayer Information",
+            "notes": "Address on resident record"
+        },
+        {
+            "id": "Text19",
+            "label": "年",
+            "section": "Date Information",
+            "notes": "Year"
+        },
+        {
+            "id": "Text20",
+            "label": "月",
+            "section": "Date Information",
+            "notes": "Month"
+        },
+        {
+            "id": "Text21",
+            "label": "日",
+            "section": "Date Information",
+            "notes": "Day"
+        },
+        {
+            "id": "Text22",
+            "label": "配偶者の氏名",
+            "section": "Spouse Information",
+            "notes": "Spouse's name"
+        },
+        {
+            "id": "Text23",
+            "label": "あなたの氏名",
+            "section": "Taxpayer Information",
+            "notes": "Your name"
+        },
+        {
+            "id": "Text24",
+            "label": "フリガナ",
+            "section": "Taxpayer Information",
+            "notes": "Phonetic spelling of your name"
+        },
+        {
+            "id": "Text25",
+            "label": "年",
+            "section": "Date Information",
+            "notes": "Year"
+        },
+        {
+            "id": "Text26",
+            "label": "月",
+            "section": "Date Information",
+            "notes": "Month"
+        },
+        {
+            "id": "Text27",
+            "label": "日",
+            "section": "Date Information",
+            "notes": "Day"
+        },
+        {
+            "id": "Text28",
+            "label": "配偶者の氏名",
+            "section": "Spouse Information",
+            "notes": "Spouse's name"
+        },
+        {
+            "id": "Text29",
+            "label": "年",
+            "section": "Date Information",
+            "notes": "Year"
+        },
+        {
+            "id": "Text30",
+            "label": "月",
+            "section": "Date Information",
+            "notes": "Month"
+        },
+        {
+            "id": "Text31",
+            "label": "日",
+            "section": "Date Information",
+            "notes": "Day"
+        },
+        {
+            "id": "Text32",
+            "label": "配偶者の氏名",
+            "section": "Spouse Information",
+            "notes": "Spouse's name"
+        },
+        {
+            "id": "Text33",
+            "label": "あなたの氏名",
+            "section": "Taxpayer Information",
+            "notes": "Your name"
+        },
+        {
+            "id": "Text34",
+            "label": "フリガナ",
+            "section": "Taxpayer Information",
+            "notes": "Phonetic spelling of your name"
+        },
+        {
+            "id": "Text35",
+            "label": "年",
+            "section": "Date Information",
+            "notes": "Year"
+        },
+        {
+            "id": "Text36",
+            "label": "月",
+            "section": "Date Information",
+            "notes": "Month"
+        },
+        {
+            "id": "Text37",
+            "label": "日",
+            "section": "Date Information",
+            "notes": "Day"
+        },
+        {
+            "id": "Text38",
+            "label": "配偶者の氏名",
+            "section": "Spouse Information",
+            "notes": "Spouse's name"
+        },
+        {
+            "id": "Text39",
+            "label": "年",
+            "section": "Date Information",
+            "notes": "Year"
+        },
+        {
+            "id": "Text40",
+            "label": "月",
+            "section": "Date Information",
+            "notes": "Month"
+        },
+        {
+            "id": "Text41",
+            "label": "日",
+            "section": "Date Information",
+            "notes": "Day"
+        },
+        {
+            "id": "Text42",
+            "label": "配偶者の氏名",
+            "section": "Spouse Information",
+            "notes": "Spouse's name"
+        },
+        {
+            "id": "Text43",
+            "label": "あなたの氏名",
+            "section": "Taxpayer Information",
+            "notes": "Your name"
+        },
+        {
+            "id": "Text44",
+            "label": "フリガナ",
+            "section": "Taxpayer Information",
+            "notes": "Phonetic spelling of your name"
+        },
+        {
+            "id": "Text45",
+            "label": "年",
+            "section": "Date Information",
+            "notes": "Year"
+        },
+        {
+            "id": "Text46",
+            "label": "月",
+            "section": "Date Information",
+            "notes": "Month"
+        },
+        {
+            "id": "Text47",
+            "label": "日",
+            "section": "Date Information",
+            "notes": "Day"
+        },
+        {
+            "id": "Text48",
+            "label": "配偶者の氏名",
+            "section": "Spouse Information",
+            "notes": "Spouse's name"
+        },
+        {
+            "id": "Text49",
+            "label": "年",
+            "section": "Date Information",
+            "notes": "Year"
+        },
+        {
+            "id": "Text50",
+            "label": "月",
+            "section": "Date Information",
+            "notes": "Month"
+        },
+        {
+            "id": "Text51",
+            "label": "日",
+            "section": "Date Information",
+            "notes": "Day"
+        },
+        {
+            "id": "Text52",
+            "label": "配偶者の氏名",
+            "section": "Spouse Information",
+            "notes": "Spouse's name"
+        },
+        {
+            "id": "Text53",
+            "label": "あなたの氏名",
+            "section": "Taxpayer Information",
+            "notes": "Your name"
+        },
+        {
+            "id": "Text54",
+            "label": "フリガナ",
+            "section": "Taxpayer Information",
+            "notes": "Phonetic spelling of your name"
+        },
+        {
+            "id": "Text55",
+            "label": "年",
+            "section": "Date Information",
+            "notes": "Year"
+        },
+        {
+            "id": "Text56",
+            "label": "月",
+            "section": "Date Information",
+            "notes": "Month"
+        },
+        {
+            "id": "Text57",
+            "label": "日",
+            "section": "Date Information",
+            "notes": "Day"
+        },
+        {
+            "id": "Text58",
+            "label": "配偶者の氏名",
+            "section": "Spouse Information",
+            "notes": "Spouse's name"
+        },
+        {
+            "id": "Text59",
+            "label": "年",
+            "section": "Date Information",
+            "notes": "Year"
+        },
+        {
+            "id": "Text60",
+            "label": "月",
+            "section": "Date Information",
+            "notes": "Month"
+        },
+        {
+            "id": "Text61",
+            "label": "日",
+            "section": "Date Information",
+            "notes": "Day"
+        },
+        {
+            "id": "Text62",
+            "label": "配偶者の氏名",
+            "section": "Spouse Information",
+            "notes": "Spouse's name"
+        },
+        {
+            "id": "Text63",
+            "label": "あなたの氏名",
+            "section": "Taxpayer Information",
+            "notes": "Your name"
+        },
+        {
+            "id": "Text64",
+            "label": "フリガナ",
+            "section": "Taxpayer Information",
+            "notes": "Phonetic spelling of your name"
+        },
+        {
+            "id": "Text65",
+            "label": "年",
+            "section": "Date Information",
+            "notes": "Year"
+        },
+        {
+            "id": "Text66",
+            "label": "月",
+            "section": "Date Information",
+            "notes": "Month"
+        },
+        {
+            "id": "Text67",
+            "label": "日",
+            "section": "Date Information",
+            "notes": "Day"
+        },
+        {
+            "id": "Text68",
+            "label": "配偶者の氏名",
+            "section": "Spouse Information",
+            "notes": "Spouse's name"
+        },
+        {
+            "id": "Text69",
+            "label": "あなたの氏名",
+            "section": "Taxpayer Information",
+            "notes": "Your name"
+        },
+        {
+            "id": "Text70",
+            "label": "フリガナ",
+            "section": "Taxpayer Information",
+            "notes": "Phonetic spelling of your name"
+        },
+        {
+            "id": "Text71",
+            "label": "年",
+            "section": "Date Information",
+            "notes": "Year"
+        },
+        {
+            "id": "Text72",
+            "label": "月",
+            "section": "Date Information",
+            "notes": "Month"
+        },
+        {
+            "id": "Text73",
+            "label": "日",
+            "section": "Date Information",
+            "notes": "Day"
+        },
+        {
+            "id": "Text74",
+            "label": "配偶者の氏名",
+            "section": "Spouse Information",
+            "notes": "Spouse's name"
+        },
+        {
+            "id": "Text75",
+            "label": "年",
+            "section": "Date Information",
+            "notes": "Year"
+        },
+        {
+            "id": "Text76",
+            "label": "月",
+            "section": "Date Information",
+            "notes": "Month"
+        },
+        {
+            "id": "Text77",
+            "label": "日",
+            "section": "Date Information",
+            "notes": "Day"
+        },
+        {
+            "id": "Text78",
+            "label": "配偶者の氏名",
+            "section": "Spouse Information",
+            "notes": "Spouse's name"
+        },
+        {
+            "id": "Text79",
+            "label": "年",
+            "section": "Date Information",
+            "notes": "Year"
+        },
+        {
+            "id": "Text80",
+            "label": "月",
+            "section": "Date Information",
+            "notes": "Month"
+        },
+        {
+            "id": "Text81",
+            "label": "日",
+            "section": "Date Information",
+            "notes": "Day"
+        },
+        {
+            "id": "Text82",
+            "label": "配偶者の氏名",
+            "section": "Spouse Information",
+            "notes": "Spouse's name"
+        },
+        {
+            "id": "Text83",
+            "label": "あなたの氏名",
+            "section": "Taxpayer Information",
+            "notes": "Your name"
+        },
+        {
+            "id": "Text84",
+            "label": "フリガナ",
+            "section": "Taxpayer Information",
+            "notes": "Phonetic spelling of your name"
+        },
+        {
+            "id": "Text85",
+            "label": "年",
+            "section": "Date Information",
+            "notes": "Year"
+        },
+        {
+            "id": "Text86",
+            "label": "月",
+            "section": "Date Information",
+            "notes": "Month"
+        },
+        {
+            "id": "Text87",
+            "label": "日",
+            "section": "Date Information",
+            "notes": "Day"
+        },
+        {
+            "id": "Text88",
+            "label": "配偶者の氏名",
+            "section": "Spouse Information",
+            "notes": "Spouse's name"
+        },
+        {
+            "id": "Text89",
+            "label": "年",
+            "section": "Date Information",
+            "notes": "Year"
+        },
+        {
+            "id": "Text90",
+            "label": "月",
+            "section": "Date Information",
+            "notes": "Month"
+        },
+        {
+            "id": "Text91",
+            "label": "日",
+            "section": "Date Information",
+            "notes": "Day"
+        },
+        {
+            "id": "Text92",
+            "label": "配偶者の氏名",
+            "section": "Spouse Information",
+            "notes": "Spouse's name"
+        },
+        {
+            "id": "Text93",
+            "label": "年",
+            "section": "Date Information",
+            "notes": "Year"
+        },
+        {
+            "id": "Text94",
+            "label": "月",
+            "section": "Date Information",
+            "notes": "Month"
+        },
+        {
+            "id": "Text95",
+            "label": "日",
+            "section": "Date Information",
+            "notes": "Day"
+        },
+        {
+            "id": "Text96",
+            "label": "配偶者の氏名",
+            "section": "Spouse Information",
+            "notes": "Spouse's name"
+        },
+        {
+            "id": "Text97",
+            "label": "年",
+            "section": "Date Information",
+            "notes": "Year"
+        },
+        {
+            "id": "Text98",
+            "label": "月",
+            "section": "Date Information",
+            "notes": "Month"
+        },
+        {
+            "id": "Text99",
+            "label": "日",
+            "section": "Date Information",
+            "notes": "Day"
+        },
+        {
+            "id": "Text100",
+            "label": "配偶者の氏名",
+            "section": "Spouse Information",
+            "notes": "Spouse's name"
+        },
+        {
+            "id": "Text101",
+            "label": "年",
+            "section": "Date Information",
+            "notes": "Year"
+        },
+        {
+            "id": "Text102",
+            "label": "月",
+            "section": "Date Information",
+            "notes": "Month"
+        },
+        {
+            "id": "Text103",
+            "label": "日",
+            "section": "Date Information",
+            "notes": "Day"
+        },
+        {
+            "id": "Text104",
+            "label": "配偶者の氏名",
+            "section": "Spouse Information",
+            "notes": "Spouse's name"
+        },
+        {
+            "id": "Text105",
+            "label": "年",
+            "section": "Date Information",
+            "notes": "Year"
+        },
+        {
+            "id": "Text106",
+            "label": "月",
+            "section": "Date Information",
+            "notes": "Month"
+        },
+        {
+            "id": "Text107",
+            "label": "日",
+            "section": "Date Information",
+            "notes": "Day"
+        },
+        {
+            "id": "Text108",
+            "label": "配偶者の氏名",
+            "section": "Spouse Information",
+            "notes": "Spouse's name"
+        },
+        {
+            "id": "Text109",
+            "label": "年",
+            "section": "Date Information",
+            "notes": "Year"
+        },
+        {
+            "id": "Text110",
+            "label": "月",
+            "section": "Date Information",
+            "notes": "Month"
+        },
+        {
+            "id": "Text111",
+            "label": "日",
+            "section": "Date Information",
+            "notes": "Day"
+        }
+    ]
+}

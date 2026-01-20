@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import base64
+import logging
 from dataclasses import dataclass
 from io import BytesIO
 from typing import Any
 
 from pypdf import PdfReader
+
+from app.services.cache import get_cached_render, set_cached_render
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -19,16 +24,42 @@ class RenderedPage:
 
 
 def render_pdf_pages(
-    pdf_bytes: bytes, *, dpi: int = 150, include_text_blocks: bool = True
+    pdf_bytes: bytes,
+    *,
+    dpi: int = 150,
+    include_text_blocks: bool = True,
+    page_indices: list[int] | None = None,
 ) -> list[RenderedPage]:
+    """Render PDF pages with automatic caching."""
+    # Check cache first
+    cached = get_cached_render(pdf_bytes, page_indices, dpi, include_text_blocks)
+    if cached is not None:
+        logger.info("Cache HIT: %d pages (dpi=%d)", len(cached), dpi)
+        return cached
+
+    logger.info(
+        "Cache MISS: Rendering %s pages (dpi=%d)",
+        "all" if page_indices is None else str(len(page_indices)),
+        dpi,
+    )
+
     try:
         import fitz  # type: ignore[import-not-found]
     except ImportError:
-        return _render_with_pypdf(pdf_bytes)
+        result = _render_with_pypdf(pdf_bytes)
+        set_cached_render(pdf_bytes, page_indices, dpi, include_text_blocks, result)
+        return result
 
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+
+    # Determine which pages to render
+    if page_indices is None:
+        pages_to_render = range(doc.page_count)
+    else:
+        pages_to_render = page_indices
+
     pages: list[RenderedPage] = []
-    for page_index in range(doc.page_count):
+    for page_index in pages_to_render:
         page = doc.load_page(page_index)
         pixmap = page.get_pixmap(dpi=dpi, alpha=False)
         png_bytes = pixmap.tobytes("png")
@@ -90,6 +121,9 @@ def render_pdf_pages(
                 visual_anchors=visual_anchors,
             )
         )
+
+    # Cache before returning
+    set_cached_render(pdf_bytes, page_indices, dpi, include_text_blocks, pages)
     return pages
 
 

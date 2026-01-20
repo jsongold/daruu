@@ -201,164 +201,175 @@ class BaseAnalysisStrategy:
         raise RuntimeError(f"LLM output failed schema validation: {last_error}")
 
 
-class HybridStrategy(BaseAnalysisStrategy, AnalysisStrategy):
-    """
-    Standard strategy: High-res images + text blocks (if available).
-    Analyzes all pages in one context window.
-    """
-
-
-
 class AcroFormEnricher(BaseAnalysisStrategy):
     """
     Enriches existing AcroForm fields with semantic labels using Vision LLM.
-    Optimized for large forms with chunking support.
+    Optimized for large forms with chunking support and concurrent processing.
     """
 
     async def enrich(self, template: DraftTemplate, pages: list[RenderedPage]) -> DraftTemplate:
         from app.services.analysis.prompts import build_enrichment_prompt
-        
+
         api_key, base_url, model = self._get_api_config()
-        
-        # We enrich page by page
+
+        # Set up concurrent processing with semaphore
+        semaphore = asyncio.Semaphore(OPENAI_MAX_CONCURRENT_REQUESTS)
+        chunk_tasks = []
+
+        logger.info(f"AcroFormEnricher: Starting concurrent enrichment with max {OPENAI_MAX_CONCURRENT_REQUESTS} concurrent requests")
+
+        # We enrich page by page, collecting tasks for concurrent processing
         for page in pages:
             # Filter fields on this page
             page_fields = [f for f in template.fields if f.placement.page_index == page.index]
             if not page_fields:
                 continue
-            
+
             # For large forms (>50 fields), process in chunks to avoid token limits
             CHUNK_SIZE = 50
             if len(page_fields) > CHUNK_SIZE:
                 logger.info(f"Page {page.index} has {len(page_fields)} fields, processing in chunks of {CHUNK_SIZE}")
-                
+
                 for chunk_idx in range(0, len(page_fields), CHUNK_SIZE):
                     chunk = page_fields[chunk_idx:chunk_idx + CHUNK_SIZE]
-                    await self._enrich_chunk(chunk, page, api_key, base_url, model)
+                    chunk_tasks.append(
+                        self._enrich_chunk(chunk, page, api_key, base_url, model, semaphore)
+                    )
             else:
                 # Process all fields at once for smaller forms
-                await self._enrich_chunk(page_fields, page, api_key, base_url, model)
-                
+                chunk_tasks.append(
+                    self._enrich_chunk(page_fields, page, api_key, base_url, model, semaphore)
+                )
+
+        # Execute all chunk enrichment tasks concurrently
+        if chunk_tasks:
+            await asyncio.gather(*chunk_tasks, return_exceptions=True)
+
         return template
-    
-    async def _enrich_chunk(self, fields: list, page, api_key: str, base_url: str, model: str):
-        """Enrich a chunk of fields."""
+
+    async def _enrich_chunk(
+        self,
+        fields: list,
+        page: RenderedPage,
+        api_key: str,
+        base_url: str,
+        model: str,
+        semaphore: asyncio.Semaphore,
+    ):
+        """Enrich a chunk of fields concurrently."""
         from app.services.analysis.prompts import build_enrichment_prompt
-        import os
-        from datetime import datetime
-        
-        DEBUG = os.getenv("DEBUG", "false").lower() == "true"
-        
-        # Prepare simplified data for LLM
-        known_fields = []
-        for f in fields:
-            known_fields.append({
-                "id": f.id,
-                "x": round(f.placement.x, 1),
-                "y": round(f.placement.y, 1),
-                "width": round(f.placement.max_width, 1),
-                "height": round(f.placement.height or 20, 1)
-            })
-        
-        if DEBUG:
-            # Write input data to debug file
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            debug_file = f"/tmp/acroform_enrichment_input_page{page.index}_{timestamp}.json"
-            with open(debug_file, 'w', encoding='utf-8') as f:
-                json.dump({
-                    "page_index": page.index,
-                    "page_size": {"width": page.width, "height": page.height},
-                    "field_count": len(fields),
-                    "fields": known_fields
-                }, f, ensure_ascii=False, indent=2)
-            logger.info(f"DEBUG: Wrote input data to {debug_file}")
-        
-        prompt = build_enrichment_prompt(
-            page.index, page.width, page.height, json.dumps(known_fields, ensure_ascii=False)
-        )
-        
-        try:
-            response_text = self._call_openai(
-                base_url=base_url,
-                api_key=api_key,
-                model=model,
-                prompt=prompt,
-                pages=[page],
-                detail="high"
-            )
-            
-            logger.info(f"Enrichment Response (Page {page.index}, {len(fields)} fields): {len(response_text)} chars")
-            
-            if DEBUG:
-                # Write raw LLM response to debug file
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                debug_file = f"/tmp/acroform_enrichment_response_page{page.index}_{timestamp}.json"
-                with open(debug_file, 'w', encoding='utf-8') as f:
-                    f.write(response_text)
-                logger.info(f"DEBUG: Wrote LLM response to {debug_file}")
-            
-            # Parse enrichment result with error recovery
+
+        async with semaphore:
             try:
-                enriched_items = json.loads(response_text)
-            except json.JSONDecodeError as e:
-                logger.warning(f"JSON parse error: {e}. Attempting repair...")
-                # Try to repair by completing the JSON array
-                response_text = response_text.strip()
-                if not response_text.endswith(']'):
-                    # Find last complete object
-                    last_brace = response_text.rfind('}')
-                    if last_brace > 0:
-                        response_text = response_text[:last_brace+1] + ']'
-                        enriched_items = json.loads(response_text)
-                        logger.info(f"Repaired JSON, recovered {len(enriched_items)} items")
+                # Prepare simplified data for LLM
+                known_fields = []
+                for f in fields:
+                    known_fields.append({
+                        "id": f.id,
+                        "x": round(f.placement.x, 1),
+                        "y": round(f.placement.y, 1),
+                        "width": round(f.placement.max_width, 1),
+                        "height": round(f.placement.height or 20, 1)
+                    })
+
+                if DEBUG:
+                    # Write input data to debug file
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    debug_file = f"/tmp/acroform_enrichment_input_page{page.index}_{timestamp}.json"
+                    with open(debug_file, 'w', encoding='utf-8') as f:
+                        json.dump({
+                            "page_index": page.index,
+                            "page_size": {"width": page.width, "height": page.height},
+                            "field_count": len(fields),
+                            "fields": known_fields
+                        }, f, ensure_ascii=False, indent=2)
+                    logger.info(f"DEBUG: Wrote input data to {debug_file}")
+
+                prompt = build_enrichment_prompt(
+                    page.index, page.width, page.height, json.dumps(known_fields, ensure_ascii=False)
+                )
+
+                response_text = await self._call_openai(
+                    base_url=base_url,
+                    api_key=api_key,
+                    model=model,
+                    prompt=prompt,
+                    pages=[page],
+                    detail="high"
+                )
+
+                logger.info(f"Enrichment Response (Page {page.index}, {len(fields)} fields): {len(response_text)} chars")
+
+                if DEBUG:
+                    # Write raw LLM response to debug file
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    debug_file = f"/tmp/acroform_enrichment_response_page{page.index}_{timestamp}.json"
+                    with open(debug_file, 'w', encoding='utf-8') as f:
+                        f.write(response_text)
+                    logger.info(f"DEBUG: Wrote LLM response to {debug_file}")
+
+                # Parse enrichment result with error recovery
+                try:
+                    enriched_items = json.loads(response_text)
+                except json.JSONDecodeError as e:
+                    logger.warning(f"JSON parse error: {e}. Attempting repair...")
+                    # Try to repair by completing the JSON array
+                    response_text = response_text.strip()
+                    if not response_text.endswith(']'):
+                        # Find last complete object
+                        last_brace = response_text.rfind('}')
+                        if last_brace > 0:
+                            response_text = response_text[:last_brace+1] + ']'
+                            enriched_items = json.loads(response_text)
+                            logger.info(f"Repaired JSON, recovered {len(enriched_items)} items")
+                        else:
+                            raise
                     else:
                         raise
-                else:
-                    raise
-            
-            if isinstance(enriched_items, dict):
-                # Handle case where LLM wraps it in {"fields": [...]}
-                enriched_items = enriched_items.get("fields", []) or enriched_items.get("items", [])
-            
-            # Create a map for quick lookup  
-            enrichment_map = {item["id"]: item for item in enriched_items if "id" in item}
-            
-            # Apply enrichment
-            for f in fields:
-                if f.id in enrichment_map:
-                    item = enrichment_map[f.id]
-                    if item.get("label"):
-                        f.label = item["label"]
-                    if item.get("section"):
-                        f.section = item["section"]
-                    if item.get("notes"):
-                        f.notes = item["notes"]
-            
-            if DEBUG:
-                # Write final enriched fields to debug file
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                debug_file = f"/tmp/acroform_enrichment_final_page{page.index}_{timestamp}.json"
-                enriched_fields = []
+
+                if isinstance(enriched_items, dict):
+                    # Handle case where LLM wraps it in {"fields": [...]}
+                    enriched_items = enriched_items.get("fields", []) or enriched_items.get("items", [])
+
+                # Create a map for quick lookup
+                enrichment_map = {item["id"]: item for item in enriched_items if "id" in item}
+
+                # Apply enrichment
                 for f in fields:
-                    enriched_fields.append({
-                        "id": f.id,
-                        "label": f.label,
-                        "section": f.section,
-                        "notes": f.notes,
-                        "placement": {
-                            "x": f.placement.x,
-                            "y": f.placement.y,
-                            "width": f.placement.max_width,
-                            "height": f.placement.height
-                        }
-                    })
-                with open(debug_file, 'w', encoding='utf-8') as file:
-                    json.dump(enriched_fields, file, ensure_ascii=False, indent=2)
-                logger.info(f"DEBUG: Wrote final enriched data to {debug_file}")
-                        
-        except Exception as e:
-            logger.error(f"Failed to enrich chunk on page {page.index}: {e}")
-            # Continue best effort
+                    if f.id in enrichment_map:
+                        item = enrichment_map[f.id]
+                        if item.get("label"):
+                            f.label = item["label"]
+                        if item.get("section"):
+                            f.section = item["section"]
+                        if item.get("notes"):
+                            f.notes = item["notes"]
+
+                if DEBUG:
+                    # Write final enriched fields to debug file
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    debug_file = f"/tmp/acroform_enrichment_final_page{page.index}_{timestamp}.json"
+                    enriched_fields = []
+                    for f in fields:
+                        enriched_fields.append({
+                            "id": f.id,
+                            "label": f.label,
+                            "section": f.section,
+                            "notes": f.notes,
+                            "placement": {
+                                "x": f.placement.x,
+                                "y": f.placement.y,
+                                "width": f.placement.max_width,
+                                "height": f.placement.height
+                            }
+                        })
+                    with open(debug_file, 'w', encoding='utf-8') as file:
+                        json.dump(enriched_fields, file, ensure_ascii=False, indent=2)
+                    logger.info(f"DEBUG: Wrote final enriched data to {debug_file}")
+
+            except Exception as e:
+                logger.error(f"Failed to enrich chunk on page {page.index}: {e}")
+                # Continue best effort
 
 
 
@@ -703,15 +714,90 @@ class HybridStrategy(BaseAnalysisStrategy, AnalysisStrategy):
 
 class VisionLowResStrategy(BaseAnalysisStrategy, AnalysisStrategy):
     """
-    Vision-only strategy: Low-res images, 1 page at a time.
+    Vision-only strategy: Low-res images, processes pages concurrently.
     Uses a specialized prompt for form field detection.
     """
+
+    async def _process_single_page_lowres(
+        self,
+        page: RenderedPage,
+        api_key: str,
+        base_url: str,
+        model: str,
+        semaphore: asyncio.Semaphore,
+    ) -> tuple[int, list[Any] | None, Exception | None]:
+        """
+        Process a single page concurrently (low-res variant).
+
+        Returns:
+            (page_index, extracted_items, error) - If error is not None, items should be ignored
+        """
+        from app.services.analysis.prompts import build_vision_prompt
+
+        async with semaphore:
+            try:
+                logger.info(f"VisionLowResStrategy: Processing page {page.index}")
+
+                prompt = build_vision_prompt(page.index, page.width, page.height)
+
+                response_text = await self._call_openai(
+                    base_url=base_url,
+                    api_key=api_key,
+                    model=model,
+                    prompt=prompt,
+                    pages=[page],
+                    detail="low",
+                )
+                logger.info("LLM Response (Page %s): %d chars", page.index, len(response_text))
+
+                if DEBUG:
+                    _write_debug_file(f"vision_lowres_page_{page.index}_response.json", {
+                        "page_index": page.index,
+                        "page_size": {"width": page.width, "height": page.height},
+                        "response_length": len(response_text),
+                        "response": response_text
+                    })
+
+                # Expecting a JSON array of dicts
+                extracted_data = json.loads(response_text)
+                if isinstance(extracted_data, dict) and "fields" in extracted_data:
+                    # Handle case where LLM wraps it in {"fields": [...]}
+                    extracted_data = extracted_data["fields"]
+
+                if not isinstance(extracted_data, list):
+                    logger.warning("LLM returned non-list for page %s: %s", page.index, type(extracted_data))
+                    if DEBUG:
+                        _write_debug_file(f"vision_lowres_page_{page.index}_error.json", {
+                            "page_index": page.index,
+                            "error": f"Expected list, got {type(extracted_data).__name__}",
+                            "data_type": type(extracted_data).__name__
+                        })
+                    return (page.index, None, ValueError(f"Expected list, got {type(extracted_data).__name__}"))
+
+                if DEBUG:
+                    _write_debug_file(f"vision_lowres_page_{page.index}_parsed.json", {
+                        "page_index": page.index,
+                        "items_count": len(extracted_data),
+                        "items": extracted_data
+                    })
+
+                logger.info(f"VisionLowResStrategy: Extracted {len(extracted_data)} fields from page {page.index}")
+                return (page.index, extracted_data, None)
+
+            except Exception as e:
+                logger.error("Failed to parse/validate page %s: %s", page.index, e, exc_info=True)
+                if DEBUG:
+                    _write_debug_file(f"vision_lowres_page_{page.index}_parse_error.json", {
+                        "page_index": page.index,
+                        "error": str(e),
+                        "type": type(e).__name__
+                    })
+                return (page.index, None, e)
 
     async def analyze(
         self, pages: list[RenderedPage], schema_json: dict[str, Any]
     ) -> DraftTemplate:
         from app.models.template_schema import FieldDefinition, Placement, FontPolicy
-        from app.services.analysis.prompts import build_vision_prompt
 
         logger.info(f"VisionLowResStrategy: Starting analysis of {len(pages)} pages")
 
@@ -733,98 +819,64 @@ class VisionLowResStrategy(BaseAnalysisStrategy, AnalysisStrategy):
 
         all_fields: list[FieldDefinition] = []
 
-        for page in pages:
-            logger.info(f"VisionLowResStrategy: Processing page {page.index}")
+        # Set up concurrent processing with semaphore
+        semaphore = asyncio.Semaphore(OPENAI_MAX_CONCURRENT_REQUESTS)
 
-            prompt = build_vision_prompt(page.index, page.width, page.height)
+        logger.info(f"VisionLowResStrategy: Starting concurrent processing of {len(pages)} pages with max {OPENAI_MAX_CONCURRENT_REQUESTS} concurrent requests")
 
-            response_text = self._call_openai(
-                base_url=base_url,
-                api_key=api_key,
-                model=model,
-                prompt=prompt,
-                pages=[page],
-                detail="low",
-            )
-            logger.info("LLM Response (Page %s): %d chars", page.index, len(response_text))
+        # Create tasks for concurrent processing
+        tasks = [
+            self._process_single_page_lowres(page, api_key, base_url, model, semaphore)
+            for page in pages
+        ]
 
-            if DEBUG:
-                _write_debug_file(f"vision_lowres_page_{page.index}_response.json", {
-                    "page_index": page.index,
-                    "page_size": {"width": page.width, "height": page.height},
-                    "response_length": len(response_text),
-                    "response": response_text
-                })
+        # Execute all tasks concurrently
+        results = await asyncio.gather(*tasks, return_exceptions=True)
 
-            try:
-                # Expecting a JSON array of dicts
-                extracted_data = json.loads(response_text)
-                if isinstance(extracted_data, dict) and "fields" in extracted_data:
-                    # Handle case where LLM wraps it in {"fields": [...]}
-                    extracted_data = extracted_data["fields"]
+        # Process results in order (preserving page order)
+        for result in results:
+            if isinstance(result, Exception):
+                logger.error(f"Task failed with exception: {result}")
+                continue
 
-                if not isinstance(extracted_data, list):
-                    logger.warning("LLM returned non-list for page %s: %s", page.index, type(extracted_data))
-                    if DEBUG:
-                        _write_debug_file(f"vision_lowres_page_{page.index}_error.json", {
-                            "page_index": page.index,
-                            "error": f"Expected list, got {type(extracted_data).__name__}",
-                            "data_type": type(extracted_data).__name__
-                        })
-                    continue
+            page_index, extracted_data, error = result
+            if error or extracted_data is None:
+                logger.warning(f"Page {page_index} had no items extracted")
+                continue
 
-                if DEBUG:
-                    _write_debug_file(f"vision_lowres_page_{page.index}_parsed.json", {
-                        "page_index": page.index,
-                        "items_count": len(extracted_data),
-                        "items": extracted_data
-                    })
+            for item in extracted_data:
+                # Map LLM output to FieldDefinition
+                # LLM output: id, label, page_index, x, y, w, h, kind, section
 
-                for item in extracted_data:
-                    # Map LLM output to FieldDefinition
-                    # LLM output: id, label, page_index, x, y, w, h, kind, section
+                kind_map = {
+                    "text": "string",
+                    "number": "string",
+                    "date": "string",
+                    "checkbox": "string",  # Schema only supports string currently
+                    "radio": "string",
+                    "signature": "string",
+                    "stamp": "string"
+                }
 
-                    kind_map = {
-                        "text": "string",
-                        "number": "string",
-                        "date": "string",
-                        "checkbox": "string",  # Schema only supports string currently
-                        "radio": "string",
-                        "signature": "string",
-                        "stamp": "string"
-                    }
+                field_type = kind_map.get(item.get("kind"), "string")
 
-                    field_type = kind_map.get(item.get("kind"), "string")
-
-                    # Convert to FieldDefinition
-                    field_def = FieldDefinition(
-                        id=item.get("id"),
-                        key=item.get("id"),
-                        label=item.get("label"),
-                        type=field_type,
-                        required=False,  # Default to optional as prompt doesn't strictly detect requiredness yet
-                        placement=Placement(
-                            page_index=item.get("page_index", page.index),
-                            x=float(item.get("x", 0)),
-                            y=float(item.get("y", 0)),
-                            max_width=float(item.get("w", 100)),
-                            align="left",
-                            font_policy=FontPolicy(size=10, min_size=6),
-                        )
+                # Convert to FieldDefinition
+                field_def = FieldDefinition(
+                    id=item.get("id"),
+                    key=item.get("id"),
+                    label=item.get("label"),
+                    type=field_type,
+                    required=False,  # Default to optional as prompt doesn't strictly detect requiredness yet
+                    placement=Placement(
+                        page_index=item.get("page_index", page_index),
+                        x=float(item.get("x", 0)),
+                        y=float(item.get("y", 0)),
+                        max_width=float(item.get("w", 100)),
+                        align="left",
+                        font_policy=FontPolicy(size=10, min_size=6),
                     )
-                    all_fields.append(field_def)
-
-                logger.info(f"VisionLowResStrategy: Extracted {len(extracted_data)} fields from page {page.index}")
-
-            except Exception as e:
-                logger.error("Failed to parse/validate page %s: %s", page.index, e, exc_info=True)
-                if DEBUG:
-                    _write_debug_file(f"vision_lowres_page_{page.index}_parse_error.json", {
-                        "page_index": page.index,
-                        "error": str(e),
-                        "type": type(e).__name__
-                    })
-                # Continue best effort
+                )
+                all_fields.append(field_def)
 
         if DEBUG:
             _write_debug_file("vision_lowres_strategy_final.json", {
