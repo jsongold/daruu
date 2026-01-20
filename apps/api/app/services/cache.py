@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from contextvars import ContextVar
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from app.services.pdf_render import RenderedPage
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 # Cache key: (pdf_hash, page_indices_tuple, dpi, include_text_blocks)
 CacheKey = tuple[str, tuple[int, ...], int, bool]
-CacheValue = list[RenderedPage]
+CacheValue = list[Any]  # list[RenderedPage], but using Any to avoid circular import
 
 # Request-scoped cache storage (auto-isolated per async context)
 _render_cache: ContextVar[dict[CacheKey, CacheValue]] = ContextVar(
@@ -60,7 +60,7 @@ def get_cached_render(
     page_indices: list[int] | None,
     dpi: int,
     include_text_blocks: bool,
-) -> list[RenderedPage] | None:
+) -> list[Any] | None:
     """
     Retrieve cached rendered pages if available.
 
@@ -82,7 +82,7 @@ def set_cached_render(
     page_indices: list[int] | None,
     dpi: int,
     include_text_blocks: bool,
-    rendered_pages: list[RenderedPage],
+    rendered_pages: list[Any],
 ) -> None:
     """Store rendered pages in cache."""
     cache = _render_cache.get()
