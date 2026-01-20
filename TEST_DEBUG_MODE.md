@@ -1,6 +1,6 @@
 # Testing Debug Mode
 
-This guide shows how to test the debug mode functionality.
+This guide shows how to test and verify the debug mode functionality.
 
 ## Quick Test
 
@@ -23,82 +23,56 @@ DEBUG mode enabled - detailed output will be generated
 
 ### 3. Analyze a PDF in Another Terminal
 ```bash
-# Using curl with a sample PDF
 curl -X POST http://localhost:8000/analyze \
   -F "file=@path/to/form.pdf" \
   -F "strategy=auto" \
-  | jq '.'
+  | jq '.schema_json.fields | length'
 ```
 
-Or with Python:
-```python
-import requests
+### 4. Check Console Output
 
-with open('form.pdf', 'rb') as f:
-    response = requests.post(
-        'http://localhost:8000/analyze',
-        files={'file': f},
-        data={'strategy': 'auto'}
-    )
-
-print(response.json()['debug_info'])
+In Terminal 1, you should see debug messages:
 ```
-
-### 4. Check Debug Files
-```bash
-# List all created files
-ls -lht /tmp/*.json | head -20
-
-# View the final template
-jq . /tmp/06_final_template.json
-
-# View extracted fields
-jq '.fields[] | {id, label, placement}' /tmp/06_final_template.json
-
-# View LLM request
-cat /tmp/llm_request_payload.json | jq .
-
-# View LLM response
-cat /tmp/llm_response_1.json | jq '.response | fromjson'
+DEBUG - Pipeline start: strategy=auto, pdf_size=245789 bytes
+DEBUG - AcroForm Check: ...
+DEBUG - Final template: ...
 ```
 
 ## Comprehensive Test Checklist
 
 ### Pipeline Execution
-- [ ] Check `00_pipeline_start.json` exists with correct strategy
-- [ ] Verify correct pipeline stage files based on strategy
-- [ ] Confirm `06_final_template.json` is created
-- [ ] Check all files are valid JSON
+- [ ] See "Pipeline start" message with strategy
+- [ ] Pipeline stages execute in correct order
+- [ ] See "Final template" message with extracted data
 
 ### AcroForm Processing (if applicable)
-- [ ] `01_acroform_check.json` shows PDF structure
-- [ ] `02_acroform_extracted_template.json` contains field data
+- [ ] See "AcroForm Check" with detection results
+- [ ] See "AcroForm extracted template" with field data
 - [ ] Field count matches PDF form fields
 
 ### Visual Structure
-- [ ] `03_visual_structure_analysis.json` contains visual anchors
-- [ ] Anchor count is greater than minimum threshold
+- [ ] See "Visual structure analysis" with anchor count
+- [ ] Anchor count is reasonable for the PDF
 
 ### Classification
-- [ ] `04_classification_result.json` shows form decision
-- [ ] Classification matches expected result
+- [ ] See "LLM Classification result" with form decision
+- [ ] Classification matches expected result (true/false)
 
 ### Vision Extraction
-- [ ] `hybrid_page_*_extraction.json` or `vision_lowres_page_*_response.json` present
-- [ ] LLM responses contain valid JSON
-- [ ] Field count in final template is reasonable
+- [ ] See "HybridStrategy: Processing page X" messages
+- [ ] See extraction results for each page
+- [ ] See "Extracted N fields" counts
 
 ### LLM Communication
-- [ ] `llm_request_payload.json` contains prompt and metadata
-- [ ] `llm_response_*.json` contains LLM response
-- [ ] Response includes duration timing
-- [ ] No `llm_error_*.json` files (unless retries expected)
+- [ ] See "LLM request start" messages
+- [ ] See "LLM request success" with timing
+- [ ] Duration is reasonable (typically 1-5 seconds)
+- [ ] No "LLM request failed" messages (unless retries expected)
 
 ### Final Output
-- [ ] `06_final_template.json` is complete template
-- [ ] Fields have correct structure
-- [ ] Field placements have valid coordinates
-- [ ] API response includes `debug_info`
+- [ ] See "Final template" with complete structure
+- [ ] Response contains extracted fields
+- [ ] Field count is reasonable
 
 ## Test with Different Strategies
 
@@ -109,11 +83,12 @@ curl -X POST http://localhost:8000/analyze \
   -F "strategy=acroform_only"
 ```
 
-Expected files:
-- `01_acroform_check.json`
-- `02_acroform_extracted_template.json`
-- `06_enrichment_complete.json` (or error)
-- `06_final_template.json`
+Expected logs:
+```
+DEBUG - Pipeline start: strategy=acroform_only
+DEBUG - AcroForm Check: ...
+DEBUG - AcroForm extracted template: ...
+```
 
 ### Test Vision Strategy
 ```bash
@@ -122,210 +97,244 @@ curl -X POST http://localhost:8000/analyze \
   -F "strategy=vision_only"
 ```
 
-Expected files:
-- `05_vision_extraction_start.json`
-- `hybrid_strategy_*.json` files
-- `06_final_template.json`
+Expected logs:
+```
+DEBUG - Pipeline start: strategy=vision_only
+DEBUG - Vision extraction start: strategy=hybrid
+DEBUG - HybridStrategy: Processing page 0
+DEBUG - HybridStrategy: Analysis complete
+```
 
-### Test Auto Strategy
+### Test Auto Strategy (Full Pipeline)
 ```bash
 curl -X POST http://localhost:8000/analyze \
   -F "file=@any_form.pdf" \
   -F "strategy=auto"
 ```
 
-Expected files:
-- `00_pipeline_start.json`
-- Files from whichever stage succeeds first
-- `06_final_template.json`
-
-## Debug File Content Verification
-
-### Verify AcroForm Check
-```bash
-python3 << 'EOF'
-import json
-
-with open('/tmp/01_acroform_check.json') as f:
-    data = json.load(f)
-
-print(f"Step: {data['step']}")
-print(f"PDF Size: {data['pdf_size_bytes']} bytes")
-print(f"Pages: {data['num_pages']}")
-print(f"Has AcroForm: {data['has_acroform']}")
-print(f"Field Count: {data['raw_fields_count']}")
-if data['field_names']:
-    print(f"Fields: {', '.join(data['field_names'][:5])}...")
-EOF
+Expected logs:
+```
+DEBUG - Pipeline start: strategy=auto
+DEBUG - AcroForm Check: ...
+[Other stages...]
+DEBUG - Final template: ...
 ```
 
-### Verify Extracted Fields
+## Analyzing Debug Output
+
+### Extract Specific Information
+
+**Field count:**
 ```bash
-python3 << 'EOF'
-import json
-
-with open('/tmp/06_final_template.json') as f:
-    template = json.load(f)
-
-print(f"Template: {template['name']}")
-print(f"Version: {template['version']}")
-print(f"Total Fields: {len(template['fields'])}")
-print("\nFirst 5 fields:")
-for field in template['fields'][:5]:
-    p = field['placement']
-    print(f"  {field['label']:30} @ ({p['x']:6.1f}, {p['y']:6.1f})")
-EOF
+DEBUG=true LOG_LEVEL=DEBUG python -m uvicorn app.main:app 2>&1 | grep -oP 'fields_count=\K[0-9]+' | head -1
 ```
 
-### Verify LLM Communication
+**Pages processed:**
 ```bash
-python3 << 'EOF'
-import json
-
-# Check request
-with open('/tmp/llm_request_payload.json') as f:
-    request = json.load(f)
-    print(f"LLM Request:")
-    print(f"  Model: {request['model']}")
-    print(f"  Detail: {request['detail']}")
-    print(f"  Images: {request['images_count']}")
-    print(f"  Prompt length: {request['prompt_length']}")
-    print(f"  Prompt preview: {request['prompt'][:100]}...")
-
-# Check response
-with open('/tmp/llm_response_1.json') as f:
-    response = json.load(f)
-    print(f"\nLLM Response:")
-    print(f"  Status: {response['status']}")
-    print(f"  Duration: {response['duration']:.2f}s")
-    print(f"  Response length: {response['response_length']}")
-    print(f"  Response preview: {response['response'][:100]}...")
-EOF
+DEBUG=true LOG_LEVEL=DEBUG python -m uvicorn app.main:app 2>&1 | grep -oP 'pages=\K[0-9]+'
 ```
+
+**LLM timing:**
+```bash
+DEBUG=true LOG_LEVEL=DEBUG python -m uvicorn app.main:app 2>&1 | grep "duration" | head -5
+```
+
+**Errors:**
+```bash
+DEBUG=true LOG_LEVEL=DEBUG python -m uvicorn app.main:app 2>&1 | grep -i "error\|failed\|exception"
+```
+
+### Count Debug Messages
+
+```bash
+# Total debug messages
+DEBUG=true LOG_LEVEL=DEBUG python -m uvicorn app.main:app 2>&1 | grep "DEBUG -" | wc -l
+
+# By stage
+DEBUG=true LOG_LEVEL=DEBUG python -m uvicorn app.main:app 2>&1 | grep "Pipeline\|AcroForm\|Visual\|Classification\|extraction" | wc -l
+```
+
+## Verify Field Extraction
+
+### Check Extracted Fields
+
+```bash
+curl -X POST http://localhost:8000/analyze \
+  -F "file=@form.pdf" \
+  | jq '.schema_json.fields[] | {id, label, placement: {x: .placement.x, y: .placement.y}}'
+```
+
+Expected output:
+```json
+{
+  "id": "field_1",
+  "label": "Full Name",
+  "placement": {
+    "x": 50.0,
+    "y": 100.0
+  }
+}
+```
+
+## Test Enrichment (AcroForm)
+
+If using AcroForm strategy, check enrichment logs:
+
+```bash
+DEBUG=true LOG_LEVEL=DEBUG python -m uvicorn app.main:app 2>&1 | grep -i "enrich"
+```
+
+Should show:
+```
+DEBUG - Attempting to enrich AcroForm fields...
+DEBUG - acroform_enrichment_input_page0_*: ...
+DEBUG - acroform_enrichment_response_page0_*: ...
+DEBUG - acroform_enrichment_final_page0_*: ...
+DEBUG - AcroForm enrichment successful
+```
+
+## Test Error Handling
+
+### Missing File
+```bash
+curl -X POST http://localhost:8000/analyze \
+  -F "strategy=auto"
+```
+
+Should see error logs about missing file.
+
+### Invalid PDF
+```bash
+echo "not a pdf" > fake.pdf
+curl -X POST http://localhost:8000/analyze \
+  -F "file=@fake.pdf" \
+  -F "strategy=auto"
+```
+
+Should see debug logs about extraction failure.
 
 ## Performance Testing
 
 ### Measure Total Time
+
 ```bash
-python3 << 'EOF'
-import json
-from datetime import datetime
-import time
-
-# Get start time
-with open('/tmp/00_pipeline_start.json') as f:
-    start = datetime.fromisoformat(json.load(f)['timestamp'])
-
-# Get end time (approximate from file creation)
-with open('/tmp/06_final_template.json') as f:
-    data = json.load(f)
-
-start_ts = start.timestamp()
-import os
-end_ts = os.path.getmtime('/tmp/06_final_template.json')
-
-duration = end_ts - start_ts
-print(f"Total analysis time: {duration:.2f}s")
-EOF
+# Single request timing
+time curl -X POST http://localhost:8000/analyze \
+  -F "file=@form.pdf" \
+  -F "strategy=auto" > /dev/null
 ```
 
-### Measure LLM Time
+Check "real" time in output.
+
+### Compare Strategies
+
 ```bash
-python3 << 'EOF'
-import json
-import glob
+# Auto strategy
+time curl -X POST http://localhost:8000/analyze \
+  -F "file=@form.pdf" \
+  -F "strategy=auto" > /dev/null
 
-total_llm_time = 0
-responses = glob.glob('/tmp/llm_response_*.json')
+# Vision only
+time curl -X POST http://localhost:8000/analyze \
+  -F "file=@form.pdf" \
+  -F "strategy=vision_only" > /dev/null
 
-for resp_file in sorted(responses):
-    with open(resp_file) as f:
-        data = json.load(f)
-        duration = data['duration']
-        total_llm_time += duration
-        print(f"{resp_file}: {duration:.2f}s")
-
-print(f"\nTotal LLM time: {total_llm_time:.2f}s")
-EOF
+# AcroForm only
+time curl -X POST http://localhost:8000/analyze \
+  -F "file=@form.pdf" \
+  -F "strategy=acroform_only" > /dev/null
 ```
 
-## Cleanup
+Compare execution times.
 
-After testing, clean up debug files:
+## Automated Test Script
+
+Create a test script:
+
 ```bash
-# Remove all debug files
-rm -f /tmp/*.json
-rm -f /tmp/*acroform*
-rm -f /tmp/*hybrid*
-rm -f /tmp/*vision*
+#!/bin/bash
 
-# Verify cleanup
-ls /tmp/*.json 2>/dev/null | wc -l  # Should be 0
+# colors for output
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+test_count=0
+pass_count=0
+
+run_test() {
+    local name=$1
+    local cmd=$2
+
+    ((test_count++))
+    echo -n "Test $test_count: $name ... "
+
+    if eval "$cmd" > /dev/null 2>&1; then
+        echo -e "${GREEN}PASS${NC}"
+        ((pass_count++))
+    else
+        echo -e "${RED}FAIL${NC}"
+    fi
+}
+
+# Start API with debug
+export DEBUG=true
+export LOG_LEVEL=DEBUG
+
+# Run tests
+run_test "API health check" "curl http://localhost:8000/health"
+run_test "Analyze with auto strategy" "curl -X POST http://localhost:8000/analyze -F 'file=@test.pdf' -F 'strategy=auto' | jq '.schema_json'"
+run_test "Analyze with acroform strategy" "curl -X POST http://localhost:8000/analyze -F 'file=@test.pdf' -F 'strategy=acroform_only' | jq '.schema_json'"
+run_test "Analyze with vision strategy" "curl -X POST http://localhost:8000/analyze -F 'file=@test.pdf' -F 'strategy=vision_only' | jq '.schema_json'"
+
+echo ""
+echo "Tests passed: $pass_count/$test_count"
 ```
 
-## Automation Test
-
-Create a test script to verify debug mode:
+## Python Test Script
 
 ```python
 #!/usr/bin/env python3
 """Test debug mode functionality."""
 
 import os
-import json
 import asyncio
+import json
 from pathlib import Path
-from app.services.analysis.pipeline import analyze_pdf
 
-# Enable debug mode
 os.environ['DEBUG'] = 'true'
+os.environ['LOG_LEVEL'] = 'DEBUG'
 
 async def test_debug_mode():
-    """Test that debug files are created."""
+    """Test that debug logging works."""
 
-    # Read a test PDF
-    pdf_path = Path('test.pdf')  # Replace with actual test PDF
+    from app.services.analysis.pipeline import analyze_pdf
+
+    # Read test PDF
+    pdf_path = Path('test.pdf')
     if not pdf_path.exists():
         print("Error: test.pdf not found")
         return False
 
     pdf_bytes = pdf_path.read_bytes()
 
-    # Analyze
     print("Running analysis with DEBUG=true...")
+    print("=" * 60)
+
     result = await analyze_pdf(pdf_bytes, strategy='auto')
 
-    # Check debug files
-    debug_files = list(Path('/tmp').glob('*.json'))
+    print("=" * 60)
+    print(f"\nAnalysis complete!")
+    print(f"Template name: {result['name']}")
+    print(f"Fields extracted: {len(result['fields'])}")
 
-    if not debug_files:
-        print("ERROR: No debug files created!")
-        return False
+    if result['fields']:
+        print(f"\nFirst field:")
+        field = result['fields'][0]
+        print(f"  ID: {field['id']}")
+        print(f"  Label: {field['label']}")
+        print(f"  Position: ({field['placement']['x']:.1f}, {field['placement']['y']:.1f})")
 
-    print(f"✓ Created {len(debug_files)} debug files")
-
-    # Check critical files
-    critical_files = [
-        '/tmp/00_pipeline_start.json',
-        '/tmp/06_final_template.json'
-    ]
-
-    for filename in critical_files:
-        if Path(filename).exists():
-            with open(filename) as f:
-                data = json.load(f)
-            print(f"✓ {filename} - valid JSON")
-        else:
-            print(f"✗ {filename} - missing!")
-            return False
-
-    # Verify template
-    if result.get('fields'):
-        print(f"✓ Extracted {len(result['fields'])} fields")
-    else:
-        print("⚠ No fields extracted (may be expected)")
-
-    print("\nAll tests passed!")
     return True
 
 if __name__ == '__main__':
@@ -333,51 +342,76 @@ if __name__ == '__main__':
     exit(0 if success else 1)
 ```
 
-Run the test:
+Run it:
 ```bash
-DEBUG=true python test_debug_mode.py
+DEBUG=true LOG_LEVEL=DEBUG python test_debug.py
 ```
+
+## Monitoring Real-Time Output
+
+### Watch logs as they happen
+```bash
+DEBUG=true LOG_LEVEL=DEBUG python -m uvicorn app.main:app --reload | grep DEBUG
+```
+
+### In another terminal, make requests
+```bash
+curl -X POST http://localhost:8000/analyze \
+  -F "file=@form.pdf" \
+  | jq .
+```
+
+Watch the debug logs appear in real-time.
 
 ## Troubleshooting Tests
 
-### Debug files not created
+### No debug output?
+
+1. Verify DEBUG is set:
+   ```bash
+   echo $DEBUG  # Should be: true
+   ```
+
+2. Verify LOG_LEVEL is set:
+   ```bash
+   echo $LOG_LEVEL  # Should be: DEBUG
+   ```
+
+3. Check logs are going to stdout:
+   ```bash
+   DEBUG=true LOG_LEVEL=DEBUG python -c "import logging; logging.debug('test')"
+   ```
+
+### Debug logs mixed with other output?
+
+Filter to just DEBUG:
 ```bash
-# Check DEBUG is set
-echo $DEBUG  # Should be: true
-
-# Check /tmp is writable
-touch /tmp/test.json && rm /tmp/test.json
-
-# Check logs for errors
-grep -i error /tmp/*.json
+DEBUG=true LOG_LEVEL=DEBUG python -m uvicorn app.main:app 2>&1 | grep DEBUG
 ```
 
-### Invalid JSON files
+### JSON parsing errors?
+
+Some debug messages contain JSON. Use tools to parse:
 ```bash
-# Validate JSON
-python3 -c "import json; json.load(open('/tmp/06_final_template.json'))"
-
-# Check file is not empty
-wc -c /tmp/*.json | grep -v " 0 "
-```
-
-### Missing expected files
-```bash
-# List actual files
-ls -1 /tmp/*.json | wc -l
-
-# Check which stage failed
-ls /tmp/0*.json /tmp/1*.json /tmp/2*.json 2>/dev/null | tail -1
+grep "Final template" debug.log | sed 's/.*Final template: //' | jq .
 ```
 
 ## Success Criteria
 
 A successful debug mode test should:
 
-1. ✓ Create debug files in `/tmp` when `DEBUG=true`
-2. ✓ All files are valid JSON
-3. ✓ Sequential numbering matches pipeline stages
+1. ✓ Show debug messages in console when `DEBUG=true LOG_LEVEL=DEBUG`
+2. ✓ Messages appear for each pipeline stage
+3. ✓ LLM interactions are logged with timing
 4. ✓ Final template is complete and valid
-5. ✓ LLM interaction files contain expected data
-6. ✓ No debug files when `DEBUG=false`
-7. ✓ No performance regression when `DEBUG=false`
+5. ✓ No debug output when `DEBUG=false` (default)
+6. ✓ No performance regression in normal mode
+7. ✓ All messages are readable and useful
+
+## Next Steps
+
+1. **Enable debug mode** on your test/dev environment
+2. **Run sample PDFs** through the analysis pipeline
+3. **Monitor console output** for debug messages
+4. **Verify extraction quality** by reviewing logged data
+5. **Optimize prompts** based on LLM behavior visible in logs

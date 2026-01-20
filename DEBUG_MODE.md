@@ -1,316 +1,368 @@
 # Debug Mode Documentation
 
-This document explains how to use the comprehensive debug mode in Daru PDF's analysis pipeline.
+This document explains how to use the debug mode in Daru PDF's analysis pipeline.
 
 ## Enabling Debug Mode
 
 Set the `DEBUG` environment variable to `true` before starting the API:
 
 ```bash
-DEBUG=true python -m uvicorn app.main:app --reload
+export DEBUG=true
+export LOG_LEVEL=DEBUG
+python -m uvicorn app.main:app --reload
 ```
 
-Or with environment file:
+Or in one command:
 ```bash
-export DEBUG=true
+DEBUG=true LOG_LEVEL=DEBUG python -m uvicorn app.main:app --reload
 ```
 
 ## What Gets Logged
 
-When debug mode is enabled, the system outputs:
+When debug mode is enabled, the system outputs detailed debug messages to stdout/logs:
 
-1. **Detailed Console Logs** - Enhanced logging with timestamps and full exception traces
-2. **JSON Debug Files** - Detailed data at each pipeline stage written to `/tmp`
-3. **LLM Interaction Data** - All prompts, responses, and errors from API calls
-4. **Intermediate Data** - Extracted text, visual anchors, parsed results
+1. **Pipeline Execution** - Each step (AcroForm check → visual structure → classification → extraction)
+2. **PDF Analysis** - PDF structure, pages, AcroForm fields, visual anchors
+3. **Field Extraction** - LLM prompts, responses, parsed field data
+4. **Coordinate Processing** - Field adjustments, snapping to visual anchors
+5. **LLM Interactions** - Request timing, response status, retry attempts
+6. **Error Details** - Full exception information with types and messages
 
-## Debug Files Generated
+## Console Output Format
 
-All debug files are written to `/tmp` with numbered prefixes indicating pipeline stage:
+Debug messages appear in the console with this format:
 
-### Pipeline Stage Files (Sequential Order)
-
-| Stage | File Pattern | Content |
-|-------|-------------|---------|
-| 0. Start | `00_pipeline_start.json` | Strategy, PDF size, timestamp |
-| 1. AcroForm Check | `01_acroform_check.json` | PDF pages, AcroForm detection results |
-| 2. AcroForm Extract | `02_acroform_extracted_template.json` | Extracted AcroForm fields |
-| 2. AcroForm Error | `02_acroform_error.json` | Extraction errors if any |
-| 3. Visual Structure | `03_visual_structure_analysis.json` | Visual anchors found, page dimensions |
-| 3. Classification | `04_classification_result.json` | Form/non-form classification result |
-| 5. Vision Extraction Start | `05_vision_extraction_start.json` | Strategy, pages info |
-| 5. Vision Extraction Complete | `05_vision_extraction_complete.json` | Final extracted fields |
-| 6. Enrichment Complete | `06_enrichment_complete.json` | AcroForm enriched with labels |
-| 6. Enrichment Error | `06_enrichment_error.json` | Enrichment errors if any |
-| 6. Final Template | `06_final_template.json` | Final response template |
-
-### Strategy-Specific Files
-
-#### HybridStrategy
-- `hybrid_strategy_start.json` - Analysis start with page info
-- `hybrid_page_{N}_extraction.json` - LLM response for page N
-- `hybrid_page_{N}_parsed_items.json` - Parsed field items from page N
-- `hybrid_page_{N}_error.json` - Extraction errors for page N
-- `hybrid_strategy_snap_results.json` - Field snapping to visual anchors
-- `hybrid_strategy_final_fields.json` - All extracted fields with positions
-- `hybrid_strategy_rejected.json` - Document rejected (non-form)
-
-#### VisionLowResStrategy
-- `vision_lowres_strategy_start.json` - Analysis start with page info
-- `vision_lowres_page_{N}_response.json` - LLM response for page N
-- `vision_lowres_page_{N}_parsed.json` - Parsed fields from page N
-- `vision_lowres_page_{N}_error.json` - Extraction errors for page N
-- `vision_lowres_page_{N}_parse_error.json` - JSON parsing errors
-- `vision_lowres_strategy_final.json` - All extracted fields with positions
-
-#### LLM Communication
-- `llm_request_payload.json` - Request sent to OpenAI (prompt, images count, model)
-- `llm_response_{N}.json` - Response from OpenAI on attempt N (status, duration, content)
-- `llm_error_attempt_{N}.json` - Error details from attempt N
-- `llm_classification_result.json` - Form classification LLM response
-- `llm_classification_error.json` - Classification errors
-
-#### AcroForm Enrichment
-- `acroform_enrichment_input_page{N}_{timestamp}.json` - Input fields for enrichment
-- `acroform_enrichment_response_page{N}_{timestamp}.json` - Raw LLM response
-- `acroform_enrichment_final_page{N}_{timestamp}.json` - Enriched fields with labels
-
-## Example File Contents
-
-### 00_pipeline_start.json
-```json
-{
-  "strategy": "auto",
-  "pdf_size_bytes": 245789,
-  "timestamp": "2025-01-20T10:30:45.123456"
-}
+```
+[timestamp] - [module] - DEBUG - [message]
 ```
 
-### 01_acroform_check.json
-```json
-{
-  "step": "AcroForm Check",
-  "pdf_size_bytes": 245789,
-  "num_pages": 3,
-  "has_acroform": true,
-  "raw_fields_count": 15,
-  "field_names": ["field1", "field2", ...]
-}
+Example:
+```
+2025-01-20 10:30:45,123 - app.services.analysis.pipeline - DEBUG - AcroForm Check: pdf_size=245789, pages=3, has_acroform=true, field_count=15, fields=['field1', 'field2', ...]
 ```
 
-### 03_visual_structure_analysis.json
-```json
-{
-  "step": "Visual Structure Check",
-  "num_pages": 3,
-  "first_page_analysis": {
-    "page_index": 0,
-    "width": 612.0,
-    "height": 792.0,
-    "visual_anchors_count": 24,
-    "visual_anchors": [
-      {
-        "x0": 50.0,
-        "y0": 100.0,
-        "x1": 200.0,
-        "y1": 120.0,
-        "type": "rect"
-      }
-    ]
-  }
-}
+## Debug Log Categories
+
+### Pipeline Stages
+
+When `DEBUG=true`, you'll see logs for each pipeline stage:
+
+```
+Pipeline start: strategy=auto, pdf_size=245789 bytes
+AcroForm Check: pdf_size=245789, pages=3, has_acroform=true, field_count=15
+AcroForm extracted template: [full template JSON]
+Visual structure analysis: pages=3, page_0_size=(612.0x792.0), anchors=24
+LLM Classification result: is_form=true, page_index=0
+Vision extraction start: strategy=hybrid, pages=[page_0(612x792,text_blocks=5,anchors=24)]
+Vision extraction complete: fields_count=15, template=[template JSON]
+Final template: [complete template with all fields]
 ```
 
-### hybrid_page_0_extraction.json
-```json
-{
-  "page_index": 0,
-  "page_size": { "width": 612.0, "height": 792.0 },
-  "llm_response": "[{\"label\": \"Name\", \"x\": 50, \"y\": 100, \"width\": 200, \"height\": 20, \"type\": \"text\"}, ...]"
-}
+### LLM Communication
+
+```
+LLM request start: attempt=1, model=gpt-4o, detail=high, images=1
+llm_request_payload: {"model": "gpt-4o", ...}
+LLM request success: attempt=1, status=200, duration=2.456
+llm_response_1: {"attempt": 1, "status": 200, "duration": 2.456, ...}
 ```
 
-### hybrid_strategy_final_fields.json
-```json
-{
-  "total_fields": 15,
-  "fields": [
-    {
-      "id": "field_1",
-      "label": "Full Name",
-      "placement": {
-        "page_index": 0,
-        "x": 50.0,
-        "y": 100.0,
-        "max_width": 200.0,
-        "height": 20.0
-      }
-    }
-  ]
-}
+### Field Extraction (per page)
+
+```
+HybridStrategy: Processing page 0
+hybrid_page_0_extraction: [LLM response]
+hybrid_page_0_parsed_items: items_count=12, items=[...]
+hybrid_page_0: Extracted 12 fields from page 0
+HybridStrategy: Snapped fields to anchors - 10 fields snapped
+HybridStrategy: Analysis complete - 15 fields
 ```
 
-### llm_request_payload.json
-```json
-{
-  "model": "gpt-4o",
-  "detail": "high",
-  "images_count": 1,
-  "prompt_length": 425,
-  "prompt": "You are a form field extraction engine...",
-  "pages_info": [
-    {
-      "index": 0,
-      "width": 612.0,
-      "height": 792.0
-    }
-  ]
-}
+### AcroForm Enrichment
+
+```
+Attempting to enrich AcroForm fields...
+acroform_enrichment_input_page0_*: page_index=0, field_count=15, fields=[...]
+acroform_enrichment_response_page0_*: [LLM enrichment response]
+acroform_enrichment_final_page0_*: [enriched fields with labels]
+AcroForm enrichment successful
 ```
 
-### llm_response_1.json
-```json
-{
-  "attempt": 1,
-  "status": 200,
-  "duration": 2.456,
-  "response_length": 1245,
-  "response": "[{\"label\": \"Name\", ...}]"
-}
+## Example Usage
+
+### Basic Debug Output
+
+```bash
+# Terminal 1: Start API with debug enabled
+export DEBUG=true
+export LOG_LEVEL=DEBUG
+python -m uvicorn app.main:app --reload
 ```
 
-## Analyzing Results
+You'll see:
+```
+DEBUG mode enabled - detailed output will be generated
+```
 
-### Check Pipeline Flow
-1. Start with `00_pipeline_start.json` to see the strategy chosen
-2. Look for `01_acroform_check.json`, `03_visual_structure_analysis.json`, `04_classification_result.json` in order
-3. Find the extraction stage: `05_vision_extraction_*.json` or `02_acroform_*.json`
-4. End with `06_final_template.json`
+### Analyze a PDF
 
-### Check Extracted Fields
-- View `hybrid_strategy_final_fields.json` or `vision_lowres_strategy_final.json` for all fields
-- For each field, check:
-  - Label correctness
-  - Position (x, y) accuracy
-  - Width and height appropriateness
+```bash
+# Terminal 2: Send a request
+curl -X POST http://localhost:8000/analyze \
+  -F "file=@form.pdf" \
+  -F "strategy=auto" \
+  | jq '.schema_json.fields | length'
+```
 
-### Check LLM Quality
-1. Review `llm_request_payload.json` - what was sent to the LLM
-2. Review `llm_response_*.json` - what the LLM returned
-3. Check duration - how long did the request take
-4. Look for retries - were there multiple attempts?
+### View Debug Output
 
-### Check Field Snapping
-- View `hybrid_strategy_snap_results.json` for fields adjusted to visual anchors
-- See old vs new positions to validate snapping accuracy
+In Terminal 1, you'll see debug logs like:
 
-### Check Enrichment (AcroForm)
-1. `acroform_enrichment_input_page*.json` - original field positions
-2. `acroform_enrichment_response_page*.json` - LLM's enrichment response
-3. `acroform_enrichment_final_page*.json` - enriched fields with labels
+```
+DEBUG - Pipeline start: strategy=auto, pdf_size=245789 bytes
+DEBUG - AcroForm Check: pdf_size=245789, pages=3, has_acroform=true, field_count=15
+DEBUG - AcroForm extracted template: {...}
+DEBUG - Attempting to enrich AcroForm fields...
+DEBUG - LLM Classification result: is_form=true, page_index=0
+DEBUG - Final template: {...}
+```
 
-## Response Format
+## Parsing Debug Output
 
-The `/analyze` endpoint includes `debug_info` in the response when DEBUG=true:
+The debug messages include JSON data. You can pipe to `jq` or other tools to parse:
 
-```json
-{
-  "schema_json": { ... },
-  "debug_info": {
-    "enabled": true,
-    "strategy": "auto",
-    "filename": "form.pdf",
-    "pdf_size_bytes": 245789,
-    "duration_seconds": 15.34,
-    "fields_extracted": 15,
-    "note": "Check /tmp directory for detailed debug files",
-    "debug_files_pattern": "*.json in /tmp"
-  }
-}
+```bash
+# Capture logs to file
+DEBUG=true LOG_LEVEL=DEBUG python -m uvicorn app.main:app &> debug.log
+
+# Search for specific patterns
+grep "fields_count" debug.log
+grep "LLM Classification" debug.log
+grep "error\|Error\|ERROR" debug.log
+
+# Extract JSON parts (if logging full JSON)
+grep "Final template" debug.log | sed 's/.*Final template: //'
 ```
 
 ## Common Debug Scenarios
 
-### No Fields Extracted
-1. Check `01_acroform_check.json` - does PDF have AcroForm?
-2. Check `03_visual_structure_analysis.json` - how many visual anchors?
-3. Check `04_classification_result.json` - was it classified as a form?
-4. Check `llm_response_*.json` - what did LLM extract?
+### Check if PDF has AcroForm fields
 
-### Incorrect Field Positions
-1. Check `hybrid_page_*_extraction.json` - what LLM coordinates were
-2. Check `hybrid_strategy_snap_results.json` - were fields snapped?
-3. Check visual anchors vs extracted positions in debug files
+Look for these debug messages:
 
-### LLM Errors or Retries
-1. Check `llm_error_attempt_*.json` for each failed attempt
-2. Check `llm_response_*.json` to see which attempt succeeded
-3. Look at duration to identify timeouts
+```
+AcroForm Check: ... has_acroform=true, field_count=15
+AcroForm extracted template: {...}
+```
 
-### AcroForm Enrichment Issues
-1. Check `acroform_enrichment_input_page*.json` - input fields
-2. Check `acroform_enrichment_response_page*.json` - LLM's response
-3. Check `06_enrichment_error.json` if enrichment failed
+If `has_acroform=false`, the pipeline continues to vision extraction.
 
-## Performance Analysis
+### Check visual structure detection
 
-Use the debug files to analyze performance:
-- `00_pipeline_start.json` + `06_final_template.json` timestamps show total time
-- `llm_response_*.json` shows LLM request duration
-- Number of stages and retries impact overall speed
+Look for:
 
-## Cleaning Up
+```
+Visual structure analysis: anchors=24
+LLM Classification result: is_form=true
+```
 
-Debug files accumulate in `/tmp`. Clean them up periodically:
+If `anchors < 15` or `is_form=false`, extraction is rejected.
+
+### Check field extraction details
+
+Look for per-page extraction:
+
+```
+HybridStrategy: Processing page 0
+hybrid_page_0_extracted: 12 fields from page 0
+hybrid_page_0: Snapped X fields to anchors
+```
+
+Or for vision low-res:
+
+```
+VisionLowResStrategy: Processing page 0
+vision_lowres_page_0_response: [LLM response]
+VisionLowResStrategy: Extracted 12 fields from page 0
+```
+
+### Check LLM requests and responses
+
+Look for:
+
+```
+LLM request start: attempt=1, model=gpt-4o
+LLM request success: attempt=1, status=200, duration=2.456s
+llm_request_payload: [request data]
+llm_response_1: [response data]
+```
+
+Check for retries:
+
+```
+LLM request failed on attempt 1: timeout
+llm_error_attempt_1: [error details]
+LLM request start: attempt=2, model=gpt-4o
+LLM request success: attempt=2, status=200, duration=3.123s
+```
+
+### Troubleshoot field positions
+
+Look for snapping information:
+
+```
+hybrid_strategy_snap_results: total_snapped=10, snaps=[
+  {field_id: "field_1", old_position: {x: 50, y: 100}, new_position: {x: 52, y: 102}, snap_distance: 2.8}
+]
+```
+
+## Performance Monitoring
+
+Check timing in the logs:
 
 ```bash
-# Remove all daru-pdf debug files
-rm -f /tmp/*acroform*.json /tmp/0*.json /tmp/llm*.json /tmp/hybrid*.json /tmp/vision*.json
+# Get request timing
+grep "Analyze completed" debug.log
 
-# Or remove all JSON files in /tmp (careful!)
-rm -f /tmp/*.json
+# Get LLM timing
+grep "LLM request success" debug.log | awk '{print $NF}'
+
+# Get overall pipeline timing from start to finish
+grep "Pipeline start\|Final template" debug.log
+```
+
+## Filtering Debug Output
+
+Since debug logs are verbose, you can filter by module:
+
+```bash
+# Only pipeline logs
+grep "pipeline" debug.log | grep DEBUG
+
+# Only LLM logs
+grep "llm\|LLM" debug.log | grep DEBUG
+
+# Only strategy logs
+grep "Strategy\|strategy" debug.log | grep DEBUG
+```
+
+## Log Levels
+
+| Level | Description | Usage |
+|-------|-------------|-------|
+| INFO | Normal operation flow | Default for analysis operations |
+| DEBUG | Detailed debug information | Set `LOG_LEVEL=DEBUG` for this |
+| WARNING | Potentially problematic situations | Non-critical errors |
+| ERROR | Serious problems | Critical failures with stack traces |
+
+## Environment Variables
+
+```bash
+# Enable debug output
+DEBUG=true
+
+# Set log level (default: INFO)
+LOG_LEVEL=DEBUG
+
+# Combine for full debug output
+DEBUG=true LOG_LEVEL=DEBUG
+```
+
+## Output Control
+
+The logging output goes to:
+- **Console (stdout/stderr)** - By default, via `logging.basicConfig()`
+- **Both console and file** - If configured with additional handlers
+
+To capture to a file:
+
+```bash
+DEBUG=true LOG_LEVEL=DEBUG python -m uvicorn app.main:app 2>&1 | tee analysis.log
+```
+
+## Redirecting Output
+
+Separate logs by type:
+
+```bash
+# Save only DEBUG messages
+DEBUG=true LOG_LEVEL=DEBUG python -m uvicorn app.main:app 2>&1 | grep DEBUG > debug.log
+
+# Save only errors
+DEBUG=true LOG_LEVEL=DEBUG python -m uvicorn app.main:app 2>&1 | grep ERROR > errors.log
+
+# Save everything
+DEBUG=true LOG_LEVEL=DEBUG python -m uvicorn app.main:app > full.log 2>&1
 ```
 
 ## Integration with Tests
 
-For testing, enable debug mode and verify:
-1. Expected number of files created
-2. File contents match expected schema
-3. Pipeline stages execute in correct order
-4. LLM responses are valid JSON
+For testing, enable debug mode and capture output:
 
-Example test pattern:
 ```python
 import os
-import json
-from pathlib import Path
+import logging
 
 os.environ["DEBUG"] = "true"
-# ... run analysis ...
-debug_files = list(Path("/tmp").glob("*.json"))
-assert len(debug_files) > 0, "No debug files created"
+os.environ["LOG_LEVEL"] = "DEBUG"
+
+# Configure logging to capture
+logging.basicConfig(level=logging.DEBUG)
+
+# Your test code here
+result = await analyze_pdf(pdf_bytes, strategy="auto")
 ```
-
-## Environment Variables
-
-- `DEBUG=true` - Enable debug mode (default: false)
-- `LOG_LEVEL=DEBUG` - Enable verbose logging (default: INFO)
-- `OPENAI_API_KEY` - Required for LLM analysis
-- `OPENAI_MODEL` - LLM model (default: gpt-4o)
 
 ## Troubleshooting
 
-**No debug files created:**
-- Verify `DEBUG=true` is set before starting the API
-- Check that `/tmp` is writable
-- Check logs for "DEBUG mode enabled" message
+### No debug output appears
 
-**Files not appearing in /tmp:**
-- On Windows, `/tmp` might be different (use `echo $TMPDIR`)
-- Some container environments might have different temp paths
-- Check file permissions on `/tmp`
+1. Check `DEBUG=true` is set:
+   ```bash
+   echo $DEBUG
+   ```
 
-**Too many files:**
-- Debug mode creates one file per step
-- Multiple pages create multiple extraction files
-- Clean up periodically to avoid disk space issues
+2. Check `LOG_LEVEL=DEBUG` is set:
+   ```bash
+   echo $LOG_LEVEL
+   ```
+
+3. Restart the API after setting environment variables:
+   ```bash
+   DEBUG=true LOG_LEVEL=DEBUG python -m uvicorn app.main:app --reload
+   ```
+
+### Too much output
+
+Filter to specific components:
+
+```bash
+# Only show errors and above
+LOG_LEVEL=ERROR python -m uvicorn app.main:app
+
+# Only show warnings and above
+LOG_LEVEL=WARNING python -m uvicorn app.main:app
+
+# Only show info (default)
+LOG_LEVEL=INFO python -m uvicorn app.main:app
+```
+
+### Logs are truncated
+
+Some JSON in debug logs may be very long. Use tools to parse:
+
+```bash
+# Extract just field counts
+grep -o "fields_count=[0-9]*" debug.log
+
+# Extract error messages
+grep "error\|Error\|ERROR" debug.log | cut -d':' -f3-
+```
+
+## Next Steps
+
+1. **Enable debug mode**: `export DEBUG=true LOG_LEVEL=DEBUG`
+2. **Run your analysis**: Upload a PDF to `/analyze`
+3. **Monitor console output**: Watch for debug messages
+4. **Analyze results**: Review the logs and template output
+5. **Refine prompts**: Based on LLM behavior visible in logs

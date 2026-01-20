@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated
 import logging
 import time
 import os
-import json
 from urllib.parse import urlparse
 
 import httpx
@@ -24,7 +23,6 @@ class AnalyzeResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     draft_template: DraftTemplate = Field(..., alias="schema_json")
-    debug_info: dict[str, Any] | None = Field(default=None, exclude=True)
 
 
 @router.post("/analyze", response_model=AnalyzeResponse)
@@ -69,23 +67,10 @@ async def analyze(
     duration = time.monotonic() - started_at
     logger.info("Analyze completed in %.2fs", duration)
 
-    response = AnalyzeResponse.model_validate({"schema_json": draft_template})
-
-    # Add debug info if enabled
     if DEBUG:
-        response.debug_info = {
-            "enabled": True,
-            "strategy": strategy,
-            "filename": filename,
-            "pdf_size_bytes": len(pdf_bytes),
-            "duration_seconds": round(duration, 2),
-            "fields_extracted": len(draft_template.fields),
-            "note": "Check /tmp directory for detailed debug files",
-            "debug_files_pattern": "*.json in /tmp"
-        }
-        logger.info(f"Debug mode enabled - see /tmp for detailed debug files")
+        logger.info(f"DEBUG summary: strategy={strategy}, filename={filename}, pdf_size={len(pdf_bytes)}, duration={round(duration, 2)}s, fields_extracted={len(draft_template.fields)}")
 
-    return response
+    return AnalyzeResponse.model_validate({"schema_json": draft_template})
 
 
 def _fetch_pdf_from_url(pdf_url: str | None) -> bytes:

@@ -21,21 +21,9 @@ DEFAULT_MODEL = "gpt-4o"
 DEFAULT_TIMEOUT_SECONDS = 120.0
 MAX_RETRIES = 2
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
-
-def _write_debug_file(filename: str, data: Any) -> None:
-    """Write debug data to /tmp directory."""
-    if not DEBUG:
-        return
-    try:
-        filepath = f"/tmp/{filename}"
-        with open(filepath, 'w', encoding='utf-8') as f:
-            if isinstance(data, str):
-                f.write(data)
-            else:
-                json.dump(data, f, ensure_ascii=False, indent=2, default=str)
-        logger.debug(f"DEBUG: Wrote {filename}")
-    except Exception as e:
-        logger.error(f"Failed to write debug file {filename}: {e}")
+OPENAI_MAX_CONCURRENT_REQUESTS = int(
+    os.getenv("OPENAI_MAX_CONCURRENT_REQUESTS", "5")
+)
 
 
 class BaseAnalysisStrategy:
@@ -91,7 +79,7 @@ class BaseAnalysisStrategy:
         }
 
         if DEBUG:
-            _write_debug_file("llm_request_payload.json", {
+            logger.debug(f"%s: %s" % ("llm_request_payload.json", json.dumps({
                 "model": model,
                 "detail": detail,
                 "images_count": len(pages) if pages else 0,
@@ -105,7 +93,7 @@ class BaseAnalysisStrategy:
                     }
                     for p in (pages or [])
                 ]
-            })
+            }, default=str, ensure_ascii=False)))
 
         last_error: Exception | None = None
         for attempt in range(1, 4):
@@ -134,24 +122,24 @@ class BaseAnalysisStrategy:
                 response_content = data["choices"][0]["message"]["content"]
 
                 if DEBUG:
-                    _write_debug_file(f"llm_response_{attempt}.json", {
+                    logger.debug(f"%s: %s" % (f"llm_response_{attempt}.json", json.dumps({
                         "attempt": attempt,
                         "status": response.status_code,
                         "duration": duration,
                         "response_length": len(response_content),
                         "response": response_content
-                    })
+                    }, default=str, ensure_ascii=False)))
 
                 return response_content
             except (httpx.HTTPError, KeyError, IndexError, TypeError) as exc:
                 last_error = exc
                 logger.warning("LLM request failed on attempt %s: %s", attempt, exc)
                 if DEBUG:
-                    _write_debug_file(f"llm_error_attempt_{attempt}.json", {
+                    logger.debug(f"%s: %s" % (f"llm_error_attempt_{attempt}.json", json.dumps({
                         "attempt": attempt,
                         "error": str(exc),
                         "type": type(exc).__name__
-                    })
+                    }, default=str, ensure_ascii=False)))
 
         raise RuntimeError("LLM request failed after retries") from last_error
 
@@ -438,23 +426,23 @@ class DocumentClassifier(BaseAnalysisStrategy):
             logger.info("Classification Pipeline: LLM Result=%s Reason='%s'", is_form, reason)
 
             if DEBUG:
-                _write_debug_file("llm_classification_result.json", {
+                logger.debug(f"%s: %s" % ("llm_classification_result.json", json.dumps({
                     "page_index": page.index,
                     "is_form": is_form,
                     "reason": reason,
                     "llm_response": data
-                })
+                }, default=str, ensure_ascii=False)))
 
             return is_form
 
         except Exception as e:
             logger.warning("Classification Pipeline: LLM check failed: %s. Defaulting to True based on visual anchors.", e)
             if DEBUG:
-                _write_debug_file("llm_classification_error.json", {
+                logger.debug(f"%s: %s" % ("llm_classification_error.json", json.dumps({
                     "page_index": page.index,
                     "error": str(e),
                     "type": type(e).__name__
-                })
+                }, default=str, ensure_ascii=False)))
             return True  # Fallback to True if visual anchors were present but LLM failed
 
 
@@ -476,7 +464,7 @@ class HybridStrategy(BaseAnalysisStrategy, AnalysisStrategy):
         from app.models.template_schema import FieldDefinition
 
         if DEBUG:
-            _write_debug_file("hybrid_strategy_start.json", {
+            logger.debug(f"%s: %s" % ("hybrid_strategy_start.json", json.dumps({
                 "strategy": "HybridStrategy",
                 "num_pages": len(pages),
                 "pages_info": [
@@ -489,7 +477,7 @@ class HybridStrategy(BaseAnalysisStrategy, AnalysisStrategy):
                     }
                     for p in pages
                 ]
-            })
+            }, default=str, ensure_ascii=False)))
 
         logger.info(f"HybridStrategy: Starting analysis of {len(pages)} pages")
 
@@ -500,9 +488,9 @@ class HybridStrategy(BaseAnalysisStrategy, AnalysisStrategy):
         if not self._classify_document(pages[0]):
             logger.info("Document classified as textual/non-form. Skipping extraction.")
             if DEBUG:
-                _write_debug_file("hybrid_strategy_rejected.json", {
+                logger.debug(f"%s: %s" % ("hybrid_strategy_rejected.json", json.dumps({
                     "reason": "Document classified as non-form"
-                })
+                }, default=str, ensure_ascii=False)))
             return DraftTemplate(
                 version="v1",
                 name="non-form-document",
@@ -557,11 +545,11 @@ class HybridStrategy(BaseAnalysisStrategy, AnalysisStrategy):
                 logger.info("LLM Response (Page %s): %d chars", page.index, len(response_text))
 
                 if DEBUG:
-                    _write_debug_file(f"hybrid_page_{page.index}_extraction.json", {
+                    logger.debug(f"%s: %s" % (f"hybrid_page_{page.index}_extraction.json", json.dumps({
                         "page_index": page.index,
                         "page_size": {"width": page.width, "height": page.height},
                         "llm_response": response_text
-                    })
+                    }, default=str, ensure_ascii=False)))
 
                 # Parse simplified JSON
                 items = json.loads(response_text)
@@ -569,11 +557,11 @@ class HybridStrategy(BaseAnalysisStrategy, AnalysisStrategy):
                     items = items.get("fields", []) or items.get("items", [])
 
                 if DEBUG:
-                    _write_debug_file(f"hybrid_page_{page.index}_parsed_items.json", {
+                    logger.debug(f"%s: %s" % (f"hybrid_page_{page.index}_parsed_items.json", json.dumps({
                         "page_index": page.index,
                         "items_count": len(items),
                         "items": items
-                    })
+                    }, default=str, ensure_ascii=False)))
 
                 for item in items:
                     from app.models.template_schema import Placement, FontPolicy
@@ -604,11 +592,11 @@ class HybridStrategy(BaseAnalysisStrategy, AnalysisStrategy):
             except Exception as e:
                 logger.error("Failed to analyze page %s: %s", page.index, e, exc_info=True)
                 if DEBUG:
-                    _write_debug_file(f"hybrid_page_{page.index}_error.json", {
+                    logger.debug(f"%s: %s" % (f"hybrid_page_{page.index}_error.json", json.dumps({
                         "page_index": page.index,
                         "error": str(e),
                         "type": type(e).__name__
-                    })
+                    }, default=str, ensure_ascii=False)))
                 # Continue best effort
 
         logger.info(f"HybridStrategy: Extracted {len(all_fields)} fields total before snapping")
@@ -617,7 +605,7 @@ class HybridStrategy(BaseAnalysisStrategy, AnalysisStrategy):
         self._snap_fields_to_anchors(all_fields, pages)
 
         if DEBUG:
-            _write_debug_file("hybrid_strategy_final_fields.json", {
+            logger.debug(f"%s: %s" % ("hybrid_strategy_final_fields.json", json.dumps({
                 "total_fields": len(all_fields),
                 "fields": [
                     {
@@ -633,7 +621,7 @@ class HybridStrategy(BaseAnalysisStrategy, AnalysisStrategy):
                     }
                     for f in all_fields
                 ]
-            })
+            }, default=str, ensure_ascii=False)))
 
         # Merge fields into a final template
         template = DraftTemplate(
@@ -707,10 +695,10 @@ class HybridStrategy(BaseAnalysisStrategy, AnalysisStrategy):
                     })
 
         if DEBUG and snap_results:
-            _write_debug_file("hybrid_strategy_snap_results.json", {
+            logger.debug(f"%s: %s" % ("hybrid_strategy_snap_results.json", json.dumps({
                 "total_snapped": len(snap_results),
                 "snaps": snap_results
-            })
+            }, default=str, ensure_ascii=False)))
 
 
 class VisionLowResStrategy(BaseAnalysisStrategy, AnalysisStrategy):
@@ -752,12 +740,12 @@ class VisionLowResStrategy(BaseAnalysisStrategy, AnalysisStrategy):
                 logger.info("LLM Response (Page %s): %d chars", page.index, len(response_text))
 
                 if DEBUG:
-                    _write_debug_file(f"vision_lowres_page_{page.index}_response.json", {
+                    logger.debug(f"%s: %s" % (f"vision_lowres_page_{page.index}_response.json", json.dumps({
                         "page_index": page.index,
                         "page_size": {"width": page.width, "height": page.height},
                         "response_length": len(response_text),
                         "response": response_text
-                    })
+                    }, default=str, ensure_ascii=False)))
 
                 # Expecting a JSON array of dicts
                 extracted_data = json.loads(response_text)
@@ -768,19 +756,19 @@ class VisionLowResStrategy(BaseAnalysisStrategy, AnalysisStrategy):
                 if not isinstance(extracted_data, list):
                     logger.warning("LLM returned non-list for page %s: %s", page.index, type(extracted_data))
                     if DEBUG:
-                        _write_debug_file(f"vision_lowres_page_{page.index}_error.json", {
+                        logger.debug(f"%s: %s" % (f"vision_lowres_page_{page.index}_error.json", json.dumps({
                             "page_index": page.index,
                             "error": f"Expected list, got {type(extracted_data).__name__}",
                             "data_type": type(extracted_data).__name__
-                        })
+                        }, default=str, ensure_ascii=False)))
                     return (page.index, None, ValueError(f"Expected list, got {type(extracted_data).__name__}"))
 
                 if DEBUG:
-                    _write_debug_file(f"vision_lowres_page_{page.index}_parsed.json", {
+                    logger.debug(f"%s: %s" % (f"vision_lowres_page_{page.index}_parsed.json", json.dumps({
                         "page_index": page.index,
                         "items_count": len(extracted_data),
                         "items": extracted_data
-                    })
+                    }, default=str, ensure_ascii=False)))
 
                 logger.info(f"VisionLowResStrategy: Extracted {len(extracted_data)} fields from page {page.index}")
                 return (page.index, extracted_data, None)
@@ -788,11 +776,11 @@ class VisionLowResStrategy(BaseAnalysisStrategy, AnalysisStrategy):
             except Exception as e:
                 logger.error("Failed to parse/validate page %s: %s", page.index, e, exc_info=True)
                 if DEBUG:
-                    _write_debug_file(f"vision_lowres_page_{page.index}_parse_error.json", {
+                    logger.debug(f"%s: %s" % (f"vision_lowres_page_{page.index}_parse_error.json", json.dumps({
                         "page_index": page.index,
                         "error": str(e),
                         "type": type(e).__name__
-                    })
+                    }, default=str, ensure_ascii=False)))
                 return (page.index, None, e)
 
     async def analyze(
@@ -803,7 +791,7 @@ class VisionLowResStrategy(BaseAnalysisStrategy, AnalysisStrategy):
         logger.info(f"VisionLowResStrategy: Starting analysis of {len(pages)} pages")
 
         if DEBUG:
-            _write_debug_file("vision_lowres_strategy_start.json", {
+            logger.debug(f"%s: %s" % ("vision_lowres_strategy_start.json", json.dumps({
                 "strategy": "VisionLowResStrategy",
                 "num_pages": len(pages),
                 "pages_info": [
@@ -814,7 +802,7 @@ class VisionLowResStrategy(BaseAnalysisStrategy, AnalysisStrategy):
                     }
                     for p in pages
                 ]
-            })
+            }, default=str, ensure_ascii=False)))
 
         api_key, base_url, model = self._get_api_config()
 
@@ -880,7 +868,7 @@ class VisionLowResStrategy(BaseAnalysisStrategy, AnalysisStrategy):
                 all_fields.append(field_def)
 
         if DEBUG:
-            _write_debug_file("vision_lowres_strategy_final.json", {
+            logger.debug(f"%s: %s" % ("vision_lowres_strategy_final.json", json.dumps({
                 "total_fields": len(all_fields),
                 "fields": [
                     {
@@ -895,7 +883,7 @@ class VisionLowResStrategy(BaseAnalysisStrategy, AnalysisStrategy):
                     }
                     for f in all_fields
                 ]
-            })
+            }, default=str, ensure_ascii=False)))
 
         logger.info(f"VisionLowResStrategy: Analysis complete - {len(all_fields)} fields")
         return DraftTemplate(

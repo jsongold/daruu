@@ -4,6 +4,7 @@
 
 ```bash
 export DEBUG=true
+export LOG_LEVEL=DEBUG
 ```
 
 Then run the API:
@@ -13,205 +14,195 @@ python -m uvicorn app.main:app --reload
 
 Or in one command:
 ```bash
-DEBUG=true python -m uvicorn app.main:app --reload
+DEBUG=true LOG_LEVEL=DEBUG python -m uvicorn app.main:app --reload
 ```
 
 ## What Happens
 
-When you make an `/analyze` request with `DEBUG=true`:
+When you make an `/analyze` request with debug enabled:
 
-1. **Console logs** become more detailed with timestamps
-2. **JSON files** are created in `/tmp` showing:
-   - Each pipeline stage execution
-   - PDF structure (pages, AcroForm fields, visual anchors)
-   - LLM prompts sent and responses received
-   - Field extraction results from each stage
-   - Final template with all extracted fields
+1. **Console logs** show detailed information at each pipeline stage
+2. **LLM interactions** are fully logged (requests, responses, timings)
+3. **Field extraction** details are displayed for each page
+4. **Errors and warnings** include full context
 
-3. **Response includes** `debug_info` with:
-   - Strategy used
-   - Filename and PDF size
-   - Duration and fields extracted
-   - Note about debug files location
+## Quick Example
 
-## Finding Debug Files
-
-All files go to `/tmp` (organized by pipeline stage):
-
-```bash
-# View all debug files
-ls -la /tmp/*.json | head -20
-
-# Watch files being created in real-time
-watch 'ls -la /tmp/*.json | tail -20'
-
-# Search for specific files
-ls /tmp/*pipeline* /tmp/*extraction* /tmp/*llm*
-
-# Clean up (optional)
-rm -f /tmp/*.json
-```
-
-## Understanding the Files
-
-Files are numbered by pipeline stage:
-
-```
-00_*.json      → Pipeline start
-01_*.json      → AcroForm check
-02_*.json      → AcroForm extraction/enrichment
-03_*.json      → Visual structure detection
-04_*.json      → LLM classification
-05_*.json      → Vision field extraction
-06_*.json      → Final results
-llm_*.json     → LLM request/response details
-hybrid_*.json  → HybridStrategy specific
-vision_*.json  → VisionLowResStrategy specific
-```
-
-## Example Usage
-
-```bash
-# Start API with debug
-DEBUG=true python -m uvicorn app.main:app --reload
-
-# In another terminal, analyze a PDF
-curl -X POST http://localhost:8000/analyze \
-  -F "file=@form.pdf" \
-  -F "strategy=auto" \
-  | jq '.debug_info'
-
-# View debug files
-cat /tmp/06_final_template.json | jq '.fields[] | {id, label, placement}'
-
-# View what LLM was asked
-cat /tmp/llm_request_payload.json | jq '.prompt'
-
-# View LLM response
-cat /tmp/llm_response_1.json | jq '.response'
-```
-
-## Key Files to Check
-
-| Want to know... | Check this file |
-|-----------------|-----------------|
-| Did extraction work? | `06_final_template.json` |
-| What fields were found? | `hybrid_strategy_final_fields.json` or `vision_lowres_strategy_final.json` |
-| What did LLM extract? | `hybrid_page_*_extraction.json` |
-| Did LLM get retried? | `llm_error_attempt_*.json` (if exists) |
-| How long did it take? | `llm_response_*.json` (check duration) |
-| What was sent to LLM? | `llm_request_payload.json` |
-| Were fields snapped? | `hybrid_strategy_snap_results.json` |
-| Was it a form? | `04_classification_result.json` |
-
-## Analyzing Field Extraction
-
-Check final fields with proper coordinates:
-
-```bash
-# Pretty print final fields
-python3 -c "
-import json
-with open('/tmp/06_final_template.json') as f:
-    data = json.load(f)
-    for field in data.get('fields', []):
-        print(f\"{field['label']:30} @ ({field['placement']['x']:6.1f}, {field['placement']['y']:6.1f})\")
-"
-```
-
-## Troubleshooting
-
-### No debug files appear
-```bash
-# Check if DEBUG is set
-echo $DEBUG
-
-# Check if /tmp exists and is writable
-touch /tmp/test.json
-ls /tmp/test.json
-rm /tmp/test.json
-```
-
-### Logs not showing timestamps
-Set both `DEBUG` and `LOG_LEVEL`:
+### Terminal 1: Start API with Debug
 ```bash
 DEBUG=true LOG_LEVEL=DEBUG python -m uvicorn app.main:app --reload
 ```
 
-### Too many files in /tmp
-Clean them up:
-```bash
-# Remove all debug files
-rm -f /tmp/*acroform* /tmp/0* /tmp/1* /tmp/2* /tmp/3* /tmp/4* /tmp/5* /tmp/6* /tmp/llm* /tmp/hybrid* /tmp/vision*
-
-# Or more aggressive
-rm -f /tmp/*.json
+You'll see:
+```
+DEBUG mode enabled - detailed output will be generated
 ```
 
-## Full Documentation
+### Terminal 2: Analyze a PDF
+```bash
+curl -X POST http://localhost:8000/analyze \
+  -F "file=@form.pdf" \
+  | jq '.schema_json | {name, fields_count: (.fields | length)}'
+```
 
-See [DEBUG_MODE.md](DEBUG_MODE.md) for comprehensive documentation including:
-- All possible debug files
-- File content examples
-- Advanced analysis techniques
-- Performance profiling
-- Integration with tests
+### Terminal 1: See Debug Output
 
-## What Gets Logged
+```
+DEBUG - Pipeline start: strategy=auto, pdf_size=245789 bytes
+DEBUG - AcroForm Check: pdf_size=245789, pages=3, has_acroform=true, field_count=15
+DEBUG - AcroForm extracted template: {...}
+DEBUG - Attempting to enrich AcroForm fields...
+DEBUG - LLM Classification result: is_form=true, page_index=0
+DEBUG - Final template: {...}
+```
 
-### Pipeline Execution
-- Each step (AcroForm check → visual structure → classification → extraction)
-- Success/failure of each step
-- Reason for skipping steps
+## Key Debug Messages
 
-### Extracted Data
-- Number of pages
-- Number of visual anchors per page
-- Text blocks detected
-- Fields extracted per page
-- Field positions and dimensions
+| Message | Meaning |
+|---------|---------|
+| `AcroForm Check: ... has_acroform=true` | PDF has native form fields |
+| `AcroForm Check: ... has_acroform=false` | No native fields, continuing to vision |
+| `LLM Classification result: is_form=true` | Document classified as a form |
+| `LLM Classification result: is_form=false` | Document rejected (not a form) |
+| `HybridStrategy: Processing page X` | Extracting fields from page X |
+| `Extracted N fields from page X` | N fields found on page X |
+| `Snapped X fields to anchors` | X fields adjusted to visual structure |
+| `LLM request success: ... duration=2.5s` | LLM request completed in 2.5 seconds |
 
-### LLM Interactions
-- Model, temperature, max tokens
-- Request/response timestamps
-- Response content and errors
-- Retry attempts and reasons
+## Filtering Output
 
-### Processing Details
-- Page-by-page extraction results
-- Field snapping to visual anchors
-- AcroForm enrichment with labels
-- Final template structure
+### See only errors
+```bash
+DEBUG=true LOG_LEVEL=DEBUG python -m uvicorn app.main:app 2>&1 | grep -i error
+```
 
-## Performance Monitoring
+### See only LLM interactions
+```bash
+DEBUG=true LOG_LEVEL=DEBUG python -m uvicorn app.main:app 2>&1 | grep -i "llm\|openai"
+```
 
-Check how fast extraction is:
+### See only field extraction
+```bash
+DEBUG=true LOG_LEVEL=DEBUG python -m uvicorn app.main:app 2>&1 | grep -i "extraction\|extracted\|fields"
+```
+
+### Save all output to file
+```bash
+DEBUG=true LOG_LEVEL=DEBUG python -m uvicorn app.main:app > debug.log 2>&1
+tail -f debug.log  # Watch in real-time
+```
+
+## Common Questions
+
+### How do I see what LLM was sent?
+
+Look for logs with `llm_request_payload`:
+```bash
+grep "llm_request_payload" debug.log
+```
+
+### How do I see what LLM returned?
+
+Look for logs with `llm_response`:
+```bash
+grep "llm_response" debug.log
+```
+
+### How do I check if fields were snapped?
+
+Look for logs with `snap`:
+```bash
+grep "Snapped\|snap_results" debug.log
+```
+
+### How long did the LLM call take?
+
+Look for timing in LLM responses:
+```bash
+grep "LLM request success" debug.log
+```
+
+### How many fields were extracted?
+
+Look for the final count:
+```bash
+grep "fields_count\|Extracted.*fields" debug.log
+```
+
+## Environment Setup
+
+### Quick Test
+```bash
+# Start in one terminal
+DEBUG=true LOG_LEVEL=DEBUG python -m uvicorn app.main:app --reload
+
+# In another terminal, test
+curl -X POST http://localhost:8000/analyze \
+  -F "file=@test.pdf" \
+  | jq '.schema_json.fields | length'
+```
+
+### Save Logs
+```bash
+# Capture all output
+DEBUG=true LOG_LEVEL=DEBUG python -m uvicorn app.main:app &> full_debug.log &
+
+# Make requests
+curl -X POST http://localhost:8000/analyze -F "file=@test.pdf"
+
+# View logs
+cat full_debug.log | grep DEBUG
+```
+
+### With Docker
+```bash
+# If running in Docker
+docker run -e DEBUG=true -e LOG_LEVEL=DEBUG my-app:latest
+```
+
+## Troubleshooting
+
+### No debug output?
+
+Check DEBUG is set:
+```bash
+DEBUG=true python -c "print('DEBUG is set')"
+```
+
+### Output is truncated?
+
+The logs might be very long. Try filtering:
+```bash
+# Just show field counts
+grep -o "fields_count=[0-9]*\|Extracted [0-9]*" debug.log
+
+# Just show errors
+grep "error\|Error\|ERROR" debug.log
+```
+
+### Too much output?
+
+Reduce log level:
+```bash
+# Only info level
+python -m uvicorn app.main:app --log-level info
+```
+
+## Log Levels
 
 ```bash
-# Extract timing info
-python3 -c "
-import json, time
-from datetime import datetime
-
-with open('/tmp/00_pipeline_start.json') as f:
-    start = datetime.fromisoformat(json.load(f)['timestamp'])
-
-with open('/tmp/06_final_template.json') as f:
-    data = json.load(f)
-
-print(f'Analysis took approximately {time.time() - start.timestamp():.2f}s')
-"
-
-# Check LLM speed
-cat /tmp/llm_response_1.json | jq '.duration'
+export LOG_LEVEL=DEBUG      # Most verbose (all debug messages)
+export LOG_LEVEL=INFO       # Normal (default)
+export LOG_LEVEL=WARNING    # Warnings and errors only
+export LOG_LEVEL=ERROR      # Errors only
 ```
 
 ## Next Steps
 
-1. **Enable debug mode**: `export DEBUG=true`
-2. **Run your analysis**: Upload a PDF to `/analyze`
-3. **Check debug files**: `ls -la /tmp/*.json`
-4. **Review results**: View `06_final_template.json` for extracted fields
-5. **Refine prompts**: Look at LLM interactions to improve extraction quality
+1. **Enable**: `DEBUG=true LOG_LEVEL=DEBUG`
+2. **Run**: `python -m uvicorn app.main:app --reload`
+3. **Test**: `curl -X POST http://localhost:8000/analyze -F "file=@form.pdf"`
+4. **Monitor**: Watch the debug output in console
+5. **Analyze**: Review logs to understand extraction behavior
 
-For more details, see [DEBUG_MODE.md](DEBUG_MODE.md)
+For detailed information, see [DEBUG_MODE.md](DEBUG_MODE.md)
