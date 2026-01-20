@@ -55,11 +55,16 @@ class BaseAnalysisStrategy:
 
         if pages:
             for page in pages:
+                # Ensure we have valid base64 data
+                if not page.png_base64:
+                    logger.warning("Page %s has no base64 image data, skipping image", page.index)
+                    continue
+
                 content.append(
                     {
                         "type": "image_url",
                         "image_url": {
-                            "url": f"data:image/png;base64,{page.png_base64[:100]}..." if DEBUG else f"data:image/png;base64,{page.png_base64}",
+                            "url": f"data:image/png;base64,{page.png_base64}",
                             "detail": detail,
                         },
                     }
@@ -114,6 +119,8 @@ class BaseAnalysisStrategy:
                 response = await client.post(
                     f"{base_url}/chat/completions", json=payload, headers=headers
                 )
+                if response.status_code != 200:
+                    logger.error("OpenAI API error %s: %s", response.status_code, response.text)
                 response.raise_for_status()
                 data = response.json()
                 duration = time.monotonic() - started_at
@@ -135,6 +142,21 @@ class BaseAnalysisStrategy:
                     }, default=str, ensure_ascii=False)))
 
                 return response_content
+            except httpx.HTTPStatusError as exc:
+                last_error = exc
+                try:
+                    error_body = exc.response.text
+                except:
+                    error_body = "Could not read response body"
+                logger.warning("LLM request failed on attempt %s: HTTP %s - %s", attempt, exc.response.status_code, error_body)
+                if attempt < 3:
+                    await asyncio.sleep(2 ** attempt)
+                if DEBUG:
+                    logger.debug(f"%s: %s" % (f"llm_error_attempt_{attempt}.json", json.dumps({
+                        "attempt": attempt,
+                        "status_code": exc.response.status_code,
+                        "error_body": error_body,
+                    }, default=str, ensure_ascii=False)))
             except (httpx.HTTPError, KeyError, IndexError, TypeError) as exc:
                 last_error = exc
                 logger.warning("LLM request failed on attempt %s: %s", attempt, exc)
