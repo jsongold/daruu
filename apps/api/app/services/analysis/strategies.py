@@ -37,7 +37,7 @@ class BaseAnalysisStrategy:
         model = os.getenv("OPENAI_MODEL", DEFAULT_MODEL)
         return api_key, base_url, model
 
-    def _call_openai(
+    async def _call_openai(
         self,
         *,
         base_url: str,
@@ -47,8 +47,9 @@ class BaseAnalysisStrategy:
         pages: list[RenderedPage] | None,
         detail: str = "high",
     ) -> str:
+        from app.services.http_client import get_llm_client
+
         timeout_seconds = float(os.getenv("OPENAI_TIMEOUT_SECONDS", str(DEFAULT_TIMEOUT_SECONDS)))
-        timeout = httpx.Timeout(timeout_seconds)
         headers = {"Authorization": f"Bearer {api_key}"}
         content: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
 
@@ -106,12 +107,12 @@ class BaseAnalysisStrategy:
                     detail,
                     len(pages) if pages else 0,
                 )
-                with httpx.Client(timeout=timeout) as client:
-                    response = client.post(
-                        f"{base_url}/chat/completions", json=payload, headers=headers
-                    )
-                    response.raise_for_status()
-                    data = response.json()
+                client = get_llm_client()
+                response = await client.post(
+                    f"{base_url}/chat/completions", json=payload, headers=headers
+                )
+                response.raise_for_status()
+                data = response.json()
                 duration = time.monotonic() - started_at
                 logger.info(
                     "LLM request success: attempt=%s status=%s duration=%.2fs",
@@ -134,6 +135,8 @@ class BaseAnalysisStrategy:
             except (httpx.HTTPError, KeyError, IndexError, TypeError) as exc:
                 last_error = exc
                 logger.warning("LLM request failed on attempt %s: %s", attempt, exc)
+                if attempt < 3:
+                    await asyncio.sleep(2 ** attempt)
                 if DEBUG:
                     logger.debug(f"%s: %s" % (f"llm_error_attempt_{attempt}.json", json.dumps({
                         "attempt": attempt,
@@ -143,7 +146,7 @@ class BaseAnalysisStrategy:
 
         raise RuntimeError("LLM request failed after retries") from last_error
 
-    def _validate_with_repair(
+    async def _validate_with_repair(
         self,
         *,
         response_text: str,
@@ -168,7 +171,7 @@ class BaseAnalysisStrategy:
                 )
                 if attempt >= MAX_RETRIES:
                     break
-                
+
                 # Repair prompt
                 repair_prompt = (
                     "Fix the following JSON so it strictly matches the schema.\n"
@@ -178,8 +181,8 @@ class BaseAnalysisStrategy:
                     f"Invalid JSON:\n{current_text}\n"
                     "Repaired JSON:"
                 )
-                
-                current_text = self._call_openai(
+
+                current_text = await self._call_openai(
                     base_url=base_url,
                     api_key=api_key,
                     model=model,
@@ -368,10 +371,10 @@ class DocumentClassifier(BaseAnalysisStrategy):
     Uses a pipeline approach: Visual Heuristics -> LLM Verification.
     """
     
-    def classify(self, page: RenderedPage) -> bool:
+    async def classify(self, page: RenderedPage) -> bool:
         """
         Determines if the document is a 'Form/Application'.
-        
+
         Pipeline:
         1. Check visual anchor density.
            - If low (< threshold): Not a form (return False).
@@ -380,26 +383,26 @@ class DocumentClassifier(BaseAnalysisStrategy):
         """
         # Threshold for visual anchors (lines/rects).
         MIN_FORM_ANCHORS = 15  # Specific threshold to trigger LLM check
-        
+
         anchor_count = len(page.visual_anchors or [])
         has_visual_structure = anchor_count >= MIN_FORM_ANCHORS
-        
+
         if not has_visual_structure:
             logger.info(
-                "Classification Pipeline: REJECTED by Visual Heuristic (Anchors: %d < %d)", 
+                "Classification Pipeline: REJECTED by Visual Heuristic (Anchors: %d < %d)",
                 anchor_count, MIN_FORM_ANCHORS
             )
             return False
-            
+
         logger.info(
-            "Classification Pipeline: PASSED Visual Heuristic (Anchors: %d >= %d). proceeding to LLM...", 
+            "Classification Pipeline: PASSED Visual Heuristic (Anchors: %d >= %d). proceeding to LLM...",
             anchor_count, MIN_FORM_ANCHORS
         )
-        
-        # Step 2: LLM Verification
-        return self._llm_classify(page)
 
-    def _llm_classify(self, page: RenderedPage) -> bool:
+        # Step 2: LLM Verification
+        return await self._llm_classify(page)
+
+    async def _llm_classify(self, page: RenderedPage) -> bool:
         api_key, base_url, model = self._get_api_config()
 
         prompt = (
@@ -411,7 +414,7 @@ class DocumentClassifier(BaseAnalysisStrategy):
         )
 
         try:
-            response_text = self._call_openai(
+            response_text = await self._call_openai(
                 base_url=base_url,
                 api_key=api_key,
                 model=model,
@@ -455,8 +458,8 @@ class HybridStrategy(BaseAnalysisStrategy, AnalysisStrategy):
     def __init__(self) -> None:
         self.classifier = DocumentClassifier()
 
-    def _classify_document(self, page: RenderedPage) -> bool:
-        return self.classifier.classify(page)
+    async def _classify_document(self, page: RenderedPage) -> bool:
+        return await self.classifier.classify(page)
 
     async def analyze(
         self, pages: list[RenderedPage], schema_json: dict[str, Any]
@@ -485,7 +488,7 @@ class HybridStrategy(BaseAnalysisStrategy, AnalysisStrategy):
             return DraftTemplate(version="v1", name="empty", fields=[])
 
         # Step 0: Classify if it's a form (Check first page)
-        if not self._classify_document(pages[0]):
+        if not await self._classify_document(pages[0]):
             logger.info("Document classified as textual/non-form. Skipping extraction.")
             if DEBUG:
                 logger.debug(f"%s: %s" % ("hybrid_strategy_rejected.json", json.dumps({
@@ -534,7 +537,7 @@ class HybridStrategy(BaseAnalysisStrategy, AnalysisStrategy):
             )
 
             try:
-                response_text = self._call_openai(
+                response_text = await self._call_openai(
                     base_url=base_url,
                     api_key=api_key,
                     model=model,

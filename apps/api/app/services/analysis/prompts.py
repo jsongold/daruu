@@ -56,26 +56,20 @@ def build_enrichment_prompt(page_index: int, width: float, height: float, fields
     Optimized for speed while maintaining accuracy.
     """
     return (
-        f"Analyze this Japanese form (Page {page_index}, {width}x{height}) and enrich the field labels.\\n\\n"
-        
-        f"INPUT FIELDS:\\n{fields_json}\\n\\n"
-        
-        "TASK: For each field, look at its coordinates in the image and identify:\\n"
-        "1. The exact Japanese label printed near that position\\n"
-        "2. Logical section (e.g., '納税者情報', '配偶者情報', '日付情報')\\n"
-        "3. Brief note if helpful (e.g., '年', '月', '日')\\n\\n"
-        
-        "RULES:\\n"
-        "- Keep original 'id' unchanged\\n"
-        "- Extract exact text from image (preserve Japanese)\\n"
-        "- Only enrich provided fields, don't add new ones\\n"
-        "- Use consistent section names for similar fields\\n\\n"
-        
-        "EXAMPLES:\\n"
-        '{\"id\":\"Text1\",\"label\":\"氏名\",\"section\":\"納税者情報\",\"notes\":\"\"}\\n'
-        '{\"id\":\"Text2\",\"label\":\"フリガナ\",\"section\":\"納税者情報\",\"notes\":\"\"}\\n'
-        '{\"id\":\"Text6\",\"label\":\"年\",\"section\":\"日付情報\",\"notes\":\"年\"}\\n\\n'
-        
-        "Return ONLY a valid JSON array with all fields enriched."
+        f"Analyze this form (Page {page_index}, {width}x{height}) and enrich the field labels.\n\n"
+        f"INPUT FIELDS:\n{fields_json}\n\n"
+        "TASK: For each field, look at its coordinates in the image and identify:\n"
+        "1. The exact label printed near that position\n"
+        "2. Logical section (e.g., 'Contact', 'Address', 'Date')\n"
+        "3. Brief note if helpful (e.g., 'Day', 'Month', 'Year')\n\n"
+        "RULES:\n"
+        "- Keep original 'id' unchanged\n"
+        "- Extract exact text from image\n"
+        "- Only enrich provided fields, don't add new ones\n"
+        "- Use consistent section names for similar fields\n\n"
+        "EXAMPLES:\n"
+        '{"id":"Text1","label":"Full Name","section":"Contact","notes":""}\n'
+        '{"id":"Text2","label":"Date","section":"Date","notes":""}\n\n'
+        "Return ONLY a valid JSON array with all fields enriched as an array."
     )
 
