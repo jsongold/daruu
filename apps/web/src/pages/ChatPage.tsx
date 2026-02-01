@@ -150,12 +150,12 @@ export function ChatPage({ initialConversationId: _initialConversationId }: Chat
 
   // Handle sending a message - check for edit commands first
   const handleSendMessage = useCallback(async (content: string, files?: File[]) => {
+    let conversationId = activeConversationId;
+
     // Auto-create conversation if none exists
-    if (!activeConversationId) {
+    if (!conversationId) {
       try {
-        await startNewConversation();
-        // After creating, wait for state update then send
-        // The sendMessage will be called with the new conversation
+        conversationId = await startNewConversation();
       } catch {
         // Error handled by hook
         return;
@@ -175,13 +175,13 @@ export function ChatPage({ initialConversationId: _initialConversationId }: Chat
         // Execute the edit
         await updateField(field.field_id, editCommand.value, 'chat');
         // Still send the message so the agent knows what happened
-        await sendMessage(content, files);
+        await sendMessage(content, files, conversationId);
         return;
       }
     }
 
-    // Regular message
-    await sendMessage(content, files);
+    // Regular message - pass conversationId to avoid race condition
+    await sendMessage(content, files, conversationId);
   }, [activeConversationId, startNewConversation, fieldsArray, updateField, sendMessage]);
 
   // Handle approval

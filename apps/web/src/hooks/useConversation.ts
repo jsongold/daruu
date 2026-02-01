@@ -48,7 +48,7 @@ export interface UseConversationReturn {
   // Actions
   selectConversation: (id: string) => Promise<void>;
   startNewConversation: () => Promise<string>;
-  sendMessage: (content: string, files?: File[]) => Promise<void>;
+  sendMessage: (content: string, files?: File[], conversationId?: string) => Promise<void>;
   approve: (messageId: string) => Promise<void>;
   download: () => Promise<Blob | null>;
 
@@ -189,8 +189,10 @@ export function useConversation(
             setAgentStage('complete');
             setThinkingMessage(null);
           },
-          onConnectionError: (err) => {
-            setError(`Connection error: ${err.message}`);
+          onConnectionError: () => {
+            // SSE connection errors are not critical - the basic flow works without SSE
+            // Only log to console, don't show to user
+            console.debug('SSE connection closed');
           },
         };
 
@@ -231,8 +233,10 @@ export function useConversation(
   }, [refreshConversations, selectConversation]);
 
   // Send a message
-  const sendMessage = useCallback(async (content: string, files?: File[]) => {
-    if (!activeConversationId) {
+  // optionalConversationId allows bypassing the race condition when creating + sending
+  const sendMessage = useCallback(async (content: string, files?: File[], optionalConversationId?: string) => {
+    const conversationId = optionalConversationId || activeConversationId;
+    if (!conversationId) {
       setError('No active conversation');
       return;
     }
@@ -241,7 +245,7 @@ export function useConversation(
     setError(null);
 
     try {
-      const message = await sendMessageWithFiles(activeConversationId, content, files);
+      const message = await sendMessageWithFiles(conversationId, content, files);
 
       // Add the user message to the list immediately
       setMessages((prev) => {
