@@ -1,26 +1,34 @@
 /**
- * Main application component.
- * Single page at /admin that handles both job creation and job viewing.
+ * Main application component with routing.
  *
- * Route:
- *   /admin          - Admin dashboard (create job or view existing job)
- *   /admin?jobId=x  - View specific job
+ * Routes:
+ *   /           - Agent Chat UI (new conversational interface)
+ *   /chat       - Agent Chat UI (alias)
+ *   /admin      - Admin dashboard (legacy job management)
+ *   /admin?jobId=x - View specific job
  */
 
 import { useState, useCallback, useEffect } from 'react';
 import { AdminPage } from './pages/AdminPage';
+import { ChatPage } from './pages/ChatPage';
+import './App.css';
 
-const BASE_PATH = '/admin';
+type AppRoute = 'chat' | 'admin';
 
 /**
- * Check if current path is the admin route.
+ * Determine current route from URL path.
  */
-function isAdminPath(): boolean {
-  return window.location.pathname === BASE_PATH || window.location.pathname === `${BASE_PATH}/`;
+function getCurrentRoute(): AppRoute {
+  const path = window.location.pathname;
+  if (path === '/admin' || path === '/admin/') {
+    return 'admin';
+  }
+  // Default to chat for /, /chat, or any other path
+  return 'chat';
 }
 
 /**
- * Read job ID from URL query params.
+ * Read job ID from URL query params (for admin page).
  */
 function getJobIdFromUrl(): string | null {
   const params = new URLSearchParams(window.location.search);
@@ -28,40 +36,24 @@ function getJobIdFromUrl(): string | null {
 }
 
 /**
- * Update URL with job ID (or clear it).
+ * Update URL for admin page with job ID.
  */
-function updateUrl(jobId: string | null): void {
-  const url = new URL(window.location.origin + BASE_PATH);
+function updateAdminUrl(jobId: string | null): void {
+  const url = new URL(window.location.origin + '/admin');
   if (jobId) {
     url.searchParams.set('jobId', jobId);
   }
   window.history.pushState({}, '', url.toString());
 }
 
-/**
- * Get initial job ID from URL.
- * Redirects to /admin if accessing root or unknown path.
- */
-function getInitialJobId(): string | null {
-  // Redirect to /admin if not already there
-  if (!isAdminPath()) {
-    const jobId = getJobIdFromUrl();
-    const url = new URL(window.location.origin + BASE_PATH);
-    if (jobId) {
-      url.searchParams.set('jobId', jobId);
-    }
-    window.history.replaceState({}, '', url.toString());
-  }
-
-  return getJobIdFromUrl();
-}
-
 function App() {
-  const [jobId, setJobId] = useState<string | null>(getInitialJobId);
+  const [route, setRoute] = useState<AppRoute>(getCurrentRoute);
+  const [jobId, setJobId] = useState<string | null>(getJobIdFromUrl);
 
   // Handle browser back/forward navigation
   useEffect(() => {
     const handlePopState = () => {
+      setRoute(getCurrentRoute());
       setJobId(getJobIdFromUrl());
     };
 
@@ -69,22 +61,47 @@ function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
+  // Admin page handlers
   const handleJobSelect = useCallback((newJobId: string) => {
-    updateUrl(newJobId);
+    updateAdminUrl(newJobId);
     setJobId(newJobId);
   }, []);
 
   const handleClearJob = useCallback(() => {
-    updateUrl(null);
+    updateAdminUrl(null);
     setJobId(null);
   }, []);
 
+  // Navigation between routes
+  const navigateTo = useCallback((newRoute: AppRoute) => {
+    const path = newRoute === 'admin' ? '/admin' : '/';
+    window.history.pushState({}, '', path);
+    setRoute(newRoute);
+  }, []);
+
+  // Render based on route
+  if (route === 'admin') {
+    return (
+      <div className="app">
+        <nav className="app-nav">
+          <button className="nav-link" onClick={() => navigateTo('chat')}>
+            ← Back to Chat
+          </button>
+        </nav>
+        <AdminPage
+          jobId={jobId}
+          onJobSelect={handleJobSelect}
+          onClearJob={handleClearJob}
+        />
+      </div>
+    );
+  }
+
+  // Default: Chat page
   return (
-    <AdminPage
-      jobId={jobId}
-      onJobSelect={handleJobSelect}
-      onClearJob={handleClearJob}
-    />
+    <div className="app">
+      <ChatPage />
+    </div>
   );
 }
 
