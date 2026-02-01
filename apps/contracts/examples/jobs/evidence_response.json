@@ -1,0 +1,81 @@
+{
+  "$schema": "../../schemas/job_context.json#/definitions/JobEvidenceResponse",
+  "success": true,
+  "data": {
+    "evidence": [
+      {
+        "id": "bb0e8400-e29b-41d4-a716-446655440001",
+        "document_id": "550e8400-e29b-41d4-a716-446655440001",
+        "source": "ocr",
+        "bbox": {
+          "page": 1,
+          "x": 0.65,
+          "y": 0.12,
+          "width": 0.15,
+          "height": 0.025
+        },
+        "text": "INV-2024-001",
+        "confidence": 0.95,
+        "metadata": {
+          "ocr_engine": "tesseract",
+          "language": "en"
+        },
+        "created_at": "2024-01-15T10:32:00Z"
+      },
+      {
+        "id": "bb0e8400-e29b-41d4-a716-446655440002",
+        "document_id": "550e8400-e29b-41d4-a716-446655440001",
+        "source": "ocr",
+        "bbox": {
+          "page": 1,
+          "x": 0.65,
+          "y": 0.15,
+          "width": 0.12,
+          "height": 0.025
+        },
+        "text": "January 15, 2024",
+        "confidence": 0.92,
+        "metadata": {
+          "ocr_engine": "tesseract",
+          "language": "en",
+          "parsed_date": "2024-01-15"
+        },
+        "created_at": "2024-01-15T10:32:00Z"
+      },
+      {
+        "id": "bb0e8400-e29b-41d4-a716-446655440003",
+        "document_id": "550e8400-e29b-41d4-a716-446655440001",
+        "source": "ocr",
+        "bbox": {
+          "page": 1,
+          "x": 0.75,
+          "y": 0.85,
+          "width": 0.1,
+          "height": 0.025
+        },
+        "text": "$1,250.00",
+        "confidence": 0.88,
+        "metadata": {
+          "ocr_engine": "tesseract",
+          "language": "en",
+          "parsed_number": 1250.00,
+          "currency": "USD"
+        },
+        "created_at": "2024-01-15T10:32:00Z"
+      },
+      {
+        "id": "bb0e8400-e29b-41d4-a716-446655440004",
+        "document_id": "550e8400-e29b-41d4-a716-446655440001",
+        "source": "llm",
+        "bbox": null,
+        "text": "Based on the invoice header and payment terms, this appears to be a standard commercial invoice for goods or services.",
+        "confidence": 0.85,
+        "metadata": {
+          "model": "gpt-4",
+          "prompt_type": "document_classification"
+        },
+        "created_at": "2024-01-15T10:33:00Z"
+      }
+    ]
+  }
+}

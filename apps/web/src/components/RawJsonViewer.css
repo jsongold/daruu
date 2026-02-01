@@ -1,0 +1,115 @@
+.raw-json-viewer {
+  background: #1e1e1e;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.raw-json-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #2d2d2d;
+  border-bottom: 1px solid #404040;
+}
+
+.raw-json-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.toggle-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: #404040;
+  border-radius: 4px;
+  color: #9ca3af;
+  font-size: 14px;
+  font-weight: bold;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.toggle-icon:hover {
+  background: #525252;
+}
+
+.toggle-icon.collapsed {
+  transform: rotate(0deg);
+}
+
+.raw-json-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #e5e7eb;
+}
+
+.raw-json-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.raw-json-copy-btn {
+  padding: 6px 12px;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.raw-json-copy-btn:hover {
+  background: #2563eb;
+}
+
+.raw-json-content {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+}
+
+.raw-json-pre {
+  margin: 0;
+  font-family: "Monaco", "Menlo", "Ubuntu Mono", "Consolas", monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre;
+  color: #d4d4d4;
+}
+
+.raw-json-code {
+  display: block;
+}
+
+/* Scrollbar styling for dark theme */
+.raw-json-content::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.raw-json-content::-webkit-scrollbar-track {
+  background: #1e1e1e;
+}
+
+.raw-json-content::-webkit-scrollbar-thumb {
+  background: #404040;
+  border-radius: 4px;
+}
+
+.raw-json-content::-webkit-scrollbar-thumb:hover {
+  background: #525252;
+}

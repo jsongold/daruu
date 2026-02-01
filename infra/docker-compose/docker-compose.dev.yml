@@ -1,0 +1,305 @@
+# Daru PDF Docker Compose - Development Configuration
+#
+# Standalone development configuration (no override merging).
+# Uses Dockerfile.dev, hot-reload, debug mode, and dev ports.
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml up
+#   docker compose -f docker-compose.dev.yml up --build
+#   docker compose -f docker-compose.dev.yml down
+#
+# Profiles:
+#   --profile debug    Include redis-commander and mailhog
+#   --profile tools    Include dozzle log viewer
+
+services:
+  # ==========================================================================
+  # API Service - FastAPI Backend (Development)
+  # ==========================================================================
+  api:
+    build:
+      context: ../../apps/api
+      dockerfile: Dockerfile.dev
+    container_name: daru-api
+    restart: unless-stopped
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/app
+    ports:
+      - "${DARU_API_PORT:-8000}:8000"
+    environment:
+      # Application settings
+      - DARU_DEBUG=true
+      - DARU_API_PREFIX=${DARU_API_PREFIX:-/api/v1}
+      # OpenAI/LLM settings
+      - DARU_OPENAI_API_KEY=${DARU_OPENAI_API_KEY}
+      - DARU_OPENAI_MODEL=${DARU_OPENAI_MODEL:-gpt-4o-mini}
+      - DARU_OPENAI_BASE_URL=${DARU_OPENAI_BASE_URL:-}
+      - DARU_OPENAI_TIMEOUT_SECONDS=${DARU_OPENAI_TIMEOUT_SECONDS:-120}
+      # Supabase settings
+      - DARU_SUPABASE_URL=${DARU_SUPABASE_URL:-}
+      - DARU_SUPABASE_SECRET_KEY=${DARU_SUPABASE_SECRET_KEY:-}
+      # Processing strategy
+      - DARU_PROCESSING_STRATEGY=${DARU_PROCESSING_STRATEGY:-hybrid}
+      # Celery settings
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      # Storage paths
+      - DARU_UPLOAD_DIR=/app/uploads
+      # Cost tracking
+      - DARU_COST_MAX_PER_JOB=${DARU_COST_MAX_PER_JOB:-}
+      - DARU_COST_WARN_THRESHOLD=${DARU_COST_WARN_THRESHOLD:-}
+      # LangChain tracing (optional)
+      - DARU_LANGCHAIN_TRACING=${DARU_LANGCHAIN_TRACING:-false}
+      - DARU_LANGCHAIN_VERBOSE=${DARU_LANGCHAIN_VERBOSE:-false}
+    volumes:
+      # Mount source code for hot-reload
+      - ../../apps/api/app:/app/app:cached
+      - ../../apps/api/tests:/app/tests:cached
+      - uploads:/app/uploads
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - daru-network
+    labels:
+      - "com.daru-pdf.service=api"
+      - "com.daru-pdf.env=development"
+
+  # ==========================================================================
+  # Orchestrator Service - Pipeline Orchestration (Development)
+  # ==========================================================================
+  orchestrator:
+    build:
+      context: ../../apps/orchestrator
+      dockerfile: Dockerfile.dev
+    container_name: daru-pdf-orchestrator
+    restart: unless-stopped
+    ports:
+      - "${DARU_ORCHESTRATOR_PORT:-8001}:8001"
+    environment:
+      - ORCHESTRATOR_APP_NAME=Daru PDF Orchestrator
+      - ORCHESTRATOR_DEBUG=true
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+      # Service endpoints
+      - ORCHESTRATOR_INGEST_SERVICE_URL=http://api:8000
+      - ORCHESTRATOR_STRUCTURE_SERVICE_URL=http://api:8000
+      - ORCHESTRATOR_EXTRACTION_SERVICE_URL=http://api:8000
+      - ORCHESTRATOR_FILL_SERVICE_URL=http://api:8000
+    volumes:
+      # Mount source code for hot-reload
+      - ../../apps/orchestrator/app:/app/app:cached
+      - ../../apps/orchestrator/tests:/app/tests:cached
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - daru-network
+    labels:
+      - "com.daru-pdf.service=orchestrator"
+      - "com.daru-pdf.env=development"
+
+  # ==========================================================================
+  # Web Service - Vite Dev Server (Development)
+  # ==========================================================================
+  web:
+    build:
+      context: ../../apps/web
+      dockerfile: Dockerfile.dev
+      args:
+        VITE_API_URL: /api/v1
+    container_name: daru-web
+    restart: unless-stopped
+    ports:
+      - "${DARU_WEB_PORT:-5173}:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8000/api/v1
+    volumes:
+      # Mount source code for hot-reload
+      - ../../apps/web/src:/app/src:cached
+      - ../../apps/web/public:/app/public:cached
+      - ../../apps/web/index.html:/app/index.html:cached
+      - ../../apps/web/vite.config.ts:/app/vite.config.ts:cached
+      - ../../apps/web/tsconfig.json:/app/tsconfig.json:cached
+      # Exclude node_modules from mount
+      - /app/node_modules
+    command: npm run dev -- --host 0.0.0.0
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:5173/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - daru-network
+    labels:
+      - "com.daru-pdf.service=web"
+      - "com.daru-pdf.env=development"
+
+  # ==========================================================================
+  # Redis Service - Message Broker and Cache
+  # ==========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: daru-redis
+    restart: unless-stopped
+    ports:
+      - "${DARU_REDIS_PORT:-6379}:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - daru-network
+    labels:
+      - "com.daru-pdf.service=redis"
+
+  # ==========================================================================
+  # Celery Worker - Async Task Processing (Development)
+  # ==========================================================================
+  celery-worker:
+    build:
+      context: ../../apps/api
+      dockerfile: Dockerfile.dev
+    container_name: daru-celery-worker
+    restart: unless-stopped
+    command: celery -A app.infrastructure.celery worker --loglevel=debug --concurrency=2
+    environment:
+      - DARU_DEBUG=true
+      - DARU_API_PREFIX=${DARU_API_PREFIX:-/api/v1}
+      # OpenAI/LLM settings
+      - DARU_OPENAI_API_KEY=${DARU_OPENAI_API_KEY}
+      - DARU_OPENAI_MODEL=${DARU_OPENAI_MODEL:-gpt-4o-mini}
+      - DARU_OPENAI_BASE_URL=${DARU_OPENAI_BASE_URL:-}
+      - DARU_OPENAI_TIMEOUT_SECONDS=${DARU_OPENAI_TIMEOUT_SECONDS:-120}
+      # Supabase settings
+      - DARU_SUPABASE_URL=${DARU_SUPABASE_URL:-}
+      - DARU_SUPABASE_SECRET_KEY=${DARU_SUPABASE_SECRET_KEY:-}
+      # Processing strategy
+      - DARU_PROCESSING_STRATEGY=${DARU_PROCESSING_STRATEGY:-hybrid}
+      # Celery settings
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      - DARU_CELERY_TASK_SOFT_TIME_LIMIT=${DARU_CELERY_TASK_SOFT_TIME_LIMIT:-300}
+      - DARU_CELERY_TASK_TIME_LIMIT=${DARU_CELERY_TASK_TIME_LIMIT:-600}
+      # Storage paths
+      - DARU_UPLOAD_DIR=/app/uploads
+      # Cost tracking
+      - DARU_COST_MAX_PER_JOB=${DARU_COST_MAX_PER_JOB:-}
+      - DARU_COST_WARN_THRESHOLD=${DARU_COST_WARN_THRESHOLD:-}
+    volumes:
+      # Mount source code for debugging
+      - ../../apps/api/app:/app/app:cached
+      - uploads:/app/uploads
+    depends_on:
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.infrastructure.celery inspect ping || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - daru-network
+    labels:
+      - "com.daru-pdf.service=celery-worker"
+      - "com.daru-pdf.env=development"
+
+  # ==========================================================================
+  # Dozzle - Real-time Docker Log Viewer
+  # ==========================================================================
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: daru-dozzle
+    restart: unless-stopped
+    ports:
+      - "${DARU_DOZZLE_PORT:-9999}:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - DOZZLE_LEVEL=info
+      - DOZZLE_TAILSIZE=300
+      - DOZZLE_FILTER=name=daru-*
+    networks:
+      - daru-network
+    profiles:
+      - tools
+    labels:
+      - "com.daru-pdf.service=dozzle"
+
+  # ==========================================================================
+  # Redis Commander - Redis GUI (Development Only)
+  # ==========================================================================
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: daru-redis-commander
+    restart: unless-stopped
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - daru-network
+    profiles:
+      - debug
+    labels:
+      - "com.daru-pdf.service=redis-commander"
+
+  # ==========================================================================
+  # MailHog - Email Testing (Development Only)
+  # ==========================================================================
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: daru-mailhog
+    restart: unless-stopped
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI
+    networks:
+      - daru-network
+    profiles:
+      - debug
+    labels:
+      - "com.daru-pdf.service=mailhog"
+
+# ==========================================================================
+# Networks
+# ==========================================================================
+networks:
+  daru-network:
+    driver: bridge
+    name: daru-network
+
+# ==========================================================================
+# Volumes
+# ==========================================================================
+volumes:
+  redis-data:
+    name: daru-redis-data
+  uploads:
+    name: daru-uploads

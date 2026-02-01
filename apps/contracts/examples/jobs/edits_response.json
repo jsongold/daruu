@@ -1,0 +1,94 @@
+{
+  "_description": "Response after submitting manual edits",
+  "_note": "This is an example response - does not include $schema since the schema has complex external refs",
+  "success": true,
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440011",
+    "mode": "scratch",
+    "status": "running",
+    "source_document": null,
+    "target_document": {
+      "id": "550e8400-e29b-41d4-a716-446655440003",
+      "ref": "uploads/form.pdf",
+      "document_type": "target",
+      "meta": {
+        "page_count": 3,
+        "file_size": 350000,
+        "mime_type": "application/pdf",
+        "filename": "form.pdf"
+      },
+      "created_at": "2024-01-15T11:00:00Z"
+    },
+    "fields": [
+      {
+        "id": "550e8400-e29b-41d4-a716-446655440401",
+        "name": "Company Name",
+        "field_type": "text",
+        "value": "Acme Corporation",
+        "confidence": 1.0,
+        "bbox": {
+          "x": 100,
+          "y": 200,
+          "width": 200,
+          "height": 25,
+          "page": 1
+        },
+        "document_id": "550e8400-e29b-41d4-a716-446655440003",
+        "page": 1,
+        "is_required": true,
+        "is_editable": true
+      },
+      {
+        "id": "550e8400-e29b-41d4-a716-446655440402",
+        "name": "Date",
+        "field_type": "date",
+        "value": "2024-01-15",
+        "confidence": 1.0,
+        "bbox": {
+          "x": 400,
+          "y": 200,
+          "width": 100,
+          "height": 25,
+          "page": 1
+        },
+        "document_id": "550e8400-e29b-41d4-a716-446655440003",
+        "page": 1,
+        "is_required": true,
+        "is_editable": true
+      }
+    ],
+    "mappings": [],
+    "extractions": [],
+    "evidence": [],
+    "issues": [],
+    "activities": [
+      {
+        "id": "550e8400-e29b-41d4-a716-446655440501",
+        "timestamp": "2024-01-15T11:05:00Z",
+        "action": "job_created",
+        "details": {"mode": "scratch"}
+      },
+      {
+        "id": "550e8400-e29b-41d4-a716-446655440502",
+        "timestamp": "2024-01-15T11:10:00Z",
+        "action": "field_edited",
+        "details": {"field_name": "Company Name", "old_value": "", "new_value": "Acme Corporation"},
+        "field_id": "550e8400-e29b-41d4-a716-446655440401"
+      },
+      {
+        "id": "550e8400-e29b-41d4-a716-446655440503",
+        "timestamp": "2024-01-15T11:10:05Z",
+        "action": "field_edited",
+        "details": {"field_name": "Date", "old_value": "", "new_value": "2024-01-15"},
+        "field_id": "550e8400-e29b-41d4-a716-446655440402"
+      }
+    ],
+    "created_at": "2024-01-15T11:05:00Z",
+    "updated_at": "2024-01-15T11:10:05Z",
+    "progress": 0.3,
+    "current_step": "awaiting_input",
+    "current_stage": "fill",
+    "next_actions": ["continue", "review"],
+    "iteration_count": 0
+  }
+}

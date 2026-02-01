@@ -1,0 +1,44 @@
+{
+  "$schema": "../../schemas/extract.json#/definitions/ExtractResponseDTO",
+  "_description": "Example extract response with extracted values",
+  "document_id": "550e8400-e29b-41d4-a716-446655440001",
+  "extractions": [
+    {
+      "field_id": "name_field",
+      "value": "John Doe",
+      "confidence": 0.95,
+      "source": "native_text",
+      "evidence": [
+        {
+          "id": "550e8400-e29b-41d4-a716-446655440010",
+          "kind": "native_text",
+          "page": 1,
+          "bbox": [100, 200, 300, 230],
+          "text": "John Doe",
+          "confidence": 0.95
+        }
+      ],
+      "needs_review": false
+    },
+    {
+      "field_id": "date_field",
+      "value": "2024-01-15",
+      "confidence": 0.72,
+      "source": "ocr",
+      "evidence": [
+        {
+          "id": "550e8400-e29b-41d4-a716-446655440011",
+          "kind": "ocr",
+          "page": 1,
+          "bbox": [100, 250, 250, 280],
+          "text": "01/15/2024",
+          "confidence": 0.72
+        }
+      ],
+      "needs_review": true
+    }
+  ],
+  "failed_fields": [],
+  "needs_questions": [],
+  "warnings": []
+}

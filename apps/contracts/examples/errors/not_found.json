@@ -1,0 +1,9 @@
+{
+  "$schema": "../../schemas/error.json#/definitions/NotFoundErrorResponse",
+  "_description": "Not found error when requesting a non-existent job",
+  "success": false,
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "Job not found: 550e8400-e29b-41d4-a716-446655440999"
+  }
+}

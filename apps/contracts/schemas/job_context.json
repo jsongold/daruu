@@ -1,0 +1,538 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://daru-pdf.io/schemas/job_context.json",
+  "title": "JobContext",
+  "description": "JobContext model representing the complete state of a document processing job",
+  "definitions": {
+    "JobStatus": {
+      "type": "string",
+      "enum": ["pending", "running", "blocked", "done", "failed"],
+      "description": "Current status of the job"
+    },
+    "JobMode": {
+      "type": "string",
+      "enum": ["transfer", "scratch"],
+      "description": "Mode of job execution - transfer copies from source to target, scratch fills from scratch"
+    },
+    "ConfidenceSummary": {
+      "type": "object",
+      "description": "Summary of confidence scores across fields",
+      "properties": {
+        "average": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Average confidence score"
+        },
+        "min": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Minimum confidence score"
+        },
+        "max": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Maximum confidence score"
+        },
+        "low_confidence_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of fields with low confidence"
+        },
+        "total_fields": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of fields"
+        }
+      },
+      "required": ["average", "total_fields"],
+      "additionalProperties": false
+    },
+    "JobConfig": {
+      "type": "object",
+      "description": "Configuration options for job execution",
+      "properties": {
+        "confidence_threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.8,
+          "description": "Minimum confidence threshold for auto-approval"
+        },
+        "auto_apply": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether to automatically apply high-confidence extractions"
+        },
+        "require_review": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to require human review before completion"
+        }
+      },
+      "additionalProperties": false
+    },
+    "NextAction": {
+      "type": "object",
+      "description": "Suggested next action for the job",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["provide_answer", "review_field", "confirm_mapping", "resolve_issue"],
+          "description": "Type of action needed"
+        },
+        "field_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Related field ID if applicable"
+        },
+        "issue_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Related issue ID if applicable"
+        },
+        "question": {
+          "type": "string",
+          "description": "Question to ask the user if applicable"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Options for the user to choose from"
+        }
+      },
+      "required": ["type"],
+      "additionalProperties": false
+    },
+    "JobContext": {
+      "type": "object",
+      "description": "Complete context of a document processing job",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Unique identifier for the job"
+        },
+        "status": {
+          "$ref": "#/definitions/JobStatus"
+        },
+        "mode": {
+          "$ref": "#/definitions/JobMode"
+        },
+        "source_document_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "ID of the source document (for transfer mode)"
+        },
+        "target_document_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "ID of the target document"
+        },
+        "config": {
+          "$ref": "#/definitions/JobConfig"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "field.json#/definitions/Field"
+          },
+          "description": "All fields in the job"
+        },
+        "mappings": {
+          "type": "array",
+          "items": {
+            "$ref": "mapping.json#/definitions/Mapping"
+          },
+          "description": "Field mappings (for transfer mode)"
+        },
+        "extractions": {
+          "type": "array",
+          "items": {
+            "$ref": "extraction.json#/definitions/Extraction"
+          },
+          "description": "Extracted values"
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "$ref": "issue.json#/definitions/Issue"
+          },
+          "description": "Issues detected during processing"
+        },
+        "activities": {
+          "type": "array",
+          "items": {
+            "$ref": "activity.json#/definitions/Activity"
+          },
+          "description": "Activity log entries"
+        },
+        "confidence_summary": {
+          "$ref": "#/definitions/ConfidenceSummary"
+        },
+        "next_actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/NextAction"
+          },
+          "description": "Suggested next actions when job is blocked"
+        },
+        "progress": {
+          "type": "object",
+          "properties": {
+            "current_step": {
+              "type": "string",
+              "description": "Current processing step"
+            },
+            "total_steps": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Total number of steps"
+            },
+            "completed_steps": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Number of completed steps"
+            },
+            "percentage": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100,
+              "description": "Completion percentage"
+            }
+          },
+          "additionalProperties": false
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the job was created"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the job was last updated"
+        },
+        "completed_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the job was completed"
+        },
+        "error": {
+          "type": "object",
+          "description": "Error information if job failed",
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "trace_id": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": ["id", "status", "mode", "target_document_id", "created_at", "updated_at"],
+      "additionalProperties": false
+    },
+    "JobCreateRequest": {
+      "type": "object",
+      "description": "Request body for creating a new job",
+      "properties": {
+        "mode": {
+          "$ref": "#/definitions/JobMode"
+        },
+        "source_document_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "ID of the source document (required for transfer mode)"
+        },
+        "target_document_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "ID of the target document"
+        },
+        "config": {
+          "$ref": "#/definitions/JobConfig"
+        }
+      },
+      "required": ["mode", "target_document_id"],
+      "additionalProperties": false
+    },
+    "JobCreateResponse": {
+      "type": "object",
+      "description": "Response after creating a job",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "const": true
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "job_id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": ["job_id"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["success", "data"],
+      "additionalProperties": false
+    },
+    "JobGetResponse": {
+      "type": "object",
+      "description": "Response for getting a job by ID",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "const": true
+        },
+        "data": {
+          "$ref": "#/definitions/JobContext"
+        }
+      },
+      "required": ["success", "data"],
+      "additionalProperties": false
+    },
+    "RunMode": {
+      "type": "string",
+      "enum": ["step", "until_blocked", "until_done"],
+      "description": "Mode for job execution control"
+    },
+    "JobRunRequest": {
+      "type": "object",
+      "description": "Request body for running a job",
+      "properties": {
+        "run_mode": {
+          "$ref": "#/definitions/RunMode"
+        },
+        "max_steps": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum number of steps to execute"
+        }
+      },
+      "required": ["run_mode"],
+      "additionalProperties": false
+    },
+    "JobRunResponse": {
+      "type": "object",
+      "description": "Response after running a job",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "const": true
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "$ref": "#/definitions/JobStatus"
+            },
+            "job_context": {
+              "$ref": "#/definitions/JobContext"
+            },
+            "next_actions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/NextAction"
+              }
+            }
+          },
+          "required": ["status", "job_context"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["success", "data"],
+      "additionalProperties": false
+    },
+    "JobAnswersRequest": {
+      "type": "object",
+      "description": "Request body for providing answers to questions",
+      "properties": {
+        "answers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "field_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "value": {
+                "oneOf": [
+                  { "type": "string" },
+                  { "type": "number" },
+                  { "type": "boolean" },
+                  { "type": "null" }
+                ]
+              }
+            },
+            "required": ["field_id", "value"],
+            "additionalProperties": false
+          },
+          "minItems": 1
+        }
+      },
+      "required": ["answers"],
+      "additionalProperties": false
+    },
+    "JobEditsRequest": {
+      "type": "object",
+      "description": "Request body for manual field edits",
+      "properties": {
+        "edits": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "field_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "value": {
+                "oneOf": [
+                  { "type": "string" },
+                  { "type": "number" },
+                  { "type": "boolean" },
+                  { "type": "null" }
+                ]
+              },
+              "bbox": {
+                "type": "object",
+                "properties": {
+                  "page": { "type": "integer", "minimum": 1 },
+                  "x": { "type": "number", "minimum": 0 },
+                  "y": { "type": "number", "minimum": 0 },
+                  "width": { "type": "number", "minimum": 0 },
+                  "height": { "type": "number", "minimum": 0 }
+                },
+                "required": ["page", "x", "y", "width", "height"],
+                "additionalProperties": false
+              },
+              "render_params": {
+                "type": "object",
+                "description": "Custom rendering parameters",
+                "additionalProperties": true
+              }
+            },
+            "required": ["field_id"],
+            "additionalProperties": false
+          },
+          "minItems": 1
+        }
+      },
+      "required": ["edits"],
+      "additionalProperties": false
+    },
+    "JobReviewResponse": {
+      "type": "object",
+      "description": "Response for job review endpoint",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "const": true
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "issues": {
+              "type": "array",
+              "items": {
+                "$ref": "issue.json#/definitions/Issue"
+              }
+            },
+            "fields": {
+              "type": "array",
+              "items": {
+                "$ref": "field.json#/definitions/Field"
+              }
+            },
+            "confidence_summary": {
+              "$ref": "#/definitions/ConfidenceSummary"
+            },
+            "previews": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "page": { "type": "integer", "minimum": 1 },
+                  "url": { "type": "string", "format": "uri" }
+                },
+                "required": ["page", "url"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": ["issues", "fields", "confidence_summary"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["success", "data"],
+      "additionalProperties": false
+    },
+    "JobActivityResponse": {
+      "type": "object",
+      "description": "Response for job activity endpoint",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "const": true
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "activities": {
+              "type": "array",
+              "items": {
+                "$ref": "activity.json#/definitions/Activity"
+              }
+            }
+          },
+          "required": ["activities"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["success", "data"],
+      "additionalProperties": false
+    },
+    "JobEvidenceResponse": {
+      "type": "object",
+      "description": "Response for job evidence endpoint",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "const": true
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "evidence": {
+              "type": "array",
+              "items": {
+                "$ref": "evidence.json#/definitions/Evidence"
+              }
+            }
+          },
+          "required": ["evidence"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["success", "data"],
+      "additionalProperties": false
+    }
+  },
+  "allOf": [
+    { "$ref": "#/definitions/JobContext" }
+  ]
+}

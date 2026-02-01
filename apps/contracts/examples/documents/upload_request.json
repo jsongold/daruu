@@ -1,0 +1,6 @@
+{
+  "$schema": "../../schemas/document.json#/definitions/DocumentUploadRequest",
+  "_description": "Example multipart form data metadata for document upload",
+  "role": "source",
+  "filename": "invoice_2024_001.pdf"
+}

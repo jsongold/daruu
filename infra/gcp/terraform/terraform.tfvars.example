@@ -1,0 +1,91 @@
+# Daru PDF GCP Infrastructure - Terraform Variables
+# Copy this file to terraform.tfvars and fill in your values
+#
+# Usage:
+#   cp terraform.tfvars.example terraform.tfvars
+#   vim terraform.tfvars
+#   terraform plan
+#   terraform apply
+
+# =============================================================================
+# Required Variables
+# =============================================================================
+
+# GCP project ID (required)
+project_id = "your-gcp-project-id"
+
+# GCP region for resources
+region = "asia-northeast1"
+
+# Environment name (dev, staging, prod)
+environment = "dev"
+
+# =============================================================================
+# Service Images
+# Leave empty to use default image paths, or specify custom images
+# =============================================================================
+
+# api_image          = "asia-northeast1-docker.pkg.dev/your-project/daru-pdf/api:latest"
+# web_image          = "asia-northeast1-docker.pkg.dev/your-project/daru-pdf/web:latest"
+# orchestrator_image = "asia-northeast1-docker.pkg.dev/your-project/daru-pdf/orchestrator:latest"
+
+# =============================================================================
+# Cloud Run Configuration
+# =============================================================================
+
+# API Service (PDF processing, document analysis)
+api_cpu           = "2"       # 2 vCPU for PDF processing
+api_memory        = "4Gi"     # 4 GiB for image processing
+api_min_instances = 0         # Scale to zero when idle
+api_max_instances = 10        # Max instances for scaling
+api_timeout       = 300       # 5 minutes for large PDF processing
+
+# Web Service (Static frontend)
+web_cpu           = "1"       # 1 vCPU is sufficient for static serving
+web_memory        = "1Gi"     # 1 GiB for Nginx
+web_min_instances = 1         # Always have one instance ready
+web_max_instances = 3         # Max instances for traffic spikes
+
+# Orchestrator Service (Pipeline control)
+orchestrator_cpu           = "1"    # 1 vCPU for coordination
+orchestrator_memory        = "2Gi"  # 2 GiB for state management
+orchestrator_min_instances = 0      # Scale to zero when idle
+orchestrator_max_instances = 5      # Max instances for parallel pipelines
+
+# =============================================================================
+# Memorystore Redis Configuration
+# =============================================================================
+
+redis_tier           = "BASIC"  # Use "STANDARD_HA" for production high availability
+redis_memory_size_gb = 1        # 1 GB for dev, increase for production
+
+# =============================================================================
+# Storage Configuration
+# =============================================================================
+
+storage_location       = "ASIA-NORTHEAST1"  # Same as region
+storage_lifecycle_days = 30                  # Move to coldline after 30 days
+storage_delete_days    = 90                  # Delete after 90 days
+
+# =============================================================================
+# Network Configuration
+# =============================================================================
+
+vpc_connector_name = "daru-pdf-vpc-connector"
+vpc_connector_cidr = "10.8.0.0/28"
+
+# =============================================================================
+# External Services (SENSITIVE - use environment variables instead)
+# =============================================================================
+
+# IMPORTANT: Do NOT commit these values to version control!
+# Instead, set them as environment variables:
+#   export TF_VAR_supabase_url="https://xxx.supabase.co"
+#   export TF_VAR_supabase_service_key="xxx"
+#   export TF_VAR_supabase_anon_key="xxx"
+#   export TF_VAR_openai_api_key="sk-xxx"
+
+# supabase_url         = ""
+# supabase_service_key = ""
+# supabase_anon_key    = ""
+# openai_api_key       = ""

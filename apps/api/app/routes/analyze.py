@@ -1,85 +1,92 @@
-from __future__ import annotations
+"""Analyze document routes.
 
-from typing import Annotated
-import logging
-import time
-import os
-from urllib.parse import urlparse
+POST /api/v1/analyze - Analyze document structure and detect fields/anchors.
+Uses LLM for label-to-position linking (Structure/Labelling phase).
+"""
 
-import httpx
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, Query
-from pydantic import BaseModel, ConfigDict, Field
+from fastapi import APIRouter, HTTPException, status
 
-from app.models.template_schema import DraftTemplate
-from app.services.llm_analyze import analyze_template, StrategyType
-from app.services.pdf_render import RenderedPage, render_pdf_pages
+from app.adapters.dto.analyze import (
+    AnalyzeRequestDTO,
+    AnalyzeResponseDTO,
+    FieldDTO,
+)
+from app.models import ApiResponse
 
-router = APIRouter()
-logger = logging.getLogger(__name__)
-DEBUG = os.getenv("DEBUG", "false").lower() == "true"
+router = APIRouter(tags=["analyze"])
 
 
-class AnalyzeResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+@router.post(
+    "/analyze",
+    response_model=ApiResponse[AnalyzeResponseDTO],
+    status_code=status.HTTP_200_OK,
+    summary="Analyze document structure",
+    description="""
+Analyze document structure and detect fields/anchors.
 
-    draft_template: DraftTemplate = Field(..., alias="schema_json")
+This endpoint uses LLM for label-to-position linking, which is critical for:
+- Handling label text variations across document versions
+- Resolving multiple candidates for the same semantic field
+- Interpreting table/form structures
+- Understanding nested box relationships
 
+The analysis process:
+1. Extract page images from the document
+2. Run OCR/detection to find labels and input boxes
+3. Use LLM to link labels to field positions
+4. Return detected fields with confidence scores
+""",
+)
+async def analyze_document(
+    request: AnalyzeRequestDTO,
+) -> ApiResponse[AnalyzeResponseDTO]:
+    """Analyze document structure and detect fields/anchors.
 
-@router.post("/analyze", response_model=AnalyzeResponse)
-async def analyze(
-    file: Annotated[UploadFile | None, File(description="Template PDF file")] = None,
-    pdf_url: Annotated[str | None, Form(description="GCS or public PDF URL")] = None,
-    strategy: Annotated[StrategyType, Query(description="Analysis strategy")] = "auto",
-) -> AnalyzeResponse:
-    started_at = time.monotonic()
-    if (file is None and pdf_url is None) or (file is not None and pdf_url is not None):
+    Args:
+        request: Analysis request with document ID and options
+
+    Returns:
+        Analysis result with detected fields
+
+    Raises:
+        HTTPException: If document not found or analysis fails
+    """
+    # TODO: Implement with actual document analysis
+    # This is a stub that returns an error indicating the feature is not yet implemented
+
+    # Check if document exists
+    from app.services import DocumentService
+
+    service = DocumentService()
+    document = service.get_document(request.document_id)
+
+    if document is None:
         raise HTTPException(
-            status_code=400, detail="Provide either a PDF file or pdf_url (one only)."
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document not found: {request.document_id}",
         )
 
-    filename = None
-    if file is not None:
-        pdf_bytes = await file.read()
-        filename = file.filename
-        logger.info(
-            "Analyze request received (file): name=%s size_bytes=%s",
-            filename,
-            len(pdf_bytes),
-        )
-        if not pdf_bytes:
-            raise HTTPException(status_code=400, detail="Uploaded PDF is empty.")
-    else:
-        parsed = urlparse(pdf_url or "")
-        filename = parsed.path.split("/")[-1] or parsed.netloc
-        logger.info(
-            "Analyze request received (url): host=%s path=%s",
-            parsed.netloc,
-            parsed.path,
-        )
-        pdf_bytes = _fetch_pdf_from_url(pdf_url)
+    # Return stub response for now
+    # In production, this would:
+    # 1. Load document and extract page images
+    # 2. Run OCR/detection on each page
+    # 3. Use LLM to link labels to positions
+    # 4. Return detected fields
 
-    # Use the functional pipeline
-    from app.services.analysis.pipeline import analyze_pdf
-
-    template_dict = await analyze_pdf(pdf_bytes, strategy=strategy)
-    draft_template = DraftTemplate.model_validate(template_dict)
-
-    duration = time.monotonic() - started_at
-    logger.info("Analyze completed in %.2fs", duration)
-
-    if DEBUG:
-        logger.info(f"DEBUG summary: strategy={strategy}, filename={filename}, pdf_size={len(pdf_bytes)}, duration={round(duration, 2)}s, fields_extracted={len(draft_template.fields)}")
-
-    return AnalyzeResponse.model_validate({"schema_json": draft_template})
-
-
-def _fetch_pdf_from_url(pdf_url: str | None) -> bytes:
-    if not pdf_url:
-        raise HTTPException(status_code=400, detail="pdf_url is required.")
-    timeout = httpx.Timeout(20.0)
-    try:
-        response = httpx.get(pdf_url, timeout=timeout)
-        response.raise_for_status()
-    except httpx.HTTPError as exc:
-        raise HTTPException(status_code=400, detail="Failed to fetch pdf_url.") from exc
-    return response.content
+    return ApiResponse(
+        success=True,
+        data=AnalyzeResponseDTO(
+            document_id=request.document_id,
+            fields=[],  # Empty for stub
+            page_count=document.meta.page_count,
+            has_acroform=False,  # Would detect from PDF
+            warnings=[
+                "Analysis not yet implemented. "
+                "This is a stub endpoint that will be completed with LangChain integration."
+            ],
+        ),
+        meta={
+            "stub": True,
+            "message": "Full implementation pending LangChain integration",
+        },
+    )

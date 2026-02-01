@@ -1,0 +1,106 @@
+{
+  "family": "daru-pdf-api",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "2048",
+  "memory": "4096",
+  "executionRoleArn": "${EXECUTION_ROLE_ARN}",
+  "taskRoleArn": "${TASK_ROLE_ARN}",
+  "containerDefinitions": [
+    {
+      "name": "daru-pdf-api",
+      "image": "${ECR_REGISTRY}/daru-pdf-api:${IMAGE_TAG}",
+      "cpu": 2048,
+      "memory": 4096,
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "hostPort": 8000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "DARU_DEBUG",
+          "value": "${DARU_DEBUG:-false}"
+        },
+        {
+          "name": "DARU_API_PREFIX",
+          "value": "/api/v1"
+        },
+        {
+          "name": "DARU_OPENAI_MODEL",
+          "value": "${DARU_OPENAI_MODEL:-gpt-4o-mini}"
+        },
+        {
+          "name": "AWS_S3_BUCKET_DOCUMENTS",
+          "value": "${AWS_S3_BUCKET_DOCUMENTS}"
+        },
+        {
+          "name": "AWS_S3_BUCKET_PREVIEWS",
+          "value": "${AWS_S3_BUCKET_PREVIEWS}"
+        },
+        {
+          "name": "AWS_S3_BUCKET_CROPS",
+          "value": "${AWS_S3_BUCKET_CROPS}"
+        },
+        {
+          "name": "AWS_S3_BUCKET_OUTPUTS",
+          "value": "${AWS_S3_BUCKET_OUTPUTS}"
+        },
+        {
+          "name": "AWS_REDIS_ENDPOINT",
+          "value": "${AWS_REDIS_ENDPOINT}"
+        },
+        {
+          "name": "AWS_REDIS_PORT",
+          "value": "${AWS_REDIS_PORT:-6379}"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "DARU_SUPABASE_URL",
+          "valueFrom": "${SECRETS_ARN}:DARU_SUPABASE_URL::"
+        },
+        {
+          "name": "DARU_SUPABASE_SERVICE_KEY",
+          "valueFrom": "${SECRETS_ARN}:DARU_SUPABASE_SERVICE_KEY::"
+        },
+        {
+          "name": "DARU_SUPABASE_ANON_KEY",
+          "valueFrom": "${SECRETS_ARN}:DARU_SUPABASE_ANON_KEY::"
+        },
+        {
+          "name": "DARU_OPENAI_API_KEY",
+          "valueFrom": "${SECRETS_ARN}:DARU_OPENAI_API_KEY::"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/daru-pdf-api",
+          "awslogs-region": "${AWS_REGION}",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      }
+    }
+  ],
+  "tags": [
+    {
+      "key": "Project",
+      "value": "daru-pdf"
+    },
+    {
+      "key": "Service",
+      "value": "api"
+    }
+  ]
+}

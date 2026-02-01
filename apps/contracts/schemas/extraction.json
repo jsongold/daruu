@@ -1,0 +1,88 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://daru-pdf.io/schemas/extraction.json",
+  "title": "Extraction",
+  "description": "Extraction model representing an extracted value with its evidence",
+  "definitions": {
+    "EvidenceRef": {
+      "type": "object",
+      "description": "Reference to supporting evidence for an extraction",
+      "properties": {
+        "evidence_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "ID of the evidence"
+        },
+        "relevance": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Relevance score of this evidence to the extraction"
+        }
+      },
+      "required": ["evidence_id"],
+      "additionalProperties": false
+    },
+    "ExtractionStatus": {
+      "type": "string",
+      "enum": ["pending", "extracted", "confirmed", "rejected"],
+      "description": "Status of the extraction"
+    },
+    "Extraction": {
+      "type": "object",
+      "description": "An extraction representing a value extracted for a field",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Unique identifier for the extraction"
+        },
+        "field_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "ID of the field this extraction is for"
+        },
+        "value": {
+          "description": "The extracted value",
+          "oneOf": [
+            { "type": "string" },
+            { "type": "number" },
+            { "type": "boolean" },
+            { "type": "null" }
+          ]
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Confidence score of the extraction"
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/EvidenceRef"
+          },
+          "description": "References to evidence supporting this extraction"
+        },
+        "status": {
+          "$ref": "#/definitions/ExtractionStatus"
+        },
+        "method": {
+          "type": "string",
+          "enum": ["ocr", "llm", "rule", "manual"],
+          "description": "Method used for extraction"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the extraction was created"
+        }
+      },
+      "required": ["id", "field_id", "value", "confidence"],
+      "additionalProperties": false
+    }
+  },
+  "allOf": [
+    { "$ref": "#/definitions/Extraction" }
+  ]
+}

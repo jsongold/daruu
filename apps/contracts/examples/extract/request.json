@@ -1,0 +1,22 @@
+{
+  "$schema": "../../schemas/extract.json#/definitions/ExtractRequestDTO",
+  "_description": "Example extract request for a document",
+  "document_id": "550e8400-e29b-41d4-a716-446655440001",
+  "fields": [
+    {
+      "field_id": "name_field",
+      "page": 1,
+      "bbox": [100, 200, 300, 230]
+    },
+    {
+      "field_id": "date_field",
+      "page": 1,
+      "bbox": [100, 250, 250, 280]
+    }
+  ],
+  "use_ocr": true,
+  "confidence_threshold": 0.7,
+  "options": {
+    "language": "en"
+  }
+}

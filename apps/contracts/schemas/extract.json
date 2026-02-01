@@ -1,0 +1,447 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://daru-pdf.io/schemas/extract.json",
+  "title": "Extract",
+  "description": "Schemas for extraction service requests and responses",
+  "definitions": {
+    "ExtractionSource": {
+      "type": "string",
+      "enum": ["native_text", "ocr", "llm", "user_input"],
+      "description": "Source of the extracted value"
+    },
+    "ExtractErrorCode": {
+      "type": "string",
+      "enum": [
+        "NO_TEXT_FOUND",
+        "LOW_CONFIDENCE",
+        "MULTIPLE_CANDIDATES",
+        "OCR_FAILED",
+        "INVALID_FIELD",
+        "DOCUMENT_NOT_FOUND",
+        "REGION_OUT_OF_BOUNDS"
+      ],
+      "description": "Error codes for extraction failures"
+    },
+    "ExtractField": {
+      "type": "object",
+      "description": "A field definition for extraction",
+      "properties": {
+        "field_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Unique field identifier"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Field name/label"
+        },
+        "field_type": {
+          "type": "string",
+          "enum": ["text", "number", "date", "checkbox"],
+          "default": "text",
+          "description": "Expected type"
+        },
+        "page": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Page number to extract from"
+        },
+        "bbox": {
+          "oneOf": [
+            { "$ref": "common.json#/definitions/BBox" },
+            { "type": "null" }
+          ],
+          "description": "Bounding box region to extract from"
+        },
+        "validation_pattern": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "null" }
+          ],
+          "description": "Regex pattern for validation"
+        }
+      },
+      "required": ["field_id", "name", "page"],
+      "additionalProperties": false
+    },
+    "PageArtifact": {
+      "type": "object",
+      "description": "Reference to a rendered page image artifact",
+      "properties": {
+        "page": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Page number (1-indexed)"
+        },
+        "image_ref": {
+          "type": "string",
+          "description": "Storage reference to page image"
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Image width in pixels"
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Image height in pixels"
+        }
+      },
+      "required": ["page", "image_ref", "width", "height"],
+      "additionalProperties": false
+    },
+    "ExtractRequest": {
+      "type": "object",
+      "description": "Request to extract values from a document",
+      "properties": {
+        "document_ref": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Reference/path to the document"
+        },
+        "fields": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/ExtractField" },
+          "minItems": 1,
+          "description": "Fields to extract"
+        },
+        "artifacts": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/PageArtifact" },
+          "description": "Rendered page images for OCR"
+        },
+        "user_rules": {
+          "oneOf": [
+            { "type": "object", "additionalProperties": true },
+            { "type": "null" }
+          ],
+          "description": "User-defined extraction rules"
+        },
+        "use_ocr": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to use OCR for extraction"
+        },
+        "use_llm": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to use LLM for ambiguity resolution"
+        },
+        "confidence_threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.7,
+          "description": "Minimum confidence for auto-accept"
+        }
+      },
+      "required": ["document_ref", "fields"],
+      "additionalProperties": false
+    },
+    "ExtractionEvidence": {
+      "type": "object",
+      "description": "Evidence supporting an extraction",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Unique evidence ID"
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["native_text", "ocr", "llm", "user_input"],
+          "description": "Evidence kind"
+        },
+        "page": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Page number"
+        },
+        "bbox": {
+          "oneOf": [
+            { "$ref": "common.json#/definitions/BBox" },
+            { "type": "null" }
+          ],
+          "description": "Bounding box"
+        },
+        "text": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "null" }
+          ],
+          "description": "Extracted text"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Evidence confidence"
+        }
+      },
+      "required": ["id", "kind", "page", "confidence"],
+      "additionalProperties": false
+    },
+    "Extraction": {
+      "type": "object",
+      "description": "An extracted value with confidence and evidence",
+      "properties": {
+        "field_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Field identifier"
+        },
+        "value": {
+          "type": "string",
+          "description": "Extracted value"
+        },
+        "normalized_value": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "null" }
+          ],
+          "description": "Normalized/standardized value"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Extraction confidence"
+        },
+        "source": {
+          "$ref": "#/definitions/ExtractionSource"
+        },
+        "evidence": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/ExtractionEvidence" },
+          "description": "Supporting evidence"
+        },
+        "needs_review": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether manual review is recommended"
+        },
+        "conflict_detected": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether conflicting values were found"
+        }
+      },
+      "required": ["field_id", "value", "confidence", "source"],
+      "additionalProperties": false
+    },
+    "OcrRequest": {
+      "type": "object",
+      "description": "Request for OCR processing of a region",
+      "properties": {
+        "field_id": {
+          "type": "string",
+          "description": "Field requiring OCR"
+        },
+        "page": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Page number"
+        },
+        "bbox": {
+          "$ref": "common.json#/definitions/BBox",
+          "description": "Region to OCR"
+        },
+        "reason": {
+          "type": "string",
+          "description": "Reason OCR is needed"
+        }
+      },
+      "required": ["field_id", "page", "bbox", "reason"],
+      "additionalProperties": false
+    },
+    "FollowupQuestion": {
+      "type": "object",
+      "description": "A question to ask the user for clarification",
+      "properties": {
+        "field_id": {
+          "type": "string",
+          "description": "Field requiring clarification"
+        },
+        "question": {
+          "type": "string",
+          "description": "Question to ask the user"
+        },
+        "candidates": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Possible answer candidates"
+        },
+        "reason": {
+          "type": "string",
+          "description": "Why clarification is needed"
+        }
+      },
+      "required": ["field_id", "question", "reason"],
+      "additionalProperties": false
+    },
+    "ExtractError": {
+      "type": "object",
+      "description": "Error detail for extraction failures",
+      "properties": {
+        "field_id": {
+          "type": "string",
+          "description": "Field that failed"
+        },
+        "code": {
+          "$ref": "#/definitions/ExtractErrorCode"
+        },
+        "message": {
+          "type": "string",
+          "description": "Human-readable error message"
+        }
+      },
+      "required": ["field_id", "code", "message"],
+      "additionalProperties": false
+    },
+    "ExtractResult": {
+      "type": "object",
+      "description": "Result of the extraction operation",
+      "properties": {
+        "document_ref": {
+          "type": "string",
+          "description": "Document reference from request"
+        },
+        "success": {
+          "type": "boolean",
+          "description": "Whether extraction completed"
+        },
+        "extractions": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/Extraction" },
+          "description": "Successfully extracted values"
+        },
+        "evidence": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/ExtractionEvidence" },
+          "description": "All evidence collected"
+        },
+        "ocr_requests": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/OcrRequest" },
+          "description": "OCR requests for regions needing OCR"
+        },
+        "followup_questions": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/FollowupQuestion" },
+          "description": "Questions for user clarification"
+        },
+        "errors": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/ExtractError" },
+          "description": "Extraction errors"
+        }
+      },
+      "required": ["document_ref", "success"],
+      "additionalProperties": false
+    },
+    "ExtractRequestDTO": {
+      "type": "object",
+      "description": "API request body for POST /api/v1/extract",
+      "properties": {
+        "document_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Source document ID"
+        },
+        "fields": {
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "field_id": { "type": "string" },
+                  "page": { "type": "integer", "minimum": 1 },
+                  "bbox": {
+                    "type": "array",
+                    "items": { "type": "number" },
+                    "minItems": 4,
+                    "maxItems": 4
+                  }
+                },
+                "required": ["field_id", "page", "bbox"]
+              }
+            },
+            { "type": "null" }
+          ],
+          "description": "Specific fields to extract"
+        },
+        "use_ocr": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to use OCR"
+        },
+        "confidence_threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.7,
+          "description": "Minimum confidence for auto-accept"
+        },
+        "options": {
+          "oneOf": [
+            { "type": "object", "additionalProperties": true },
+            { "type": "null" }
+          ],
+          "description": "Extraction options"
+        }
+      },
+      "required": ["document_id"],
+      "additionalProperties": false
+    },
+    "ExtractResponseDTO": {
+      "type": "object",
+      "description": "API response body for POST /api/v1/extract",
+      "properties": {
+        "document_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Source document ID"
+        },
+        "extractions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "field_id": { "type": "string" },
+              "value": { "type": "string" },
+              "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+              "source": { "type": "string" },
+              "evidence": { "type": "array" },
+              "needs_review": { "type": "boolean" }
+            },
+            "required": ["field_id", "value", "confidence", "source"]
+          },
+          "description": "Extracted values"
+        },
+        "failed_fields": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Field IDs that failed extraction"
+        },
+        "needs_questions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Field IDs that need user input"
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Any warnings generated"
+        }
+      },
+      "required": ["document_id"],
+      "additionalProperties": false
+    }
+  },
+  "allOf": [
+    { "$ref": "#/definitions/ExtractResult" }
+  ]
+}

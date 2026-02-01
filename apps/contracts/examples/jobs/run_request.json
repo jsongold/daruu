@@ -1,0 +1,5 @@
+{
+  "$schema": "../../schemas/job_context.json#/definitions/JobRunRequest",
+  "run_mode": "until_blocked",
+  "max_steps": 10
+}

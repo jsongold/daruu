@@ -1,0 +1,199 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://daru-pdf.io/schemas/error.json",
+  "title": "Error",
+  "description": "Error response schemas for API",
+  "definitions": {
+    "ErrorCode": {
+      "type": "string",
+      "enum": [
+        "VALIDATION_ERROR",
+        "BAD_REQUEST",
+        "UNAUTHORIZED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "UNPROCESSABLE_ENTITY",
+        "INTERNAL_ERROR",
+        "SERVICE_UNAVAILABLE"
+      ],
+      "description": "Machine-readable error code"
+    },
+    "ErrorDetail": {
+      "type": "object",
+      "description": "Detailed error information",
+      "properties": {
+        "code": {
+          "$ref": "#/definitions/ErrorCode"
+        },
+        "message": {
+          "type": "string",
+          "description": "Human-readable error message"
+        },
+        "field": {
+          "type": "string",
+          "description": "Field that caused the error (for validation errors)"
+        },
+        "trace_id": {
+          "type": "string",
+          "description": "Trace ID for debugging (500 errors)"
+        },
+        "details": {
+          "type": "object",
+          "description": "Additional error details",
+          "additionalProperties": true
+        }
+      },
+      "required": ["code", "message"],
+      "additionalProperties": false
+    },
+    "ErrorResponse": {
+      "type": "object",
+      "description": "Standard error response format",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "const": false,
+          "description": "Always false for errors"
+        },
+        "error": {
+          "$ref": "#/definitions/ErrorDetail"
+        }
+      },
+      "required": ["success", "error"],
+      "additionalProperties": false
+    },
+    "ValidationErrorResponse": {
+      "type": "object",
+      "description": "Validation error response (400)",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "const": false
+        },
+        "error": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string",
+              "const": "VALIDATION_ERROR"
+            },
+            "message": {
+              "type": "string"
+            },
+            "field": {
+              "type": "string"
+            },
+            "errors": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "loc": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "msg": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string"
+                  }
+                },
+                "required": ["msg"]
+              }
+            }
+          },
+          "required": ["code", "message"]
+        }
+      },
+      "required": ["success", "error"],
+      "additionalProperties": false
+    },
+    "NotFoundErrorResponse": {
+      "type": "object",
+      "description": "Not found error response (404)",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "const": false
+        },
+        "error": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string",
+              "const": "NOT_FOUND"
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": ["code", "message"]
+        }
+      },
+      "required": ["success", "error"],
+      "additionalProperties": false
+    },
+    "ConflictErrorResponse": {
+      "type": "object",
+      "description": "Conflict error response (409)",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "const": false
+        },
+        "error": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string",
+              "const": "CONFLICT"
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": ["code", "message"]
+        }
+      },
+      "required": ["success", "error"],
+      "additionalProperties": false
+    },
+    "InternalErrorResponse": {
+      "type": "object",
+      "description": "Internal server error response (500)",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "const": false
+        },
+        "error": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string",
+              "const": "INTERNAL_ERROR"
+            },
+            "message": {
+              "type": "string",
+              "const": "An internal error occurred. Please try again later."
+            },
+            "trace_id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": ["code", "message"]
+        }
+      },
+      "required": ["success", "error"],
+      "additionalProperties": false
+    }
+  },
+  "allOf": [
+    { "$ref": "#/definitions/ErrorResponse" }
+  ]
+}

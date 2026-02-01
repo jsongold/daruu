@@ -1,30 +1,117 @@
 [project]
 name = "daru-pdf-api"
-version = "0.0.0"
-description = "Daru PDF API"
+version = "0.1.0"
+description = "Daru PDF Public API Gateway"
 requires-python = ">=3.11,<4"
 dependencies = [
-  "fastapi",
-  "uvicorn[standard]",
-  "python-multipart",
-  "reportlab>=4.2.0",
-  "pypdf",
-  "PyMuPDF",
-  "pytest",
-  "httpx",
-  "supabase",
+    "fastapi>=0.109.0",
+    "uvicorn[standard]>=0.27.0",
+    "python-multipart>=0.0.6",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "sse-starlette>=1.8.0",
+    "aiofiles>=23.2.0",
+    "PyMuPDF>=1.24.0",
+    "reportlab>=4.1.0",
+    "opencv-python-headless>=4.9.0",
+    "numpy>=1.26.0",
+    "pdfplumber>=0.10.0",
 ]
+
+[project.optional-dependencies]
+# Supabase integration (database, auth, storage)
+supabase = [
+    "supabase>=2.0.0",
+]
+
+# LangChain integration (LLM abstraction)
+langchain = [
+    "langchain>=0.3.0",
+    "langchain-openai>=0.3.0",
+    "langchain-core>=0.3.0",
+]
+
+# Fuzzy string matching (optional, falls back to difflib)
+fuzzy = [
+    "rapidfuzz>=3.0.0",
+]
+
+# Observability (tracing, metrics, logging)
+observability = [
+    "opentelemetry-api>=1.20.0",
+    "opentelemetry-sdk>=1.20.0",
+    "opentelemetry-exporter-otlp>=1.20.0",
+    "prometheus-client>=0.19.0",
+    "structlog>=23.2.0",
+]
+
+# Redis integration (job storage, distributed locking)
+redis = [
+    "redis>=5.0.0",
+]
+
+# Celery integration (async task processing)
+celery = [
+    "celery[redis]>=5.3.0",
+]
+
+# All integrations
+integrations = [
+    "daru-pdf-api[supabase]",
+    "daru-pdf-api[langchain]",
+    "daru-pdf-api[fuzzy]",
+    "daru-pdf-api[observability]",
+    "daru-pdf-api[redis]",
+    "daru-pdf-api[celery]",
+]
+
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-celery>=0.1.0",
+    "httpx>=0.26.0",
+    "coverage>=7.4.0",
+    "fakeredis>=2.20.0",
+]
+
+# Full development setup with all integrations
+dev-full = [
+    "daru-pdf-api[dev]",
+    "daru-pdf-api[integrations]",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py311"
 
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
 [tool.mypy]
 python_version = "3.11"
 warn_unused_ignores = true
 warn_redundant_casts = true
-disallow_untyped_defs = false
+disallow_untyped_defs = true
+strict = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+asyncio_mode = "auto"
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+]

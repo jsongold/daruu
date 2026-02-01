@@ -1,0 +1,179 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://daru-pdf.io/schemas/common.json",
+  "title": "Common Types",
+  "description": "Shared type definitions used across all Daru PDF contracts",
+  "definitions": {
+    "UUID": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Universally Unique Identifier",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "Confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Confidence score between 0 and 1"
+    },
+    "DateTime": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 date-time string"
+    },
+    "BBox": {
+      "type": "object",
+      "description": "Bounding box coordinates on a page",
+      "properties": {
+        "page": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Page number (1-indexed)"
+        },
+        "x": {
+          "type": "number",
+          "minimum": 0,
+          "description": "X coordinate (normalized 0-1 or pixels)"
+        },
+        "y": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Y coordinate (normalized 0-1 or pixels)"
+        },
+        "width": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Width of the bounding box"
+        },
+        "height": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Height of the bounding box"
+        }
+      },
+      "required": ["page", "x", "y", "width", "height"],
+      "additionalProperties": false
+    },
+    "PageRef": {
+      "type": "object",
+      "description": "Reference to a specific page in a document",
+      "properties": {
+        "document_id": {
+          "$ref": "#/definitions/UUID"
+        },
+        "page": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Page number (1-indexed)"
+        }
+      },
+      "required": ["document_id", "page"],
+      "additionalProperties": false
+    },
+    "FieldType": {
+      "type": "string",
+      "enum": ["text", "number", "date", "checkbox", "signature", "image"],
+      "description": "Type of field value"
+    },
+    "FieldSource": {
+      "type": "string",
+      "enum": ["extracted", "manual", "default"],
+      "description": "Source of field value"
+    },
+    "JobStatus": {
+      "type": "string",
+      "enum": ["pending", "running", "blocked", "done", "failed"],
+      "description": "Current status of a job"
+    },
+    "JobMode": {
+      "type": "string",
+      "enum": ["transfer", "scratch"],
+      "description": "Mode of job execution"
+    },
+    "RunMode": {
+      "type": "string",
+      "enum": ["step", "until_blocked", "until_done"],
+      "description": "Mode for job execution control"
+    },
+    "IssueSeverity": {
+      "type": "string",
+      "enum": ["error", "warning", "info"],
+      "description": "Severity level of an issue"
+    },
+    "IssueType": {
+      "type": "string",
+      "enum": ["missing_value", "low_confidence", "format_error", "validation_error", "conflict"],
+      "description": "Type of issue detected"
+    },
+    "MimeType": {
+      "type": "string",
+      "pattern": "^[a-z]+/[a-z0-9.+-]+$",
+      "description": "MIME type string",
+      "examples": ["application/pdf", "image/png", "image/jpeg"]
+    },
+    "ErrorResponse": {
+      "type": "object",
+      "description": "Standard error response format",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "const": false
+        },
+        "error": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string",
+              "description": "Machine-readable error code"
+            },
+            "message": {
+              "type": "string",
+              "description": "Human-readable error message"
+            },
+            "details": {
+              "type": "object",
+              "description": "Additional error details",
+              "additionalProperties": true
+            },
+            "trace_id": {
+              "type": "string",
+              "description": "Trace ID for debugging"
+            }
+          },
+          "required": ["code", "message"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["success", "error"],
+      "additionalProperties": false
+    },
+    "PaginationMeta": {
+      "type": "object",
+      "description": "Pagination metadata for list responses",
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of items"
+        },
+        "page": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Current page number"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "description": "Items per page"
+        },
+        "has_more": {
+          "type": "boolean",
+          "description": "Whether more pages exist"
+        }
+      },
+      "required": ["total", "page", "limit"],
+      "additionalProperties": false
+    }
+  }
+}

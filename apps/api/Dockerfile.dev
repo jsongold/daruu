@@ -1,0 +1,79 @@
+# =============================================================================
+# Daru PDF API - Development Dockerfile
+# =============================================================================
+# Development image with hot-reload support.
+#
+# Features:
+#   - Source code mounted as volume
+#   - Auto-reload on code changes
+#   - Debug dependencies included
+#   - Development tools available
+#
+# Build:
+#   docker build -f Dockerfile.dev -t daru-pdf-api:dev .
+#
+# Run:
+#   docker run -p 8000:8000 -v $(pwd)/app:/app/app daru-pdf-api:dev
+# =============================================================================
+
+FROM python:3.11-slim-bookworm
+
+# Labels
+LABEL maintainer="Daru PDF Team" \
+      version="0.1.0-dev" \
+      description="Daru PDF API - Development image"
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONFAULTHANDLER=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    # Application settings
+    DARU_DEBUG=true \
+    DARU_UPLOAD_DIR=/app/uploads
+
+# Install dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # For health checks
+    curl \
+    # For PDF processing
+    libmupdf-dev \
+    # For OpenCV
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    # For fonts
+    fonts-dejavu-core \
+    # Development tools
+    git \
+    vim \
+    # Clean up
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Set working directory
+WORKDIR /app
+
+# Copy project files
+COPY pyproject.toml ./
+
+# Install dependencies with all extras (including dev)
+RUN pip install --upgrade pip && \
+    pip install -e ".[dev-full]"
+
+# Create directories
+RUN mkdir -p /app/uploads
+
+# Copy application code
+COPY app/ ./app/
+# COPY tests/ ./tests/
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=10s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Default command with hot-reload
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app/app"]

@@ -1,0 +1,19 @@
+# Environment Files
+.env
+.env.gcp
+*.env.local
+
+# Keep examples
+!.env.*.example
+!.env.example
+
+# Terraform (see terraform/.gitignore for detailed rules)
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/terraform.tfvars
+
+# Credentials and Secrets
+*.json.key
+*-credentials.json
+service-account*.json

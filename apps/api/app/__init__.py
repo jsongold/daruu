@@ -1,1 +1,3 @@
-"""API package."""
+"""Daru PDF Public API Gateway."""
+
+__version__ = "0.1.0"

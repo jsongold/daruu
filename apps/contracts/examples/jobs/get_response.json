@@ -1,0 +1,177 @@
+{
+  "$schema": "../../schemas/job_context.json#/definitions/JobGetResponse",
+  "success": true,
+  "data": {
+    "id": "660e8400-e29b-41d4-a716-446655440010",
+    "status": "blocked",
+    "mode": "transfer",
+    "source_document_id": "550e8400-e29b-41d4-a716-446655440001",
+    "target_document_id": "550e8400-e29b-41d4-a716-446655440002",
+    "config": {
+      "confidence_threshold": 0.8,
+      "auto_apply": false,
+      "require_review": true
+    },
+    "fields": [
+      {
+        "id": "770e8400-e29b-41d4-a716-446655440001",
+        "name": "Invoice Number",
+        "type": "text",
+        "value": "INV-2024-001",
+        "confidence": 0.95,
+        "bbox": {
+          "page": 1,
+          "x": 0.65,
+          "y": 0.12,
+          "width": 0.15,
+          "height": 0.025
+        },
+        "source": "extracted",
+        "document_id": "550e8400-e29b-41d4-a716-446655440001"
+      },
+      {
+        "id": "770e8400-e29b-41d4-a716-446655440002",
+        "name": "Invoice Date",
+        "type": "date",
+        "value": "2024-01-15",
+        "confidence": 0.92,
+        "bbox": {
+          "page": 1,
+          "x": 0.65,
+          "y": 0.15,
+          "width": 0.12,
+          "height": 0.025
+        },
+        "source": "extracted",
+        "document_id": "550e8400-e29b-41d4-a716-446655440001"
+      },
+      {
+        "id": "770e8400-e29b-41d4-a716-446655440003",
+        "name": "Total Amount",
+        "type": "number",
+        "value": 1250.00,
+        "confidence": 0.88,
+        "bbox": {
+          "page": 1,
+          "x": 0.75,
+          "y": 0.85,
+          "width": 0.1,
+          "height": 0.025
+        },
+        "source": "extracted",
+        "document_id": "550e8400-e29b-41d4-a716-446655440001"
+      },
+      {
+        "id": "770e8400-e29b-41d4-a716-446655440004",
+        "name": "Customer Name",
+        "type": "text",
+        "value": null,
+        "confidence": 0.0,
+        "bbox": null,
+        "source": "extracted",
+        "document_id": "550e8400-e29b-41d4-a716-446655440001",
+        "required": true
+      }
+    ],
+    "mappings": [
+      {
+        "id": "880e8400-e29b-41d4-a716-446655440001",
+        "source_field_id": "770e8400-e29b-41d4-a716-446655440001",
+        "target_field_id": "990e8400-e29b-41d4-a716-446655440001",
+        "confidence": 0.95,
+        "status": "confirmed",
+        "created_at": "2024-01-15T10:35:00Z",
+        "updated_at": "2024-01-15T10:35:00Z"
+      },
+      {
+        "id": "880e8400-e29b-41d4-a716-446655440002",
+        "source_field_id": "770e8400-e29b-41d4-a716-446655440002",
+        "target_field_id": "990e8400-e29b-41d4-a716-446655440002",
+        "confidence": 0.92,
+        "status": "confirmed",
+        "transform": "YYYY-MM-DD to DD/MM/YYYY",
+        "created_at": "2024-01-15T10:35:00Z",
+        "updated_at": "2024-01-15T10:35:00Z"
+      }
+    ],
+    "extractions": [
+      {
+        "id": "aa0e8400-e29b-41d4-a716-446655440001",
+        "field_id": "770e8400-e29b-41d4-a716-446655440001",
+        "value": "INV-2024-001",
+        "confidence": 0.95,
+        "evidence_refs": [
+          {
+            "evidence_id": "bb0e8400-e29b-41d4-a716-446655440001",
+            "relevance": 1.0
+          }
+        ],
+        "status": "confirmed",
+        "method": "ocr",
+        "created_at": "2024-01-15T10:35:00Z"
+      }
+    ],
+    "issues": [
+      {
+        "id": "cc0e8400-e29b-41d4-a716-446655440001",
+        "job_id": "660e8400-e29b-41d4-a716-446655440010",
+        "field_id": "770e8400-e29b-41d4-a716-446655440004",
+        "type": "missing_value",
+        "severity": "error",
+        "message": "Customer Name is required but could not be extracted",
+        "status": "open",
+        "suggestion": "Please provide the customer name manually",
+        "created_at": "2024-01-15T10:36:00Z"
+      }
+    ],
+    "activities": [
+      {
+        "id": "dd0e8400-e29b-41d4-a716-446655440001",
+        "job_id": "660e8400-e29b-41d4-a716-446655440010",
+        "timestamp": "2024-01-15T10:30:00Z",
+        "action": "job_created",
+        "actor": "user",
+        "message": "Job created in transfer mode"
+      },
+      {
+        "id": "dd0e8400-e29b-41d4-a716-446655440002",
+        "job_id": "660e8400-e29b-41d4-a716-446655440010",
+        "timestamp": "2024-01-15T10:35:00Z",
+        "action": "field_extracted",
+        "actor": "ocr",
+        "field_id": "770e8400-e29b-41d4-a716-446655440001",
+        "message": "Extracted Invoice Number with 95% confidence"
+      },
+      {
+        "id": "dd0e8400-e29b-41d4-a716-446655440003",
+        "job_id": "660e8400-e29b-41d4-a716-446655440010",
+        "timestamp": "2024-01-15T10:36:00Z",
+        "action": "job_blocked",
+        "actor": "system",
+        "message": "Job blocked: missing required field Customer Name"
+      }
+    ],
+    "confidence_summary": {
+      "average": 0.6875,
+      "min": 0.0,
+      "max": 0.95,
+      "low_confidence_count": 1,
+      "total_fields": 4
+    },
+    "next_actions": [
+      {
+        "type": "provide_answer",
+        "field_id": "770e8400-e29b-41d4-a716-446655440004",
+        "question": "What is the customer name for this invoice?"
+      }
+    ],
+    "progress": {
+      "current_step": "waiting_for_input",
+      "total_steps": 5,
+      "completed_steps": 3,
+      "percentage": 60.0
+    },
+    "created_at": "2024-01-15T10:30:00Z",
+    "updated_at": "2024-01-15T10:36:00Z"
+  }
+}

@@ -1,0 +1,77 @@
+# Cloud Build configuration for Daru PDF Web Service
+#
+# This configuration:
+# 1. Builds the Docker image with Vite build
+# 2. Pushes to Artifact Registry
+# 3. Deploys to Cloud Run
+#
+# Trigger this build:
+#   gcloud builds submit --config=infra/gcp/cloud-run/web/cloudbuild.yaml .
+#
+# Or set up a trigger for automatic builds on push to main branch.
+
+substitutions:
+  _REGION: asia-northeast1
+  _SERVICE_NAME: daru-pdf-web
+  _ENVIRONMENT: dev
+  _API_URL: ''
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  # Step 1: Build the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build'
+    args:
+      - 'build'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/daru-pdf/web:${SHORT_SHA}'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/daru-pdf/web:latest'
+      - '-f'
+      - 'infra/gcp/cloud-run/web/Dockerfile'
+      - '--build-arg'
+      - 'VITE_API_URL=${_API_URL}'
+      - '.'
+    timeout: 600s
+
+  # Step 2: Push the Docker image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push'
+    args:
+      - 'push'
+      - '--all-tags'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/daru-pdf/web'
+    waitFor: ['build']
+
+  # Step 3: Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - '${_SERVICE_NAME}-${_ENVIRONMENT}'
+      - '--image'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/daru-pdf/web:${SHORT_SHA}'
+      - '--region'
+      - '${_REGION}'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--cpu'
+      - '1'
+      - '--memory'
+      - '1Gi'
+      - '--min-instances'
+      - '1'
+      - '--max-instances'
+      - '3'
+    waitFor: ['push']
+
+images:
+  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/daru-pdf/web:${SHORT_SHA}'
+  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/daru-pdf/web:latest'
+
+timeout: 900s

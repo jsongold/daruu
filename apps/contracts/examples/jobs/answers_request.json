@@ -1,0 +1,9 @@
+{
+  "$schema": "../../schemas/job_context.json#/definitions/JobAnswersRequest",
+  "answers": [
+    {
+      "field_id": "770e8400-e29b-41d4-a716-446655440004",
+      "value": "Acme Corporation"
+    }
+  ]
+}

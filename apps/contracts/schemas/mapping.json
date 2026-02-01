@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://daru-pdf.io/schemas/mapping.json",
+  "title": "Mapping",
+  "description": "Mapping model representing a relationship between source and target fields",
+  "definitions": {
+    "MappingStatus": {
+      "type": "string",
+      "enum": ["pending", "confirmed", "rejected", "applied"],
+      "description": "Status of the mapping"
+    },
+    "Mapping": {
+      "type": "object",
+      "description": "A mapping between a source field and a target field",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Unique identifier for the mapping"
+        },
+        "source_field_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "ID of the source field"
+        },
+        "target_field_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "ID of the target field"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Confidence score of the mapping"
+        },
+        "status": {
+          "$ref": "#/definitions/MappingStatus"
+        },
+        "transform": {
+          "type": "string",
+          "description": "Optional transformation to apply (e.g., date format conversion)"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the mapping was created"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the mapping was last updated"
+        }
+      },
+      "required": ["id", "source_field_id", "target_field_id", "confidence"],
+      "additionalProperties": false
+    }
+  },
+  "allOf": [
+    { "$ref": "#/definitions/Mapping" }
+  ]
+}

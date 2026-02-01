@@ -1,0 +1,143 @@
+# Daru PDF Docker Compose Development Overrides
+#
+# This file is automatically loaded when running `docker compose up`
+# and provides development-specific configuration.
+#
+# Features:
+#   - Hot-reload for both API and Web
+#   - Debug mode enabled
+#   - Source code mounted as volumes
+#   - Exposed ports for debugging
+#   - Redis Commander for monitoring (optional)
+#
+# Usage:
+#   docker compose up        # Automatically includes this file
+#   docker compose up --build  # Rebuild images after changes
+
+services:
+  # ==========================================================================
+  # API Service - Development Overrides
+  # ==========================================================================
+  api:
+    build:
+      context: ../../apps/api
+      dockerfile: Dockerfile.dev
+    environment:
+      - DARU_DEBUG=true
+      # LangChain tracing (optional, for debugging)
+      - DARU_LANGCHAIN_TRACING=${DARU_LANGCHAIN_TRACING:-false}
+      - DARU_LANGCHAIN_VERBOSE=${DARU_LANGCHAIN_VERBOSE:-false}
+    volumes:
+      # Mount source code for hot-reload
+      - ../../apps/api/app:/app/app:cached
+      - ../../apps/api/tests:/app/tests:cached
+      # Persistent uploads directory
+      - uploads:/app/uploads
+    # Override command for development with auto-reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/app
+    # Faster health check for development
+    healthcheck:
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ==========================================================================
+  # Orchestrator Service - Development Overrides
+  # ==========================================================================
+  orchestrator:
+    build:
+      context: ../../apps/orchestrator
+      dockerfile: Dockerfile.dev
+    volumes:
+      # Mount source code for hot-reload
+      - ../../apps/orchestrator/app:/app/app:cached
+      - ../../apps/orchestrator/tests:/app/tests:cached
+    environment:
+      - ORCHESTRATOR_DEBUG=true
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # ==========================================================================
+  # Web Service - Development Overrides (Vite Dev Server)
+  # ==========================================================================
+  web:
+    build:
+      context: ../../apps/web
+      dockerfile: Dockerfile.dev
+    ports: !override
+      - "${DARU_WEB_PORT:-5173}:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8000/api/v1
+    volumes:
+      # Mount source code for hot-reload
+      - ../../apps/web/src:/app/src:cached
+      - ../../apps/web/public:/app/public:cached
+      - ../../apps/web/index.html:/app/index.html:cached
+      - ../../apps/web/vite.config.ts:/app/vite.config.ts:cached
+      - ../../apps/web/tsconfig.json:/app/tsconfig.json:cached
+      # Exclude node_modules from mount
+      - /app/node_modules
+    # Override command for development with HMR
+    command: npm run dev -- --host 0.0.0.0
+
+  # ==========================================================================
+  # Celery Worker - Development Overrides
+  # ==========================================================================
+  celery-worker:
+    build:
+      context: ../../apps/api
+      dockerfile: Dockerfile.dev
+    environment:
+      - DARU_DEBUG=true
+    volumes:
+      # Mount source code for easier debugging
+      - ../../apps/api/app:/app/app:cached
+      - uploads:/app/uploads
+    # Lower concurrency for development
+    command: celery -A app.infrastructure.celery worker --loglevel=debug --concurrency=2
+
+  # ==========================================================================
+  # Redis Commander - Redis GUI (Development Only)
+  # ==========================================================================
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: daru-redis-commander
+    restart: unless-stopped
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - daru-network
+    profiles:
+      - debug  # Only starts with: docker compose --profile debug up
+    labels:
+      - "com.daru-pdf.service=redis-commander"
+      - "com.daru-pdf.description=Redis GUI for development"
+
+  # ==========================================================================
+  # MailHog - Email Testing (Development Only)
+  # ==========================================================================
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: daru-mailhog
+    restart: unless-stopped
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI
+    networks:
+      - daru-network
+    profiles:
+      - debug  # Only starts with: docker compose --profile debug up
+    labels:
+      - "com.daru-pdf.service=mailhog"
+      - "com.daru-pdf.description=Email testing for development"

@@ -1,0 +1,75 @@
+# =============================================================================
+# Docker Ignore - Daru PDF Web
+# Exclude files not needed in Docker builds
+# =============================================================================
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Dependencies (will be installed fresh in container)
+node_modules/
+
+# Build output (will be rebuilt in container)
+dist/
+build/
+
+# Environment files (CRITICAL: never include secrets)
+.env
+.env.*
+*.env
+.envrc
+
+# IDE and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Testing
+coverage/
+.nyc_output/
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+__tests__/
+tests/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Development files
+docker-compose*.yml
+Makefile
+
+# TypeScript build info
+*.tsbuildinfo
+
+# ESLint cache
+.eslintcache
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+temp/
+
+# Lock files (using package-lock.json only)
+pnpm-lock.yaml
+yarn.lock
