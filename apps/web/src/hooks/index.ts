@@ -15,3 +15,9 @@ export type { UseConversationOptions, UseConversationReturn } from './useConvers
 
 export { useTemplates } from './useTemplates';
 export type { UseTemplatesOptions, UseTemplatesReturn } from './useTemplates';
+
+export { useEdits } from './useEdits';
+export type { UseEditsOptions, UseEditsReturn } from './useEdits';
+
+export { useKeyboardShortcuts, useIsKeyPressed, getShortcutDisplay } from './useKeyboardShortcuts';
+export type { KeyboardShortcutHandlers, UseKeyboardShortcutsOptions } from './useKeyboardShortcuts';

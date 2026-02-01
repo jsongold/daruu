@@ -34,6 +34,9 @@ from app.infrastructure.repositories.memory_repository import (
 from app.infrastructure.repositories.memory_conversation_repository import (
     MemoryConversationRepository,
 )
+from app.infrastructure.repositories.memory_edit_repository import (
+    MemoryEditRepository,
+)
 from app.infrastructure.repositories.memory_message_repository import (
     MemoryMessageRepository,
 )
@@ -42,6 +45,7 @@ from app.infrastructure.repositories.memory_template_repository import (
 )
 from app.infrastructure.repositories.factory import (
     get_document_repository,
+    get_edit_repository,
     get_event_publisher,
     get_file_repository,
     get_job_repository,
@@ -59,10 +63,12 @@ __all__ = [
     "MemoryFileRepository",
     "MemoryEventPublisher",
     "MemoryConversationRepository",
+    "MemoryEditRepository",
     "MemoryMessageRepository",
     "MemoryTemplateRepository",
     # Factory functions (preferred way to get repositories)
     "get_document_repository",
+    "get_edit_repository",
     "get_job_repository",
     "get_file_repository",
     "get_event_publisher",

@@ -35,6 +35,7 @@ Directory structure:
 
 from app.repositories.conversation_repository import ConversationRepository
 from app.repositories.document_repository import DocumentRepository
+from app.repositories.edit_repository import EditRepository
 from app.repositories.event_publisher import EventPublisher
 from app.repositories.file_repository import FileRepository
 from app.repositories.job_repository import JobRepository
@@ -44,6 +45,7 @@ from app.repositories.template_repository import TemplateRepository
 __all__ = [
     "ConversationRepository",
     "DocumentRepository",
+    "EditRepository",
     "EventPublisher",
     "FileRepository",
     "JobRepository",

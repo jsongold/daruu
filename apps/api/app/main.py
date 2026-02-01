@@ -19,6 +19,7 @@ from app.routes import (
     auth_router,
     conversations_router,
     documents_router,
+    edits_router,
     extract_router,
     extract_service_router,
     fill_router,
@@ -187,6 +188,10 @@ All errors follow a consistent format with `success: false` and an `error` objec
                 "name": "templates",
                 "description": "Template management and matching (v2 API)",
             },
+            {
+                "name": "edits",
+                "description": "Field editing and undo/redo operations (v2 API)",
+            },
         ],
         contact={
             "name": "Daru PDF Team",
@@ -239,6 +244,9 @@ All errors follow a consistent format with `success: false` and an `error` objec
 
     # Template System v2 API (has its own /api/v2 prefix)
     app.include_router(templates_router)
+
+    # Edit System v2 API (has its own /api/v2 prefix)
+    app.include_router(edits_router)
 
     # Root endpoint
     @app.get("/")

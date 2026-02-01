@@ -36,6 +36,7 @@ def _is_test_mode() -> bool:
 from app.repositories import (
     ConversationRepository,
     DocumentRepository,
+    EditRepository,
     EventPublisher,
     FileRepository,
     JobRepository,
@@ -66,6 +67,9 @@ _memory_msg_repo: "MessageRepository | None" = None
 
 # Template repository (in-memory only for now)
 _memory_template_repo: "TemplateRepository | None" = None
+
+# Edit repository (in-memory only for now)
+_memory_edit_repo: "EditRepository | None" = None
 
 
 def _get_memory_document_repository() -> DocumentRepository:
@@ -305,6 +309,30 @@ def get_template_repository(
     return _memory_template_repo
 
 
+def get_edit_repository(
+    mode: RepositoryMode = "memory",
+) -> EditRepository:
+    """Get the edit repository.
+
+    Currently only in-memory implementation is available.
+    Future: Supabase implementation.
+
+    Args:
+        mode: Repository mode (only "memory" is supported for now).
+
+    Returns:
+        EditRepository implementation.
+    """
+    global _memory_edit_repo
+    if _memory_edit_repo is None:
+        from app.infrastructure.repositories.memory_edit_repository import (
+            MemoryEditRepository,
+        )
+        _memory_edit_repo = MemoryEditRepository()
+        logger.debug("Initialized memory edit repository")
+    return _memory_edit_repo
+
+
 def clear_repository_singletons() -> None:
     """Clear all repository singleton instances.
 
@@ -312,7 +340,7 @@ def clear_repository_singletons() -> None:
     """
     global _memory_doc_repo, _memory_job_repo, _memory_file_repo, _memory_event_pub
     global _supabase_doc_repo, _supabase_job_repo, _supabase_file_repo
-    global _memory_conv_repo, _memory_msg_repo, _memory_template_repo
+    global _memory_conv_repo, _memory_msg_repo, _memory_template_repo, _memory_edit_repo
 
     _memory_doc_repo = None
     _memory_job_repo = None
@@ -324,6 +352,7 @@ def clear_repository_singletons() -> None:
     _memory_conv_repo = None
     _memory_msg_repo = None
     _memory_template_repo = None
+    _memory_edit_repo = None
 
 
 def get_active_mode() -> str:

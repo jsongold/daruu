@@ -16,6 +16,7 @@ The agent transitions through stages:
 For MVP, this provides stub implementations that simulate the agent behavior.
 """
 
+import re
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
@@ -30,8 +31,10 @@ from app.models.conversation import (
     Message,
     MessageRole,
 )
-from app.repositories import ConversationRepository, MessageRepository
+from app.models.edit import EditRequest
+from app.repositories import ConversationRepository, EditRepository, MessageRepository
 from app.services.conversation_logger import log
+from app.services.edit import EditService
 
 
 class AgentResponse(BaseModel):
@@ -69,15 +72,19 @@ class ConversationAgent:
         self,
         conversation_repo: ConversationRepository,
         message_repo: MessageRepository,
+        edit_repo: EditRepository | None = None,
     ) -> None:
         """Initialize the conversation agent.
 
         Args:
             conversation_repo: Repository for conversation persistence.
             message_repo: Repository for message persistence.
+            edit_repo: Optional repository for edit operations.
         """
         self._conversation_repo = conversation_repo
         self._message_repo = message_repo
+        self._edit_repo = edit_repo
+        self._edit_service = EditService(edit_repo) if edit_repo else None
 
     async def process_message(
         self,
@@ -530,10 +537,18 @@ class ConversationAgent:
                 conversation_id, content, AgentStage.COMPLETE
             )
 
-        elif "edit" in message_lower or "change" in message_lower:
+        # Try to parse edit commands
+        edit_result = self._parse_edit_command(user_message.content)
+        if edit_result and self._edit_service:
+            return await self._handle_edit_command(
+                conversation_id, state, edit_result
+            )
+
+        if "edit" in message_lower or "change" in message_lower:
             content = (
                 "What would you like to change? "
-                "You can click on a field in the preview or describe the change here."
+                "You can say something like 'change [field name] to [value]' "
+                "or click on a field in the preview."
             )
             return self._create_simple_response(
                 conversation_id, content, AgentStage.REVIEWING
@@ -609,6 +624,98 @@ class ConversationAgent:
 
         return self._create_simple_response(
             conversation_id, content, AgentStage.IDLE
+        )
+
+    def _parse_edit_command(
+        self,
+        message: str,
+    ) -> list[tuple[str, str]] | None:
+        """Parse edit commands from a message.
+
+        Recognizes patterns like:
+        - "change [field] to [value]"
+        - "set [field] to [value]"
+        - "update [field] to [value]"
+        - "[field] = [value]"
+
+        Args:
+            message: The user message to parse.
+
+        Returns:
+            List of (field_id, value) tuples, or None if no edits found.
+        """
+        edits: list[tuple[str, str]] = []
+
+        # Pattern: change/set/update [field_name] to [value]
+        # Field name is a single word (underscore/hyphen allowed)
+        # Value continues until 'and [verb]' or real end of string/sentence
+        # Use negative lookahead for sentence-ending punctuation not preceded by word chars
+        pattern1 = r"(?:change|set|update)\s+(?:the\s+)?([a-zA-Z][a-zA-Z0-9_-]*)\s+to\s+['\"]?(.+?)['\"]?(?=\s+and\s+(?:change|set|update)|$|\s*[!?](?:\s|$))"
+        matches1 = re.findall(pattern1, message, re.IGNORECASE)
+        for field, value in matches1:
+            # Clean trailing periods that aren't part of the value
+            clean_value = value.rstrip(".")
+            # But keep domain-like patterns (e.g., .com)
+            if value.endswith(".") and not re.search(r"\.\w+$", clean_value):
+                value = clean_value
+            edits.append((field.strip(), value.strip()))
+
+        # Pattern: [field] = [value] (value is non-whitespace chars)
+        pattern2 = r"\b([a-zA-Z][a-zA-Z0-9_-]*)\s*=\s*['\"]?([^\s'\"]+)['\"]?"
+        matches2 = re.findall(pattern2, message)
+        for field, value in matches2:
+            edits.append((field.strip(), value.strip()))
+
+        return edits if edits else None
+
+    async def _handle_edit_command(
+        self,
+        conversation_id: str,
+        state: AgentState,
+        edits: list[tuple[str, str]],
+    ) -> AgentResponse:
+        """Handle parsed edit commands.
+
+        Args:
+            conversation_id: ID of the conversation.
+            state: Current agent state.
+            edits: List of (field_id, value) tuples to apply.
+
+        Returns:
+            AgentResponse confirming the edits.
+        """
+        if not self._edit_service:
+            return self._create_simple_response(
+                conversation_id,
+                "Edit functionality is not available.",
+                AgentStage.REVIEWING,
+            )
+
+        edit_requests = [
+            EditRequest(field_id=field_id, value=value, source="chat")
+            for field_id, value in edits
+        ]
+
+        if len(edit_requests) == 1:
+            # Single edit
+            result = self._edit_service.apply_edit(conversation_id, edit_requests[0])
+            content = result.message
+        else:
+            # Batch edit
+            result = self._edit_service.apply_batch_edits(conversation_id, edit_requests)
+            content = result.summary
+
+        log.agent_thinking(
+            conversation_id=conversation_id,
+            stage="reviewing",
+            message=f"Applied {len(edit_requests)} edit(s) from chat command",
+        )
+
+        # Build a more detailed response
+        full_content = f"{content}\n\nThe preview has been updated. Would you like to make more changes or approve the form?"
+
+        return self._create_simple_response(
+            conversation_id, full_content, AgentStage.REVIEWING
         )
 
     def _create_simple_response(

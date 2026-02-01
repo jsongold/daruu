@@ -5,6 +5,7 @@ from app.routes.analyze import router as analyze_router
 from app.routes.auth import router as auth_router
 from app.routes.conversations import router as conversations_router
 from app.routes.documents import router as documents_router
+from app.routes.edits import router as edits_router
 from app.routes.extract import router as extract_router
 from app.routes.extract_service import router as extract_service_router
 from app.routes.fill import router as fill_router
@@ -24,6 +25,7 @@ __all__ = [
     "auth_router",
     "conversations_router",
     "documents_router",
+    "edits_router",
     "extract_router",
     "extract_service_router",
     "fill_router",

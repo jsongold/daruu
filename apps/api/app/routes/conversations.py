@@ -24,6 +24,7 @@ from fastapi.responses import StreamingResponse
 
 from app.infrastructure.repositories import (
     get_conversation_repository,
+    get_edit_repository,
     get_message_repository,
 )
 from app.models.conversation import (
@@ -42,7 +43,7 @@ from app.models.conversation import (
     MessageListResponse,
     MessageRole,
 )
-from app.repositories import ConversationRepository, MessageRepository
+from app.repositories import ConversationRepository, EditRepository, MessageRepository
 from app.services.agents.conversation_agent import ConversationAgent
 from app.services.conversation_logger import log
 
@@ -72,14 +73,21 @@ def get_message_repo() -> MessageRepository:
     return get_message_repository()
 
 
+def get_edit_repo() -> EditRepository:
+    """Get the edit repository."""
+    return get_edit_repository()
+
+
 def get_agent(
     conversation_repo: ConversationRepository = Depends(get_conversation_repo),
     message_repo: MessageRepository = Depends(get_message_repo),
+    edit_repo: EditRepository = Depends(get_edit_repo),
 ) -> ConversationAgent:
     """Get the conversation agent."""
     return ConversationAgent(
         conversation_repo=conversation_repo,
         message_repo=message_repo,
+        edit_repo=edit_repo,
     )
 
 
