@@ -99,13 +99,102 @@ eventSource.onmessage = (event) => {
 };
 ```
 
-## Quickstart
+## Quick Start with Docker Compose
+
+The fastest way to run Daru PDF is with Docker Compose.
+
+### Prerequisites
+
+- Docker and Docker Compose (v2.0+)
+- OpenAI API key (get one at https://platform.openai.com/api-keys)
+
+### 1. Setup Environment
+
+```bash
+# Copy the example environment file
+cp infra/docker-compose/.env.example infra/docker-compose/.env
+
+# Edit .env and set your OpenAI API key (required)
+# DARU_OPENAI_API_KEY=sk-your-key-here
+```
+
+### 2. Start Services
+
+```bash
+# Start all services (API, Web UI, Redis)
+cd infra/docker-compose
+docker compose -f docker-compose.dev.yml up --build
+
+# Or run in detached mode
+docker compose -f docker-compose.dev.yml up -d --build
+```
+
+### 3. Verify Services
+
+Once started, the services are available at:
+
+| Service | URL | Description |
+|---------|-----|-------------|
+| Web UI | http://localhost:5173 | Agent Chat interface |
+| API | http://localhost:8000 | FastAPI backend |
+| API Docs | http://localhost:8000/docs | Swagger UI |
+| Health Check | http://localhost:8000/health | Service health |
+
+**Quick verification:**
+
+```bash
+# Check API health
+curl http://localhost:8000/health
+
+# Check API docs are accessible
+curl -s http://localhost:8000/docs | head -5
+
+# List conversations (should return empty array initially)
+curl http://localhost:8000/api/v2/conversations
+```
+
+### 4. Using the Agent Chat UI
+
+1. Open http://localhost:5173 in your browser
+2. Click "New Conversation" or start typing
+3. Upload a PDF form (drag & drop or click to upload)
+4. Optionally upload a source document to transfer data from
+5. The agent will auto-fill all fields
+6. Review and edit using:
+   - **Chat**: Type "change [field] to [value]"
+   - **Inline**: Click on fields in the preview
+   - **Undo/Redo**: Ctrl+Z / Ctrl+Shift+Z (Cmd on Mac)
+7. Download the filled PDF
+
+### 5. Stop Services
+
+```bash
+cd infra/docker-compose
+docker compose -f docker-compose.dev.yml down
+
+# To also remove volumes (clears all data)
+docker compose -f docker-compose.dev.yml down -v
+```
+
+### Optional: Debug Tools
+
+```bash
+# Start with log viewer (Dozzle at http://localhost:9999)
+docker compose -f docker-compose.dev.yml --profile tools up
+
+# Start with Redis Commander (at http://localhost:8081)
+docker compose -f docker-compose.dev.yml --profile debug up
+```
+
+---
+
+## Local Development (Without Docker)
 
 ### Prerequisites
 
 - Python 3.11+
 - pip or poetry
-- (Optional) Node.js and pnpm for web UI
+- Node.js 18+ and npm for web UI
 
 ### Setup
 
