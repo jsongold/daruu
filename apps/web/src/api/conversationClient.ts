@@ -375,7 +375,7 @@ export function subscribeToUpdates(
   // Also listen to generic message events
   eventSource.addEventListener('message', messageHandler);
 
-  eventSource.onerror = (event) => {
+  eventSource.onerror = () => {
     // Only report error if the connection is actually closed
     // EventSource.CLOSED = 2
     if (eventSource.readyState === 2) {

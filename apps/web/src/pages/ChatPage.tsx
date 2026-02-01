@@ -150,6 +150,18 @@ export function ChatPage({ initialConversationId: _initialConversationId }: Chat
 
   // Handle sending a message - check for edit commands first
   const handleSendMessage = useCallback(async (content: string, files?: File[]) => {
+    // Auto-create conversation if none exists
+    if (!activeConversationId) {
+      try {
+        await startNewConversation();
+        // After creating, wait for state update then send
+        // The sendMessage will be called with the new conversation
+      } catch {
+        // Error handled by hook
+        return;
+      }
+    }
+
     // Check if this is an edit command
     const editCommand = parseEditCommand(content);
     if (editCommand && !files?.length) {
@@ -170,7 +182,7 @@ export function ChatPage({ initialConversationId: _initialConversationId }: Chat
 
     // Regular message
     await sendMessage(content, files);
-  }, [fieldsArray, updateField, sendMessage]);
+  }, [activeConversationId, startNewConversation, fieldsArray, updateField, sendMessage]);
 
   // Handle approval
   const handleApprove = useCallback(async (messageId: string) => {

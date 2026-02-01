@@ -133,7 +133,9 @@ export function ChatContainer({
     cursor: 'pointer',
   };
 
-  const inputDisabled = isSending || !activeConversationId || agentStage === 'analyzing' || agentStage === 'mapping' || agentStage === 'filling';
+  // Only disable during active operations, not when no conversation exists
+  // (uploading files will auto-create a conversation)
+  const inputDisabled = isSending || agentStage === 'analyzing' || agentStage === 'mapping' || agentStage === 'filling';
 
   return (
     <div style={containerStyle}>
@@ -240,7 +242,7 @@ export function ChatContainerReversed(props: ChatContainerProps) {
     minWidth: 0,
   };
 
-  const inputDisabled = rest.isSending || !rest.activeConversationId ||
+  const inputDisabled = rest.isSending ||
     rest.agentStage === 'analyzing' || rest.agentStage === 'mapping' || rest.agentStage === 'filling';
 
   return (
