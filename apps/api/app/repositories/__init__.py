@@ -39,6 +39,7 @@ from app.repositories.event_publisher import EventPublisher
 from app.repositories.file_repository import FileRepository
 from app.repositories.job_repository import JobRepository
 from app.repositories.message_repository import MessageRepository
+from app.repositories.template_repository import TemplateRepository
 
 __all__ = [
     "ConversationRepository",
@@ -47,4 +48,5 @@ __all__ = [
     "FileRepository",
     "JobRepository",
     "MessageRepository",
+    "TemplateRepository",
 ]

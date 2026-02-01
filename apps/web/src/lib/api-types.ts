@@ -806,3 +806,55 @@ export interface ChatErrorDetail {
 export interface ChatErrorResponse {
   error: ChatErrorDetail;
 }
+
+// ============================================
+// Template System Types (Phase 2)
+// ============================================
+
+/** A form template in the system */
+export interface Template {
+  /** Unique template ID */
+  id: string;
+  /** Template display name */
+  name: string;
+  /** Type of form (e.g., "W-2", "1099", "I-9") */
+  form_type: string;
+  /** Preview image URL (if available) */
+  preview_url: string | null;
+  /** Number of fields in the template */
+  field_count: number;
+}
+
+/** A template match result from visual similarity matching */
+export interface TemplateMatch {
+  /** Matched template ID */
+  template_id: string;
+  /** Template display name */
+  template_name: string;
+  /** Similarity score (0-1) */
+  similarity_score: number;
+  /** Preview image URL (if available) */
+  preview_url: string | null;
+  /** Number of fields in the template */
+  field_count: number;
+}
+
+/** User input type for ask_user_input pattern */
+export type AskUserInputType =
+  | 'template_selection'
+  | 'field_confirmation'
+  | 'value_clarification'
+  | 'document_classification';
+
+/** Metadata for template selection user input */
+export interface TemplateSelectionMetadata {
+  type: 'template_selection';
+  matches: TemplateMatch[];
+  document_id?: string;
+  page_number?: number;
+}
+
+/** Generic ask_user_input metadata */
+export type AskUserInputMetadata =
+  | TemplateSelectionMetadata
+  | { type: AskUserInputType; [key: string]: unknown };

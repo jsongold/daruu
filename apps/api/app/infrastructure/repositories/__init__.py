@@ -37,6 +37,9 @@ from app.infrastructure.repositories.memory_conversation_repository import (
 from app.infrastructure.repositories.memory_message_repository import (
     MemoryMessageRepository,
 )
+from app.infrastructure.repositories.memory_template_repository import (
+    MemoryTemplateRepository,
+)
 from app.infrastructure.repositories.factory import (
     get_document_repository,
     get_event_publisher,
@@ -44,6 +47,7 @@ from app.infrastructure.repositories.factory import (
     get_job_repository,
     get_conversation_repository,
     get_message_repository,
+    get_template_repository,
     get_active_mode,
     clear_repository_singletons,
 )
@@ -56,6 +60,7 @@ __all__ = [
     "MemoryEventPublisher",
     "MemoryConversationRepository",
     "MemoryMessageRepository",
+    "MemoryTemplateRepository",
     # Factory functions (preferred way to get repositories)
     "get_document_repository",
     "get_job_repository",
@@ -63,6 +68,7 @@ __all__ = [
     "get_event_publisher",
     "get_conversation_repository",
     "get_message_repository",
+    "get_template_repository",
     # Utility functions
     "get_active_mode",
     "clear_repository_singletons",

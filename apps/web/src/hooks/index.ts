@@ -12,3 +12,6 @@ export { useDebounce, useDebouncedCallback, useDebouncedSave } from './useDeboun
 
 export { useConversation } from './useConversation';
 export type { UseConversationOptions, UseConversationReturn } from './useConversation';
+
+export { useTemplates } from './useTemplates';
+export type { UseTemplatesOptions, UseTemplatesReturn } from './useTemplates';

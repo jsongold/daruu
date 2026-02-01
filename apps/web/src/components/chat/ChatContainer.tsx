@@ -37,6 +37,11 @@ export interface ChatContainerProps {
   onEdit?: (messageId: string) => void;
   approvingMessageId?: string | null;
 
+  // Template selection props
+  onTemplateSelect?: (templateId: string, messageId: string) => void;
+  onTemplateSkip?: (messageId: string) => void;
+  isMatchingTemplates?: boolean;
+
   // Preview props
   previewComponent?: React.ReactNode;
   showPreview?: boolean;
@@ -62,6 +67,9 @@ export function ChatContainer({
   onApprove,
   onEdit,
   approvingMessageId,
+  onTemplateSelect,
+  onTemplateSkip,
+  isMatchingTemplates = false,
   previewComponent,
   showPreview = false,
   error,
@@ -159,6 +167,9 @@ export function ChatContainer({
             onEdit={onEdit}
             approvingMessageId={approvingMessageId}
             isLoading={isLoadingMessages}
+            onTemplateSelect={onTemplateSelect}
+            onTemplateSkip={onTemplateSkip}
+            isMatchingTemplates={isMatchingTemplates}
           />
 
           <ChatInput
@@ -188,7 +199,14 @@ export function ChatContainer({
  * Layout variant with preview on the left instead of right.
  */
 export function ChatContainerReversed(props: ChatContainerProps) {
-  const { showPreview, previewComponent, ...rest } = props;
+  const {
+    showPreview,
+    previewComponent,
+    onTemplateSelect,
+    onTemplateSkip,
+    isMatchingTemplates = false,
+    ...rest
+  } = props;
 
   const containerStyle: CSSProperties = {
     display: 'flex',
@@ -282,6 +300,9 @@ export function ChatContainerReversed(props: ChatContainerProps) {
             onEdit={rest.onEdit}
             approvingMessageId={rest.approvingMessageId}
             isLoading={rest.isLoadingMessages}
+            onTemplateSelect={onTemplateSelect}
+            onTemplateSkip={onTemplateSkip}
+            isMatchingTemplates={isMatchingTemplates}
           />
 
           <ChatInput

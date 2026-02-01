@@ -96,6 +96,21 @@ from app.models.task import (
     TaskStatus,
     TaskStatusResponse,
 )
+from app.models.template import (
+    FieldType as TemplateFieldType,
+    RuleType,
+    Template,
+    TemplateBbox,
+    TemplateCreate,
+    TemplateDetailResponse,
+    TemplateListResponse,
+    TemplateMatch,
+    TemplateMatchRequest,
+    TemplateMatchResponse,
+    TemplateResponse,
+    TemplateRule,
+    TemplateUpdate,
+)
 
 __all__ = [
     # Common
@@ -185,4 +200,18 @@ __all__ = [
     "RunAsyncResponse",
     "TaskStatus",
     "TaskStatusResponse",
+    # Template (Phase 2 Template System)
+    "TemplateFieldType",
+    "RuleType",
+    "Template",
+    "TemplateBbox",
+    "TemplateCreate",
+    "TemplateDetailResponse",
+    "TemplateListResponse",
+    "TemplateMatch",
+    "TemplateMatchRequest",
+    "TemplateMatchResponse",
+    "TemplateResponse",
+    "TemplateRule",
+    "TemplateUpdate",
 ]

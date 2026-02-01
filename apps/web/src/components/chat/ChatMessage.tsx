@@ -1,17 +1,25 @@
 /**
  * Single chat message component.
  * Renders user, agent, or system messages with appropriate styling.
+ * Supports inline rendering of template picker for ask_user_input pattern.
  */
 
 import type { CSSProperties } from 'react';
-import type { Message, MessageRole, ApprovalStatus } from '../../lib/api-types';
+import type { Message, MessageRole, ApprovalStatus, TemplateMatch } from '../../lib/api-types';
 import { Button } from '../ui/Button';
+import { TemplatePicker } from '../template/TemplatePicker';
 
 export interface ChatMessageProps {
   message: Message;
   onApprove?: (messageId: string) => void;
   onEdit?: (messageId: string) => void;
   isApproving?: boolean;
+  /** Handler for template selection (for ask_user_input messages) */
+  onTemplateSelect?: (templateId: string, messageId: string) => void;
+  /** Handler for skipping template selection */
+  onTemplateSkip?: (messageId: string) => void;
+  /** Whether template matching is in progress */
+  isMatchingTemplates?: boolean;
 }
 
 const roleStyles: Record<MessageRole, CSSProperties> = {
@@ -195,13 +203,40 @@ function ApprovalActions({
   );
 }
 
+/**
+ * Check if message metadata contains template selection data.
+ */
+function hasTemplateSelection(metadata: Record<string, unknown>): boolean {
+  return metadata?.type === 'template_selection' && Array.isArray(metadata?.matches);
+}
+
+/**
+ * Get template matches from message metadata.
+ */
+function getTemplateMatches(metadata: Record<string, unknown>): TemplateMatch[] {
+  if (!hasTemplateSelection(metadata)) {
+    return [];
+  }
+  return metadata.matches as TemplateMatch[];
+}
+
+/**
+ * Check if template selection has been completed (user selected or skipped).
+ */
+function isTemplateSelectionCompleted(metadata: Record<string, unknown>): boolean {
+  return metadata?.selection_completed === true;
+}
+
 export function ChatMessage({
   message,
   onApprove,
   onEdit,
   isApproving,
+  onTemplateSelect,
+  onTemplateSkip,
+  isMatchingTemplates = false,
 }: ChatMessageProps) {
-  const { role, content, attachments, thinking, preview_ref, approval_required, approval_status, created_at } = message;
+  const { role, content, attachments, thinking, preview_ref, approval_required, approval_status, created_at, metadata } = message;
 
   const containerStyle: CSSProperties = {
     display: 'flex',
@@ -242,6 +277,22 @@ export function ChatMessage({
     (!approval_status || approval_status === 'pending') &&
     (onApprove || onEdit);
 
+  // Check for template selection
+  const templateMatches = getTemplateMatches(metadata);
+  const showTemplatePicker =
+    hasTemplateSelection(metadata) &&
+    !isTemplateSelectionCompleted(metadata) &&
+    (onTemplateSelect || onTemplateSkip);
+
+  const templatePickerContainerStyle: CSSProperties = {
+    marginTop: '12px',
+    marginLeft: '-16px',
+    marginRight: '-16px',
+    marginBottom: '-12px',
+    borderTop: '1px solid rgba(0, 0, 0, 0.1)',
+    paddingTop: '12px',
+  };
+
   return (
     <div style={containerStyle}>
       <div style={headerStyle}>
@@ -260,6 +311,17 @@ export function ChatMessage({
       )}
 
       {preview_ref && <PreviewImage previewRef={preview_ref} />}
+
+      {showTemplatePicker && (
+        <div style={templatePickerContainerStyle}>
+          <TemplatePicker
+            matches={templateMatches}
+            isLoading={isMatchingTemplates}
+            onSelect={(templateId) => onTemplateSelect?.(templateId, message.id)}
+            onSkip={() => onTemplateSkip?.(message.id)}
+          />
+        </div>
+      )}
 
       {approval_status && approval_status !== 'pending' && (
         <div style={{ marginTop: '8px' }}>

@@ -40,6 +40,7 @@ from app.repositories import (
     FileRepository,
     JobRepository,
     MessageRepository,
+    TemplateRepository,
 )
 
 logger = get_logger("repositories")
@@ -62,6 +63,9 @@ _supabase_file_repo: "FileRepository | None" = None
 # Conversation repositories (in-memory only for now)
 _memory_conv_repo: "ConversationRepository | None" = None
 _memory_msg_repo: "MessageRepository | None" = None
+
+# Template repository (in-memory only for now)
+_memory_template_repo: "TemplateRepository | None" = None
 
 
 def _get_memory_document_repository() -> DocumentRepository:
@@ -277,6 +281,30 @@ def get_message_repository(
     return _memory_msg_repo
 
 
+def get_template_repository(
+    mode: RepositoryMode = "memory",
+) -> TemplateRepository:
+    """Get the template repository.
+
+    Currently only in-memory implementation is available.
+    Future: Supabase implementation.
+
+    Args:
+        mode: Repository mode (only "memory" is supported for now).
+
+    Returns:
+        TemplateRepository implementation.
+    """
+    global _memory_template_repo
+    if _memory_template_repo is None:
+        from app.infrastructure.repositories.memory_template_repository import (
+            MemoryTemplateRepository,
+        )
+        _memory_template_repo = MemoryTemplateRepository()
+        logger.debug("Initialized memory template repository")
+    return _memory_template_repo
+
+
 def clear_repository_singletons() -> None:
     """Clear all repository singleton instances.
 
@@ -284,7 +312,7 @@ def clear_repository_singletons() -> None:
     """
     global _memory_doc_repo, _memory_job_repo, _memory_file_repo, _memory_event_pub
     global _supabase_doc_repo, _supabase_job_repo, _supabase_file_repo
-    global _memory_conv_repo, _memory_msg_repo
+    global _memory_conv_repo, _memory_msg_repo, _memory_template_repo
 
     _memory_doc_repo = None
     _memory_job_repo = None
@@ -295,6 +323,7 @@ def clear_repository_singletons() -> None:
     _supabase_file_repo = None
     _memory_conv_repo = None
     _memory_msg_repo = None
+    _memory_template_repo = None
 
 
 def get_active_mode() -> str:

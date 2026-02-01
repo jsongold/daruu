@@ -30,6 +30,7 @@ from app.routes import (
     review_router,
     review_service_router,
     structure_labelling_router,
+    templates_router,
 )
 from app.infrastructure.observability import (
     init_tracing,
@@ -182,6 +183,10 @@ All errors follow a consistent format with `success: false` and an `error` objec
                 "name": "conversations",
                 "description": "Agent Chat UI - conversation and message management (v2 API)",
             },
+            {
+                "name": "templates",
+                "description": "Template management and matching (v2 API)",
+            },
         ],
         contact={
             "name": "Daru PDF Team",
@@ -231,6 +236,9 @@ All errors follow a consistent format with `success: false` and an `error` objec
 
     # Agent Chat UI v2 API (has its own /api/v2 prefix)
     app.include_router(conversations_router)
+
+    # Template System v2 API (has its own /api/v2 prefix)
+    app.include_router(templates_router)
 
     # Root endpoint
     @app.get("/")

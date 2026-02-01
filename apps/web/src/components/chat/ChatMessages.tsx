@@ -16,6 +16,12 @@ export interface ChatMessagesProps {
   onEdit?: (messageId: string) => void;
   approvingMessageId?: string | null;
   isLoading?: boolean;
+  /** Handler for template selection (for ask_user_input messages) */
+  onTemplateSelect?: (templateId: string, messageId: string) => void;
+  /** Handler for skipping template selection */
+  onTemplateSkip?: (messageId: string) => void;
+  /** Whether template matching is in progress */
+  isMatchingTemplates?: boolean;
 }
 
 function WelcomeMessage() {
@@ -135,6 +141,9 @@ export function ChatMessages({
   onEdit,
   approvingMessageId,
   isLoading = false,
+  onTemplateSelect,
+  onTemplateSkip,
+  isMatchingTemplates = false,
 }: ChatMessagesProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const lastMessageRef = useRef<HTMLDivElement>(null);
@@ -189,6 +198,9 @@ export function ChatMessages({
           onApprove={onApprove}
           onEdit={onEdit}
           isApproving={approvingMessageId === message.id}
+          onTemplateSelect={onTemplateSelect}
+          onTemplateSkip={onTemplateSkip}
+          isMatchingTemplates={isMatchingTemplates}
         />
       ))}
 
