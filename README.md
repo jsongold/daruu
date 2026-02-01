@@ -40,9 +40,64 @@ Programmatic access for:
 
 - `apps/api`: FastAPI service for document processing, job management, and PDF generation
 - `apps/contracts`: OpenAPI specs, JSON schemas, and examples (contract-driven development)
-- `apps/web`: Vite + React + TypeScript web UI
+- `apps/web`: Vite + React + TypeScript web UI (includes Agent Chat UI)
 - `apps/orchestrator`: Orchestrator service (if separate)
 - `docs/`: Documentation including PRDs, orchestrator guides, and architecture notes
+
+## Agent Chat UI
+
+The conversational interface for document processing. Built with React and TypeScript.
+
+### Components
+
+```
+apps/web/src/
+├── pages/
+│   └── ChatPage.tsx        # Main chat page
+├── components/
+│   ├── chat/
+│   │   ├── ChatContainer.tsx   # Layout container (sidebar + messages + preview)
+│   │   ├── ChatSidebar.tsx     # Conversation list with date grouping
+│   │   ├── ChatMessages.tsx    # Message list with auto-scroll
+│   │   ├── ChatMessage.tsx     # Individual message bubble
+│   │   ├── ChatInput.tsx       # Text input with file drop
+│   │   └── AgentThinking.tsx   # Thinking indicator with stage
+│   └── preview/
+│       └── DocumentPreview.tsx # PDF preview with zoom/pan
+├── hooks/
+│   └── useConversation.ts     # Conversation state management
+└── api/
+    └── conversationClient.ts  # API client with SSE support
+```
+
+### Agent Stages
+
+The agent progresses through stages during form processing:
+
+| Stage | Description |
+|-------|-------------|
+| `idle` | Waiting for input |
+| `analyzing` | Analyzing uploaded documents |
+| `confirming` | Confirming document type |
+| `mapping` | Mapping fields between documents |
+| `filling` | Auto-filling form fields |
+| `reviewing` | Ready for user review |
+| `complete` | Processing complete |
+
+### Real-time Updates
+
+The chat uses Server-Sent Events (SSE) for real-time agent updates:
+
+```typescript
+// Connect to SSE stream
+const eventSource = new EventSource(`/api/v2/conversations/${id}/stream`);
+
+// Event types: message, thinking, stage_change, preview_update, complete, error
+eventSource.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  // Handle event based on type
+};
+```
 
 ## Quickstart
 
@@ -446,6 +501,21 @@ curl -X POST http://localhost:8000/api/v1/review \
 ```
 
 ## API Endpoints
+
+### Conversations (v2 API - Agent Chat)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v2/conversations` | Create new conversation |
+| GET | `/api/v2/conversations` | List user's conversations |
+| GET | `/api/v2/conversations/{id}` | Get conversation details |
+| DELETE | `/api/v2/conversations/{id}` | Delete conversation |
+| POST | `/api/v2/conversations/{id}/messages` | Send message (with optional file attachments) |
+| GET | `/api/v2/conversations/{id}/messages` | Get conversation messages |
+| GET | `/api/v2/conversations/{id}/stream` | SSE stream for real-time updates |
+| POST | `/api/v2/conversations/{id}/messages/{msg_id}/approve` | Approve agent proposal |
+| GET | `/api/v2/conversations/{id}/download` | Download filled PDF |
+| GET | `/api/v2/conversations/{id}/documents/{doc_id}/pages/{page}/preview` | Get page preview |
 
 ### Authentication (MVP Stub)
 

@@ -156,6 +156,9 @@ apps/api/
 │   │   ├── __init__.py
 │   │   ├── document_service.py
 │   │   ├── job_service.py
+│   │   ├── conversation_logger.py   # Conversation tracking
+│   │   ├── agents/
+│   │   │   └── conversation_agent.py  # Stage-based form filling agent
 │   │   ├── structure_labelling/
 │   │   │   ├── service.py
 │   │   │   ├── ports.py
@@ -167,6 +170,8 @@ apps/api/
 │   │
 │   ├── repositories/           # Repository Interfaces (Protocols)
 │   │   ├── __init__.py
+│   │   ├── conversation_repository.py  # Agent Chat
+│   │   ├── message_repository.py       # Agent Chat
 │   │   ├── document_repository.py
 │   │   ├── job_repository.py
 │   │   ├── file_repository.py
@@ -178,7 +183,9 @@ apps/api/
 │   ├── infrastructure/         # External Service Adapters
 │   │   ├── repositories/       # Repository factory
 │   │   │   ├── factory.py      # get_document_repository(), etc.
-│   │   │   └── memory_repository.py  # For tests only
+│   │   │   ├── memory_repository.py  # For tests only
+│   │   │   ├── memory_conversation_repository.py  # MVP in-memory
+│   │   │   └── memory_message_repository.py       # MVP in-memory
 │   │   └── supabase/           # Supabase integration
 │   │       ├── client.py
 │   │       ├── config.py
@@ -186,6 +193,7 @@ apps/api/
 │   │
 │   ├── routes/                 # API Endpoints
 │   │   ├── auth.py
+│   │   ├── conversations.py    # v2 Agent Chat API
 │   │   ├── documents.py
 │   │   ├── jobs.py
 │   │   ├── health.py
@@ -193,6 +201,7 @@ apps/api/
 │   │
 │   └── models/                 # Pydantic Models
 │       ├── common.py
+│       ├── conversation.py     # Agent Chat models
 │       ├── document.py
 │       ├── field.py
 │       ├── job.py
@@ -203,6 +212,57 @@ apps/api/
 │   └── ...
 │
 └── pyproject.toml
+```
+
+## Agent Chat (v2 API)
+
+The v2 API provides a conversational interface for form filling with these key features:
+
+### Philosophy
+
+**"Auto-fill first, ask later"** - The agent automatically fills ALL fields without asking questions. Users review and edit via chat or inline editing.
+
+### Agent Stages
+
+```
+IDLE → ANALYZING → CONFIRMING → MAPPING → FILLING → REVIEWING → COMPLETE
+```
+
+| Stage | Description |
+|-------|-------------|
+| `idle` | Waiting for user input |
+| `analyzing` | Analyzing uploaded documents |
+| `confirming` | Confirming form type detected |
+| `mapping` | Mapping source to target fields |
+| `filling` | Auto-filling form fields |
+| `reviewing` | Ready for user review |
+| `complete` | Processing complete |
+
+### SSE Events
+
+The `/stream` endpoint sends real-time events:
+
+| Event Type | Description |
+|------------|-------------|
+| `message` | New message from agent |
+| `thinking` | Agent thinking with stage info |
+| `stage_change` | Agent stage transition |
+| `preview_update` | Preview image updated |
+| `complete` | Processing complete |
+| `error` | Error occurred |
+
+### Logging
+
+Use `conversation_logger` for tracking:
+
+```python
+from app.services.conversation_logger import log
+
+log.conversation_created(conversation_id, user_id, title)
+log.message_received(conversation_id, message_id, content[:50], has_files, file_count)
+log.agent_stage_change(conversation_id, "analyzing", "mapping")
+log.fields_extracted(conversation_id, field_count, filled_count, avg_confidence)
+log.error(conversation_id, "PARSE_ERROR", "Failed to parse PDF", {"page": 1})
 ```
 
 ## Import Patterns
@@ -225,9 +285,29 @@ from app.infrastructure.repositories import (
     get_job_repository,
     get_file_repository,
 )
+
+# Agent Chat (v2)
+from app.models.conversation import Conversation, Message, AgentStage
+from app.services.agents.conversation_agent import ConversationAgent
+from app.services.conversation_logger import log
 ```
 
 ## API Endpoints
+
+### Conversations (v2 API - Agent Chat)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v2/conversations` | Create new conversation |
+| GET | `/api/v2/conversations` | List user's conversations |
+| GET | `/api/v2/conversations/{id}` | Get conversation details |
+| DELETE | `/api/v2/conversations/{id}` | Delete conversation |
+| POST | `/api/v2/conversations/{id}/messages` | Send message with optional files |
+| GET | `/api/v2/conversations/{id}/messages` | Get conversation messages |
+| GET | `/api/v2/conversations/{id}/stream` | SSE stream for real-time updates |
+| POST | `/api/v2/conversations/{id}/messages/{msg_id}/approve` | Approve agent proposal |
+| GET | `/api/v2/conversations/{id}/download` | Download filled PDF |
+| GET | `/api/v2/conversations/{id}/documents/{doc_id}/pages/{page}/preview` | Page preview |
 
 ### Documents
 
