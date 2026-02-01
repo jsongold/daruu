@@ -177,19 +177,21 @@ export async function getMessages(
 
 /**
  * Send a text message to a conversation.
+ * API expects Form data, not JSON.
  */
 export async function sendMessage(
   conversationId: string,
   content: string
 ): Promise<Message> {
-  const body: SendMessageRequest = { content };
+  const formData = new FormData();
+  formData.append('content', content);
 
-  // API returns Message directly
+  // API returns Message directly, expects Form data
   return request<Message>(
     `${API_PREFIX}/conversations/${conversationId}/messages`,
     {
       method: 'POST',
-      body: JSON.stringify(body),
+      body: formData,
     }
   );
 }
@@ -373,8 +375,14 @@ export function subscribeToUpdates(
   // Also listen to generic message events
   eventSource.addEventListener('message', messageHandler);
 
-  eventSource.onerror = () => {
-    handlers.onConnectionError?.(new Error('SSE connection error'));
+  eventSource.onerror = (event) => {
+    // Only report error if the connection is actually closed
+    // EventSource.CLOSED = 2
+    if (eventSource.readyState === 2) {
+      handlers.onConnectionError?.(new Error('SSE connection closed'));
+    }
+    // Don't report errors for temporary disconnections
+    // EventSource will automatically reconnect
   };
 
   return () => {
