@@ -22,7 +22,6 @@ import type {
   SSEApprovalData,
   SSEStageChangeData,
   SSEErrorData,
-  ApiResponse,
 } from '../lib/api-types';
 
 import { apiBaseUrl, ApiError } from './client';
@@ -109,23 +108,14 @@ async function requestBlob(endpoint: string): Promise<Blob> {
 export async function createConversation(
   data?: CreateConversationRequest
 ): Promise<Conversation> {
-  const response = await request<ApiResponse<Conversation>>(
+  // API returns Conversation directly, not wrapped in ApiResponse
+  return request<Conversation>(
     `${API_PREFIX}/conversations`,
     {
       method: 'POST',
       body: JSON.stringify(data ?? {}),
     }
   );
-
-  if (!response.success || !response.data) {
-    throw new ApiError(
-      'Failed to create conversation',
-      'CREATE_ERROR',
-      400
-    );
-  }
-
-  return response.data;
 }
 
 /**
@@ -146,17 +136,8 @@ export async function listConversations(
   const queryString = params.toString();
   const endpoint = `${API_PREFIX}/conversations${queryString ? `?${queryString}` : ''}`;
 
-  const response = await request<ApiResponse<ConversationListResponse>>(endpoint);
-
-  if (!response.success || !response.data) {
-    throw new ApiError(
-      'Failed to list conversations',
-      'LIST_ERROR',
-      400
-    );
-  }
-
-  return response.data;
+  // API returns ConversationListResponse directly
+  return request<ConversationListResponse>(endpoint);
 }
 
 /**
@@ -165,19 +146,10 @@ export async function listConversations(
 export async function getConversation(
   conversationId: string
 ): Promise<ConversationWithMessages> {
-  const response = await request<ApiResponse<ConversationWithMessages>>(
+  // API returns ConversationWithMessages directly
+  return request<ConversationWithMessages>(
     `${API_PREFIX}/conversations/${conversationId}`
   );
-
-  if (!response.success || !response.data) {
-    throw new ApiError(
-      'Conversation not found',
-      'NOT_FOUND',
-      404
-    );
-  }
-
-  return response.data;
 }
 
 /**
@@ -199,17 +171,8 @@ export async function getMessages(
   const queryString = params.toString();
   const endpoint = `${API_PREFIX}/conversations/${conversationId}/messages${queryString ? `?${queryString}` : ''}`;
 
-  const response = await request<ApiResponse<MessageListResponse>>(endpoint);
-
-  if (!response.success || !response.data) {
-    throw new ApiError(
-      'Failed to get messages',
-      'MESSAGE_ERROR',
-      400
-    );
-  }
-
-  return response.data;
+  // API returns MessageListResponse directly
+  return request<MessageListResponse>(endpoint);
 }
 
 /**
@@ -221,23 +184,14 @@ export async function sendMessage(
 ): Promise<Message> {
   const body: SendMessageRequest = { content };
 
-  const response = await request<ApiResponse<Message>>(
+  // API returns Message directly
+  return request<Message>(
     `${API_PREFIX}/conversations/${conversationId}/messages`,
     {
       method: 'POST',
       body: JSON.stringify(body),
     }
   );
-
-  if (!response.success || !response.data) {
-    throw new ApiError(
-      'Failed to send message',
-      'SEND_ERROR',
-      400
-    );
-  }
-
-  return response.data;
 }
 
 /**
@@ -252,23 +206,14 @@ export async function uploadFiles(
     formData.append('files', file);
   });
 
-  const response = await request<ApiResponse<Message>>(
+  // API returns Message directly
+  return request<Message>(
     `${API_PREFIX}/conversations/${conversationId}/messages`,
     {
       method: 'POST',
       body: formData,
     }
   );
-
-  if (!response.success || !response.data) {
-    throw new ApiError(
-      'Failed to upload files',
-      'UPLOAD_ERROR',
-      400
-    );
-  }
-
-  return response.data;
 }
 
 /**
@@ -289,23 +234,14 @@ export async function sendMessageWithFiles(
     formData.append('files', file);
   });
 
-  const response = await request<ApiResponse<Message>>(
+  // API returns Message directly
+  return request<Message>(
     `${API_PREFIX}/conversations/${conversationId}/messages`,
     {
       method: 'POST',
       body: formData,
     }
   );
-
-  if (!response.success || !response.data) {
-    throw new ApiError(
-      'Failed to send message',
-      'SEND_ERROR',
-      400
-    );
-  }
-
-  return response.data;
 }
 
 /**
@@ -317,23 +253,14 @@ export async function approvePreview(
 ): Promise<Message> {
   const body: ApprovePreviewRequest = { message_id: messageId };
 
-  const response = await request<ApiResponse<Message>>(
+  // API returns Message directly
+  return request<Message>(
     `${API_PREFIX}/conversations/${conversationId}/approve`,
     {
       method: 'POST',
       body: JSON.stringify(body),
     }
   );
-
-  if (!response.success || !response.data) {
-    throw new ApiError(
-      'Failed to approve preview',
-      'APPROVE_ERROR',
-      400
-    );
-  }
-
-  return response.data;
 }
 
 /**
