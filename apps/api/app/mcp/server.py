@@ -12,6 +12,10 @@ Tools:
 - get_form_summary: Get current form status
 - list_forms: List all registered forms
 - export_pdf: Export with source file (URL or re-attachment)
+- render_preview: Render PDF page with field highlights
+- visual_edit_field: Get field info + focused preview
+- get_form_visual_summary: Get text summary + color-coded preview
+- get_next_unfilled_field: Get next empty field for guided filling
 """
 
 import asyncio
@@ -27,7 +31,8 @@ from mcp.types import (
     CallToolResult,
 )
 
-from app.mcp.tools import register_form, form_operations, export_pdf
+from app.mcp.tools import register_form, form_operations, export_pdf, render_preview
+from app.mcp.tools import visual_editing
 from app.mcp.session import set_current_session
 
 
@@ -164,7 +169,7 @@ def create_mcp_server() -> Server:
                 name="get_form_summary",
                 description=(
                     "Get the current status of a form - which fields are filled, "
-                    "which are empty, and overall progress."
+                    "which are empty, and overall progress. Text only."
                 ),
                 inputSchema={
                     "type": "object",
@@ -220,6 +225,122 @@ def create_mcp_server() -> Server:
                     "required": ["form_id"],
                 },
             ),
+            # Visual editing tools
+            Tool(
+                name="render_preview",
+                description=(
+                    "Render a PDF page as an image with field highlights and filled values. "
+                    "Returns an image showing fields color-coded by status: "
+                    "yellow=active, green=filled, red=empty required, gray=empty optional."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "form_id": {
+                            "type": "string",
+                            "description": "ID of the form to preview",
+                        },
+                        "page": {
+                            "type": "integer",
+                            "description": "Page number (1-indexed)",
+                            "default": 1,
+                        },
+                        "zoom": {
+                            "type": "number",
+                            "description": "Zoom level (1.0 = 100%, 1.5 = 150%)",
+                            "default": 1.5,
+                        },
+                        "highlight_mode": {
+                            "type": "string",
+                            "enum": ["all", "empty", "filled", "single"],
+                            "description": (
+                                "Which fields to highlight: "
+                                "'all' = all fields, 'empty' = only empty, "
+                                "'filled' = only filled, 'single' = specific field"
+                            ),
+                            "default": "all",
+                        },
+                        "highlight_field_id": {
+                            "type": "string",
+                            "description": "Field ID to highlight (when mode is 'single')",
+                        },
+                        "show_values": {
+                            "type": "boolean",
+                            "description": "Overlay filled values on the image",
+                            "default": True,
+                        },
+                    },
+                    "required": ["form_id"],
+                },
+            ),
+            Tool(
+                name="visual_edit_field",
+                description=(
+                    "Get a visual preview focused on a specific field for editing. "
+                    "Returns field info (name, type, current value, options) plus "
+                    "a preview image with that field highlighted in yellow."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "form_id": {
+                            "type": "string",
+                            "description": "ID of the form",
+                        },
+                        "field_id": {
+                            "type": "string",
+                            "description": "Field ID or name to edit",
+                        },
+                    },
+                    "required": ["form_id", "field_id"],
+                },
+            ),
+            Tool(
+                name="get_form_visual_summary",
+                description=(
+                    "Get both text summary AND preview image for a form. "
+                    "Shows progress, field status list, and a color-coded preview "
+                    "showing filled (green), empty required (red), and optional (gray) fields."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "form_id": {
+                            "type": "string",
+                            "description": "ID of the form",
+                        },
+                        "page": {
+                            "type": "integer",
+                            "description": "Page number to preview (1-indexed)",
+                            "default": 1,
+                        },
+                    },
+                    "required": ["form_id"],
+                },
+            ),
+            Tool(
+                name="get_next_unfilled_field",
+                description=(
+                    "Get the next unfilled field and its visual preview. "
+                    "Useful for guided form filling - returns the first empty field "
+                    "(prioritizing required fields) with instructions and a focused preview."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "form_id": {
+                            "type": "string",
+                            "description": "ID of the form",
+                        },
+                        "skip_optional": {
+                            "type": "boolean",
+                            "description": "If true, only return required empty fields",
+                            "default": False,
+                        },
+                    },
+                    "required": ["form_id"],
+                },
+            ),
         ]
 
     @server.call_tool()
@@ -237,6 +358,11 @@ def create_mcp_server() -> Server:
             "get_form_summary": form_operations.handle_get_form_summary,
             "list_forms": form_operations.handle_list_forms,
             "export_pdf": export_pdf.handle,
+            # Visual editing tools
+            "render_preview": render_preview.handle,
+            "visual_edit_field": visual_editing.handle_visual_edit_field,
+            "get_form_visual_summary": visual_editing.handle_get_form_visual_summary,
+            "get_next_unfilled_field": visual_editing.handle_get_next_unfilled_field,
         }
 
         handler = handlers.get(name)
