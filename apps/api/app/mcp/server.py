@@ -52,10 +52,9 @@ def create_mcp_server() -> Server:
             Tool(
                 name="register_form",
                 description=(
-                    "Register a PDF form that you've analyzed visually. "
-                    "Extract the KEY fields (max 15-20) - do not extract every single field. "
-                    "Focus on: name, address, date, ID numbers, key checkboxes. "
-                    "Do NOT send file data - just field metadata."
+                    "Register a PDF form. If the form has MANY fields (>20), "
+                    "call this multiple times - first with form_type and first batch of fields, "
+                    "then use add_fields to add more. Do NOT send file data."
                 ),
                 inputSchema={
                     "type": "object",
@@ -105,6 +104,38 @@ def create_mcp_server() -> Server:
                         },
                     },
                     "required": ["form_type", "fields"],
+                },
+            ),
+            Tool(
+                name="add_fields",
+                description=(
+                    "Add more fields to an existing registered form. "
+                    "Use this when a form has many fields - register first batch with register_form, "
+                    "then add remaining fields in batches of 15-20 using this tool."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "form_id": {
+                            "type": "string",
+                            "description": "ID of the registered form",
+                        },
+                        "fields": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {"type": "string"},
+                                    "label": {"type": "string"},
+                                    "type": {"type": "string"},
+                                    "page": {"type": "integer"},
+                                },
+                                "required": ["name", "type"],
+                            },
+                            "description": "Additional fields to add",
+                        },
+                    },
+                    "required": ["form_id", "fields"],
                 },
             ),
             Tool(
@@ -201,6 +232,7 @@ def create_mcp_server() -> Server:
 
         handlers: dict[str, Any] = {
             "register_form": register_form.handle,
+            "add_fields": form_operations.handle_add_fields,
             "update_fields": form_operations.handle_update_fields,
             "get_form_summary": form_operations.handle_get_form_summary,
             "list_forms": form_operations.handle_list_forms,

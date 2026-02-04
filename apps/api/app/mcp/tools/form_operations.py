@@ -52,6 +52,80 @@ async def _save_form(session_id: str, form_data: dict[str, Any]) -> None:
         client.setex(key, STORAGE_TTL, json.dumps(form_data))
 
 
+async def handle_add_fields(arguments: dict[str, Any]) -> CallToolResult:
+    """
+    Add more fields to an existing form (for chunked registration).
+
+    Args:
+        arguments: Tool arguments containing:
+            - form_id: ID of the registered form
+            - fields: List of additional field definitions
+
+    Returns:
+        CallToolResult with confirmation
+    """
+    from uuid import uuid4
+
+    form_id = arguments.get("form_id")
+    new_fields = arguments.get("fields", [])
+
+    if not form_id:
+        return CallToolResult(
+            content=[TextContent(type="text", text="Error: form_id is required")]
+        )
+
+    if not new_fields:
+        return CallToolResult(
+            content=[TextContent(type="text", text="Error: fields list is required")]
+        )
+
+    session = await get_current_session()
+    if not session:
+        return CallToolResult(
+            content=[TextContent(type="text", text="Error: No active session")]
+        )
+
+    form_data = await _get_form(session["id"], form_id)
+    if not form_data:
+        return CallToolResult(
+            content=[TextContent(type="text", text="Error: Form not found")]
+        )
+
+    existing_fields = form_data.get("fields", {})
+
+    # Add new fields
+    added_count = 0
+    for field in new_fields:
+        field_id = field.get("id") or str(uuid4())
+        existing_fields[field_id] = {
+            "id": field_id,
+            "name": field.get("name", f"field_{len(existing_fields)+1}"),
+            "label": field.get("label") or field.get("name"),
+            "type": field.get("type", "text"),
+            "page": field.get("page", 1),
+            "position": field.get("position"),
+            "required": field.get("required", False),
+            "options": field.get("options"),
+            "value": None,
+        }
+        added_count += 1
+
+    form_data["fields"] = existing_fields
+    form_data["field_count"] = len(existing_fields)
+    await _save_form(session["id"], form_data)
+
+    response_text = (
+        f"✓ Added {added_count} fields to form\n\n"
+        f"Total fields: {len(existing_fields)}\n\n"
+        f"Use `add_fields` again if more fields remain, "
+        f"or `get_form_summary` to see all fields."
+    )
+
+    return CallToolResult(
+        content=[TextContent(type="text", text=response_text)]
+    )
+
+
 async def handle_update_fields(arguments: dict[str, Any]) -> CallToolResult:
     """
     Update field values in a registered form.

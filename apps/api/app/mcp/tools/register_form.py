@@ -65,12 +65,6 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
             )]
         )
 
-    # Limit fields to prevent timeouts
-    MAX_FIELDS = 25
-    if len(fields) > MAX_FIELDS:
-        fields = fields[:MAX_FIELDS]
-        print(f"Warning: Truncated fields to {MAX_FIELDS}", file=__import__('sys').stderr)
-
     # Get current MCP session
     session = await get_current_session()
     if not session:
