@@ -6,28 +6,47 @@
  * - Center: Document preview with inline editing
  * - Right: Activity log
  * - Bottom: Document upload + list
+ *
+ * URL: /single?d=<document_id>
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { EditableDocumentPreview } from '../components/preview/EditableDocumentPreview';
 import { DocumentBar } from '../components/single/DocumentBar';
 import { FieldListReadOnly } from '../components/single/FieldListReadOnly';
 import { ActivityLog, type Activity } from '../components/single/ActivityLog';
 import { uploadDocument, getPagePreviewUrl, getAcroFormFields } from '../api/client';
 import type { FieldData } from '../api/editClient';
-import type { AcroFormFieldInfo } from '../types/api';
+import type { AcroFormFieldInfo, PageDimensions } from '../types/api';
 
 interface DocumentWithPages {
   document_id: string;
   filename: string;
   page_count: number;
   pageUrls: string[];
+  pageDimensions?: PageDimensions[];
+}
+
+// URL helpers
+function getDocumentIdFromUrl(): string | null {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('d');
+}
+
+function updateUrl(documentId: string | null): void {
+  const url = new URL(window.location.href);
+  if (documentId) {
+    url.searchParams.set('d', documentId);
+  } else {
+    url.searchParams.delete('d');
+  }
+  window.history.pushState({}, '', url.toString());
 }
 
 export function SinglePage() {
   // Document state
   const [documents, setDocuments] = useState<DocumentWithPages[]>([]);
-  const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null);
+  const [activeDocumentId, setActiveDocumentId] = useState<string | null>(getDocumentIdFromUrl);
 
   // Field state
   const [fields, setFields] = useState<FieldData[]>([]);
@@ -43,6 +62,18 @@ export function SinglePage() {
 
   // Get active document
   const activeDocument = documents.find(d => d.document_id === activeDocumentId);
+
+  // Handle browser back/forward
+  useEffect(() => {
+    const handlePopState = () => {
+      const docId = getDocumentIdFromUrl();
+      if (docId && documents.find(d => d.document_id === docId)) {
+        setActiveDocumentId(docId);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [documents]);
 
   // Add activity helper
   const addActivity = useCallback((type: Activity['type'], message: string, details?: string) => {
@@ -61,6 +92,7 @@ export function SinglePage() {
     switch (type.toLowerCase()) {
       case 'checkbox':
       case 'check':
+      case 'btn':
         return 'checkbox';
       case 'date':
         return 'date';
@@ -71,28 +103,58 @@ export function SinglePage() {
     }
   };
 
+  // Normalize bbox coordinates (PDF coords to 0-1 range)
+  const normalizeBbox = (
+    bbox: { x: number; y: number; width: number; height: number },
+    pageDimensions: PageDimensions | undefined
+  ) => {
+    if (!pageDimensions) {
+      // Fallback: assume standard letter size (612x792 points)
+      return {
+        x: bbox.x / 612,
+        y: bbox.y / 792,
+        width: bbox.width / 612,
+        height: bbox.height / 792,
+      };
+    }
+    return {
+      x: bbox.x / pageDimensions.width,
+      y: bbox.y / pageDimensions.height,
+      width: bbox.width / pageDimensions.width,
+      height: bbox.height / pageDimensions.height,
+    };
+  };
+
   // Load fields for a document
-  const loadFields = useCallback(async (documentId: string) => {
+  const loadFields = useCallback(async (documentId: string, pageDimensions?: PageDimensions[]) => {
     setIsLoadingFields(true);
 
     try {
       const acroFields = await getAcroFormFields(documentId);
+      const dims = pageDimensions || acroFields.page_dimensions;
 
-      // Convert AcroForm fields to FieldData format
-      const fieldData: FieldData[] = acroFields.fields.map((field: AcroFormFieldInfo) => ({
-        field_id: field.field_name,
-        label: field.field_name,
-        value: field.value || '',
-        type: mapFieldType(field.field_type),
-        bbox: field.bbox ? {
-          x: field.bbox.x,
-          y: field.bbox.y,
-          width: field.bbox.width,
-          height: field.bbox.height,
-          page: field.bbox.page,
-        } : null,
-        required: false,
-      }));
+      // Convert AcroForm fields to FieldData format with normalized coordinates
+      const fieldData: FieldData[] = acroFields.fields.map((field: AcroFormFieldInfo) => {
+        const page = field.bbox?.page || 1;
+        const pageDim = dims?.find(d => d.page === page);
+
+        const normalizedBbox = field.bbox ? normalizeBbox(field.bbox, pageDim) : null;
+
+        return {
+          field_id: field.field_name,
+          label: field.field_name,
+          value: field.value || '',
+          type: mapFieldType(field.field_type),
+          bbox: normalizedBbox ? {
+            x: normalizedBbox.x,
+            y: normalizedBbox.y,
+            width: normalizedBbox.width,
+            height: normalizedBbox.height,
+            page,
+          } : null,
+          required: false,
+        };
+      });
 
       setFields(fieldData);
       addActivity('info', `Found ${fieldData.length} fields`);
@@ -124,20 +186,31 @@ export function SinglePage() {
         pageUrls.push(getPagePreviewUrl(doc.document_id, i));
       }
 
+      // Get AcroForm fields to also get page dimensions
+      let pageDimensions: PageDimensions[] | undefined;
+      try {
+        const acroFields = await getAcroFormFields(doc.document_id);
+        pageDimensions = acroFields.page_dimensions;
+      } catch {
+        // Ignore if no AcroForm
+      }
+
       const docWithPages: DocumentWithPages = {
         document_id: doc.document_id,
         filename,
         page_count: pageCount,
         pageUrls,
+        pageDimensions,
       };
 
       setDocuments(prev => [...prev, docWithPages]);
       setActiveDocumentId(doc.document_id);
+      updateUrl(doc.document_id);
 
       addActivity('upload', `Uploaded ${filename}`, `${pageCount} pages`);
 
       // Load fields for the document
-      await loadFields(doc.document_id);
+      await loadFields(doc.document_id, pageDimensions);
 
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Upload failed';
@@ -150,24 +223,33 @@ export function SinglePage() {
 
   // Handle document selection
   const handleSelectDocument = useCallback((documentId: string) => {
+    const doc = documents.find(d => d.document_id === documentId);
     setActiveDocumentId(documentId);
     setSelectedFieldId(null);
+    updateUrl(documentId);
 
     // Load fields for selected document
-    loadFields(documentId);
-  }, [loadFields]);
+    loadFields(documentId, doc?.pageDimensions);
+  }, [documents, loadFields]);
 
   // Handle document removal
   const handleRemoveDocument = useCallback((documentId: string) => {
     setDocuments(prev => prev.filter(d => d.document_id !== documentId));
 
     if (activeDocumentId === documentId) {
-      setActiveDocumentId(null);
+      const remaining = documents.filter(d => d.document_id !== documentId);
+      if (remaining.length > 0) {
+        setActiveDocumentId(remaining[0].document_id);
+        updateUrl(remaining[0].document_id);
+      } else {
+        setActiveDocumentId(null);
+        updateUrl(null);
+      }
       setFields([]);
     }
 
     addActivity('info', 'Document removed');
-  }, [activeDocumentId, addActivity]);
+  }, [activeDocumentId, documents, addActivity]);
 
   // Handle field selection (from left panel)
   const handleFieldSelect = useCallback((fieldId: string | null) => {
@@ -192,7 +274,7 @@ export function SinglePage() {
 
     addActivity('export', 'Exporting PDF...');
 
-    // TODO: Implement actual export
+    // TODO: Implement actual export via API
     setTimeout(() => {
       addActivity('export', 'PDF exported successfully');
     }, 1000);
@@ -205,6 +287,7 @@ export function SinglePage() {
     setFields([]);
     setSelectedFieldId(null);
     setActivities([]);
+    updateUrl(null);
   }, []);
 
   return (
