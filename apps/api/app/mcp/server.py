@@ -34,6 +34,7 @@ from mcp.types import (
 from app.mcp.tools import register_form, form_operations, export_pdf, render_preview
 from app.mcp.tools import visual_editing
 from app.mcp.session import set_current_session
+from app.mcp.logging import server_logger, log_tool_call, log_tool_result
 
 
 def create_mcp_server() -> Server:
@@ -48,7 +49,8 @@ def create_mcp_server() -> Server:
         "linked": False,
     }
     set_current_session(session)
-    print(f"MCP Session created: {session_id}", file=sys.stderr)
+    server_logger.info(f"MCP Server started - Session: {session_id}")
+    server_logger.info("Available tools: register_form, add_fields, update_fields, get_form_summary, list_forms, export_pdf, render_preview, visual_edit_field, get_form_visual_summary, get_next_unfilled_field")
 
     @server.list_tools()
     async def list_tools() -> list[Tool]:
@@ -346,7 +348,7 @@ def create_mcp_server() -> Server:
     @server.call_tool()
     async def call_tool(name: str, arguments: dict[str, Any]) -> CallToolResult:
         """Handle tool calls."""
-        print(f"Tool called: {name}", file=sys.stderr)
+        log_tool_call(name, arguments)
 
         # Ensure session is set for this tool call
         set_current_session(session)
@@ -367,18 +369,28 @@ def create_mcp_server() -> Server:
 
         handler = handlers.get(name)
         if not handler:
+            log_tool_result(name, False, f"Unknown tool")
             return CallToolResult(
                 content=[TextContent(type="text", text=f"Unknown tool: {name}")]
             )
 
         try:
             result = await handler(arguments)
-            print(f"Tool {name} completed successfully", file=sys.stderr)
+            # Extract result summary for logging
+            result_summary = ""
+            if result.content:
+                first_content = result.content[0]
+                if hasattr(first_content, "text"):
+                    text = first_content.text
+                    result_summary = text[:100] + "..." if len(text) > 100 else text
+                elif hasattr(first_content, "type") and first_content.type == "image":
+                    result_summary = "[Image returned]"
+            log_tool_result(name, True, result_summary)
             return result
         except Exception as e:
             import traceback
-            print(f"Tool {name} error: {e}", file=sys.stderr)
-            traceback.print_exc(file=sys.stderr)
+            log_tool_result(name, False, str(e))
+            server_logger.error(traceback.format_exc())
             return CallToolResult(
                 content=[TextContent(type="text", text=f"Error: {str(e)}")]
             )

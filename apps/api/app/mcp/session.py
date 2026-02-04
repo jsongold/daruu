@@ -25,6 +25,7 @@ from typing import Any
 from contextvars import ContextVar
 
 from app.config import get_settings
+from app.mcp.logging import session_logger
 
 # Context variable to store current session ID for tool handlers
 _current_session_id: ContextVar[str | None] = ContextVar(
@@ -56,9 +57,11 @@ def _get_redis_client() -> Any:
         _redis_client = redis.from_url(redis_url, decode_responses=True)
         # Test connection
         _redis_client.ping()
+        session_logger.info(f"Redis connected: {redis_url}")
         return _redis_client
-    except Exception:
+    except Exception as e:
         # Fallback to in-memory for tests
+        session_logger.warning(f"Redis unavailable ({e}), using in-memory storage")
         _use_memory_fallback = True
         return None
 
@@ -67,16 +70,22 @@ async def get_current_session() -> dict[str, Any] | None:
     """Get the current MCP session from storage."""
     session_id = _current_session_id.get()
     if not session_id:
+        session_logger.debug("No current session ID set")
         return None
 
     client = _get_redis_client()
     if client:
         data = client.get(f"{SESSION_PREFIX}{session_id}")
         if data:
+            session_logger.debug(f"Session retrieved from Redis: {session_id[:8]}...")
             return json.loads(data)
+        session_logger.warning(f"Session not found in Redis: {session_id[:8]}...")
         return None
     else:
-        return _memory_sessions.get(session_id)
+        session = _memory_sessions.get(session_id)
+        if session:
+            session_logger.debug(f"Session retrieved from memory: {session_id[:8]}...")
+        return session
 
 
 async def save_session(session: dict[str, Any]) -> None:
@@ -99,19 +108,23 @@ async def save_session(session: dict[str, Any]) -> None:
 def set_current_session(session: dict[str, Any] | None) -> None:
     """Set the current MCP session ID in context and save to storage."""
     if session:
-        _current_session_id.set(session.get("id"))
+        session_id = session.get("id")
+        _current_session_id.set(session_id)
         # Save synchronously for initialization
         client = _get_redis_client()
         if client:
             client.setex(
-                f"{SESSION_PREFIX}{session['id']}",
+                f"{SESSION_PREFIX}{session_id}",
                 SESSION_TTL,
                 json.dumps(session),
             )
+            session_logger.info(f"Session saved to Redis: {session_id[:8]}...")
         else:
-            _memory_sessions[session["id"]] = session
+            _memory_sessions[session_id] = session
+            session_logger.info(f"Session saved to memory: {session_id[:8]}...")
     else:
         _current_session_id.set(None)
+        session_logger.debug("Session cleared")
 
 
 class MCPSessionManager:

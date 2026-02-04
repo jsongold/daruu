@@ -14,6 +14,7 @@ from uuid import uuid4
 from mcp.types import CallToolResult, TextContent
 
 from app.mcp.session import get_current_session
+from app.mcp.logging import tool_logger
 
 
 def _get_redis_client() -> Any:
@@ -53,6 +54,8 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
     fields = arguments.get("fields", [])
     page_count = arguments.get("page_count", 1)
     metadata = arguments.get("metadata", {})
+
+    tool_logger.debug(f"register_form: type={form_type}, fields={len(fields)}, pages={page_count}")
 
     if not fields:
         return CallToolResult(
@@ -113,6 +116,9 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
     if client:
         key = f"{FORM_PREFIX}{session_id}:{form_id}"
         client.setex(key, STORAGE_TTL, json.dumps(form_data))
+        tool_logger.info(f"Form saved to Redis: {form_id[:8]}... ({len(normalized_fields)} fields)")
+    else:
+        tool_logger.warning(f"Form {form_id[:8]}... not saved - Redis unavailable")
 
     # Build response
     field_summary = {}
