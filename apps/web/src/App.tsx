@@ -4,6 +4,7 @@
  * Routes:
  *   /           - Agent Chat UI (new conversational interface)
  *   /chat       - Agent Chat UI (alias)
+ *   /single     - Single-page editor (simple PDF editing)
  *   /admin      - Admin dashboard (legacy job management)
  *   /admin?jobId=x - View specific job
  */
@@ -11,9 +12,10 @@
 import { useState, useCallback, useEffect } from 'react';
 import { AdminPage } from './pages/AdminPage';
 import { ChatPage } from './pages/ChatPage';
+import { SinglePage } from './pages/SinglePage';
 import './App.css';
 
-type AppRoute = 'chat' | 'admin';
+type AppRoute = 'chat' | 'single' | 'admin';
 
 /**
  * Determine current route from URL path.
@@ -22,6 +24,9 @@ function getCurrentRoute(): AppRoute {
   const path = window.location.pathname;
   if (path === '/admin' || path === '/admin/') {
     return 'admin';
+  }
+  if (path === '/single' || path === '/single/') {
+    return 'single';
   }
   // Default to chat for /, /chat, or any other path
   return 'chat';
@@ -74,8 +79,12 @@ function App() {
 
   // Navigation between routes
   const navigateTo = useCallback((newRoute: AppRoute) => {
-    const path = newRoute === 'admin' ? '/admin' : '/';
-    window.history.pushState({}, '', path);
+    const pathMap: Record<AppRoute, string> = {
+      chat: '/',
+      single: '/single',
+      admin: '/admin',
+    };
+    window.history.pushState({}, '', pathMap[newRoute]);
     setRoute(newRoute);
   }, []);
 
@@ -95,6 +104,10 @@ function App() {
         />
       </div>
     );
+  }
+
+  if (route === 'single') {
+    return <SinglePage />;
   }
 
   // Default: Chat page
