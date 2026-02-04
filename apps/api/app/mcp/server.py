@@ -53,8 +53,9 @@ def create_mcp_server() -> Server:
                 name="register_form",
                 description=(
                     "Register a PDF form that you've analyzed visually. "
-                    "Extract field names, types, and positions from the attached PDF, "
-                    "then call this to register them. Do NOT send file data - just the metadata."
+                    "Extract the KEY fields (max 15-20) - do not extract every single field. "
+                    "Focus on: name, address, date, ID numbers, key checkboxes. "
+                    "Do NOT send file data - just field metadata."
                 ),
                 inputSchema={
                     "type": "object",
