@@ -15,7 +15,7 @@ import { EditableDocumentPreview } from '../components/preview/EditableDocumentP
 import { DocumentBar } from '../components/single/DocumentBar';
 import { FieldListReadOnly } from '../components/single/FieldListReadOnly';
 import { ActivityLog, type Activity } from '../components/single/ActivityLog';
-import { uploadDocument, getPagePreviewUrl, getAcroFormFields } from '../api/client';
+import { uploadDocument, getPagePreviewUrl, getAcroFormFields, getDocument } from '../api/client';
 import type { FieldData } from '../api/editClient';
 import type { AcroFormFieldInfo, PageDimensions } from '../types/api';
 
@@ -75,6 +75,75 @@ export function SinglePage() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, [documents]);
 
+  // Initialize document from URL on mount
+  useEffect(() => {
+    const initDocumentFromUrl = async () => {
+      const docId = getDocumentIdFromUrl();
+      if (!docId) return;
+
+      // Check if already loaded
+      if (documents.find(d => d.document_id === docId)) return;
+
+      console.log('[SinglePage] Loading document from URL:', docId);
+      setIsUploading(true);
+      setError(null);
+
+      try {
+        // Fetch document details from API
+        const doc = await getDocument(docId);
+        const pageCount = doc.meta.page_count;
+        const filename = doc.meta.filename;
+
+        console.log('[SinglePage] Document loaded:', { docId, filename, pageCount });
+
+        // Generate page URLs
+        const pageUrls: string[] = [];
+        for (let i = 1; i <= pageCount; i++) {
+          pageUrls.push(getPagePreviewUrl(docId, i));
+        }
+
+        // Get AcroForm fields to also get page dimensions
+        let pageDimensions: PageDimensions[] | undefined;
+        try {
+          const acroFields = await getAcroFormFields(docId);
+          pageDimensions = acroFields.page_dimensions;
+          console.log('[SinglePage] Page dimensions:', pageDimensions);
+        } catch (e) {
+          console.log('[SinglePage] No AcroForm fields:', e);
+        }
+
+        const docWithPages: DocumentWithPages = {
+          document_id: docId,
+          filename,
+          page_count: pageCount,
+          pageUrls,
+          pageDimensions,
+        };
+
+        setDocuments([docWithPages]);
+        setActiveDocumentId(docId);
+        addActivity('info', `Loaded ${filename}`, `${pageCount} pages`);
+
+        // Load fields for the document
+        await loadFields(docId, pageDimensions);
+
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to load document';
+        console.error('[SinglePage] Error loading document:', err);
+        setError(message);
+        addActivity('error', 'Failed to load document', message);
+        // Clear the invalid document ID from URL
+        updateUrl(null);
+        setActiveDocumentId(null);
+      } finally {
+        setIsUploading(false);
+      }
+    };
+
+    initDocumentFromUrl();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run once on mount
+
   // Add activity helper
   const addActivity = useCallback((type: Activity['type'], message: string, details?: string) => {
     const activity: Activity = {
@@ -128,10 +197,16 @@ export function SinglePage() {
   // Load fields for a document
   const loadFields = useCallback(async (documentId: string, pageDimensions?: PageDimensions[]) => {
     setIsLoadingFields(true);
+    console.log('[SinglePage] Loading fields for document:', documentId);
 
     try {
       const acroFields = await getAcroFormFields(documentId);
       const dims = pageDimensions || acroFields.page_dimensions;
+      console.log('[SinglePage] AcroForm response:', {
+        fieldCount: acroFields.fields.length,
+        dims,
+        hasAcroform: acroFields.has_acroform
+      });
 
       // Convert AcroForm fields to FieldData format with normalized coordinates
       const fieldData: FieldData[] = acroFields.fields.map((field: AcroFormFieldInfo) => {
@@ -139,6 +214,16 @@ export function SinglePage() {
         const pageDim = dims?.find(d => d.page === page);
 
         const normalizedBbox = field.bbox ? normalizeBbox(field.bbox, pageDim) : null;
+
+        // Debug log first few fields
+        if (acroFields.fields.indexOf(field) < 3) {
+          console.log('[SinglePage] Field normalization:', {
+            name: field.field_name,
+            originalBbox: field.bbox,
+            pageDim,
+            normalizedBbox,
+          });
+        }
 
         return {
           field_id: field.field_name,
@@ -157,6 +242,7 @@ export function SinglePage() {
       });
 
       setFields(fieldData);
+      console.log('[SinglePage] Fields loaded:', fieldData.length);
       addActivity('info', `Found ${fieldData.length} fields`);
 
     } catch (err) {
