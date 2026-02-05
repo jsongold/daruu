@@ -1,6 +1,7 @@
 /**
  * Inline editor popover for editing field values directly in the preview.
  * Appears when clicking a field and provides text input with save/cancel.
+ * Includes font style controls for customizing field appearance.
  */
 
 import {
@@ -13,6 +14,9 @@ import {
   type ChangeEvent,
 } from 'react';
 import { Button } from '../ui/Button';
+import { FontStyleControls } from './FontStyleControls';
+import type { FontStyle } from '../../api/editClient';
+import { DEFAULT_FONT_STYLE } from '../../api/editClient';
 
 export interface InlineEditorProps {
   /** Field ID being edited */
@@ -26,16 +30,22 @@ export interface InlineEditorProps {
   /** Position to display the editor (relative to viewport) */
   position: { x: number; y: number };
   /** Called when user saves the value */
-  onSave: (fieldId: string, value: string) => void;
+  onSave: (fieldId: string, value: string, fontStyle?: FontStyle) => void;
   /** Called when user cancels editing */
   onCancel: () => void;
   /** Whether the save is in progress */
   isLoading?: boolean;
   /** Container element for positioning bounds */
   containerRef?: React.RefObject<HTMLElement>;
+  /** Current font style */
+  currentFontStyle?: FontStyle;
+  /** Whether to show font style controls */
+  showFontControls?: boolean;
+  /** Bounding box dimensions in pixels (for fit text feature) */
+  bbox?: { width: number; height: number };
 }
 
-const POPOVER_WIDTH = 280;
+const POPOVER_WIDTH = 320;
 const POPOVER_MIN_HEIGHT = 120;
 const MARGIN = 16;
 
@@ -50,11 +60,18 @@ export function InlineEditor({
   isLoading = false,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   containerRef: _containerRef,
+  currentFontStyle,
+  showFontControls = true,
+  bbox,
 }: InlineEditorProps) {
   const [value, setValue] = useState(currentValue);
   const [isCheckbox, setIsCheckbox] = useState(
     fieldType === 'checkbox' && (currentValue === 'true' || currentValue === 'Yes')
   );
+  const [fontStyle, setFontStyle] = useState<FontStyle>(
+    currentFontStyle || DEFAULT_FONT_STYLE
+  );
+  const [showFontPanel, setShowFontPanel] = useState(false);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
 
@@ -125,19 +142,23 @@ export function InlineEditor({
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         const finalValue = fieldType === 'checkbox' ? (isCheckbox ? 'Yes' : 'No') : value;
-        onSave(fieldId, finalValue);
+        onSave(fieldId, finalValue, fontStyle);
       } else if (e.key === 'Escape') {
         e.preventDefault();
         onCancel();
       }
     },
-    [fieldId, fieldType, isCheckbox, value, onSave, onCancel]
+    [fieldId, fieldType, isCheckbox, value, fontStyle, onSave, onCancel]
   );
 
   const handleSave = useCallback(() => {
     const finalValue = fieldType === 'checkbox' ? (isCheckbox ? 'Yes' : 'No') : value;
-    onSave(fieldId, finalValue);
-  }, [fieldId, fieldType, isCheckbox, value, onSave]);
+    onSave(fieldId, finalValue, fontStyle);
+  }, [fieldId, fieldType, isCheckbox, value, fontStyle, onSave]);
+
+  const handleFontStyleChange = useCallback((newFontStyle: FontStyle) => {
+    setFontStyle(newFontStyle);
+  }, []);
 
   const handleInputChange = useCallback((e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setValue(e.target.value);
@@ -299,6 +320,62 @@ export function InlineEditor({
             aria-label="Field value"
           />
         )}
+
+        {/* Font style toggle */}
+        {showFontControls && fieldType !== 'checkbox' && (
+          <div style={{ marginTop: '12px' }}>
+            <button
+              type="button"
+              onClick={() => setShowFontPanel(!showFontPanel)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 10px',
+                fontSize: '12px',
+                color: '#6b7280',
+                backgroundColor: showFontPanel ? '#f3f4f6' : 'transparent',
+                border: '1px solid #e5e7eb',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                width: '100%',
+                justifyContent: 'center',
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M4 7V4h16v3" />
+                <path d="M9 20h6" />
+                <path d="M12 4v16" />
+              </svg>
+              {showFontPanel ? 'Hide' : 'Show'} Font Style
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                style={{ transform: showFontPanel ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}
+              >
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </button>
+
+            {showFontPanel && (
+              <div style={{ marginTop: '12px', padding: '12px', backgroundColor: '#f9fafb', borderRadius: '6px' }}>
+                <FontStyleControls
+                  fontStyle={fontStyle}
+                  onChange={handleFontStyleChange}
+                  disabled={isLoading}
+                  compact={false}
+                  bbox={bbox}
+                  textValue={value}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
         <p style={hintStyle}>
           Press Enter to save, Escape to cancel
         </p>

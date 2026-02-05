@@ -16,7 +16,7 @@ import { Button } from '../ui/Button';
 import { LoadingSpinner, EmptyState } from '../ui/LoadingState';
 import { FieldHighlight, type FieldRegion } from './FieldHighlight';
 import { InlineEditor } from '../editor/InlineEditor';
-import type { FieldData } from '../../api/editClient';
+import type { FieldData, FontStyle } from '../../api/editClient';
 
 export interface EditableDocumentPreviewProps {
   /** Image URLs for each page */
@@ -32,7 +32,7 @@ export interface EditableDocumentPreviewProps {
   /** Called when a field is selected */
   onFieldSelect?: (fieldId: string | null) => void;
   /** Called when a field value is edited */
-  onFieldEdit?: (fieldId: string, value: string) => void;
+  onFieldEdit?: (fieldId: string, value: string, fontStyle?: FontStyle) => void;
   /** Whether the preview is loading */
   isLoading?: boolean;
   /** Whether field edit is in progress */
@@ -246,6 +246,7 @@ export function EditableDocumentPreview({
           type: field.type,
           status,
           required: field.required,
+          fontStyle: field.fontStyle,
         };
       })
       .filter((field) => field.bbox.width > 0 && field.bbox.height > 0);
@@ -255,6 +256,20 @@ export function EditableDocumentPreview({
   const getFieldForEditor = useCallback((fieldId: string) => {
     return fields.find((f) => f.field_id === fieldId);
   }, [fields]);
+
+  // Get bbox in pixels for a field (for fit text feature)
+  const getFieldBboxInPixels = useCallback((fieldId: string): { width: number; height: number } | undefined => {
+    const field = fields.find((f) => f.field_id === fieldId);
+    if (!field?.bbox || !imageRef.current) {
+      return undefined;
+    }
+    const containerWidth = imageRef.current.offsetWidth || imageSize.width;
+    const containerHeight = imageRef.current.offsetHeight || imageSize.height;
+    return {
+      width: field.bbox.width * containerWidth,
+      height: field.bbox.height * containerHeight,
+    };
+  }, [fields, imageSize.width, imageSize.height]);
 
   // Store resetTransform function for page changes
   const resetTransformRef = useRef<(() => void) | null>(null);
@@ -279,8 +294,8 @@ export function EditableDocumentPreview({
   }, [onFieldSelect]);
 
   // Handle save from inline editor
-  const handleInlineEditorSave = useCallback((fieldId: string, value: string) => {
-    onFieldEdit?.(fieldId, value);
+  const handleInlineEditorSave = useCallback((fieldId: string, value: string, fontStyle?: FontStyle) => {
+    onFieldEdit?.(fieldId, value, fontStyle);
     setEditingField(null);
   }, [onFieldEdit]);
 
@@ -539,6 +554,9 @@ export function EditableDocumentPreview({
           onSave={handleInlineEditorSave}
           onCancel={handleInlineEditorCancel}
           isLoading={isEditLoading}
+          currentFontStyle={getFieldForEditor(editingField.fieldId)?.fontStyle}
+          showFontControls={true}
+          bbox={getFieldBboxInPixels(editingField.fieldId)}
         />
       )}
     </div>

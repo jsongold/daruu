@@ -9,6 +9,7 @@ import {
   type CSSProperties,
   type MouseEvent,
 } from 'react';
+import type { FontStyle } from '../../api/editClient';
 
 export interface FieldRegion {
   /** Field ID */
@@ -30,6 +31,8 @@ export interface FieldRegion {
   status?: 'empty' | 'filled' | 'selected' | 'error';
   /** Whether field is required */
   required?: boolean;
+  /** Font style for rendering the value */
+  fontStyle?: FontStyle;
 }
 
 export interface FieldHighlightProps {
@@ -200,6 +203,45 @@ export function FieldHighlight({
           boxShadow: '0 1px 3px rgba(0, 0, 0, 0.2)',
         };
 
+        // Use custom font style if available, otherwise fallback to dynamic sizing
+        const fontStyle = field.fontStyle;
+        const defaultFontSize = Math.max(8, Math.min(14, height * 0.7));
+
+        // Map font families to web-safe equivalents
+        const fontFamilyMap: Record<string, string> = {
+          'Helvetica': 'Helvetica, Arial, sans-serif',
+          'Times': 'Times New Roman, Times, serif',
+          'Courier': 'Courier New, Courier, monospace',
+        };
+
+        // Map alignment to CSS textAlign
+        const alignmentMap: Record<string, CSSProperties['textAlign']> = {
+          'left': 'left',
+          'center': 'center',
+          'right': 'right',
+        };
+
+        const valueStyle: CSSProperties = {
+          position: 'absolute',
+          top: '50%',
+          left: '4px',
+          right: '4px',
+          transform: 'translateY(-50%)',
+          fontSize: fontStyle?.fontSize ? `${fontStyle.fontSize}px` : `${defaultFontSize}px`,
+          fontFamily: fontStyle?.fontFamily
+            ? fontFamilyMap[fontStyle.fontFamily] || 'system-ui, -apple-system, sans-serif'
+            : 'system-ui, -apple-system, sans-serif',
+          color: fontStyle?.fontColor || '#1f2937',
+          textAlign: fontStyle?.alignment
+            ? alignmentMap[fontStyle.alignment] || 'left'
+            : 'left',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          pointerEvents: 'none',
+          lineHeight: 1.2,
+        };
+
         return (
           <div
             key={field.id}
@@ -221,6 +263,11 @@ export function FieldHighlight({
               }
             }}
           >
+            {/* Display field value inside the box */}
+            {field.value && (
+              <div style={valueStyle}>{field.value}</div>
+            )}
+
             {/* Status indicator dot */}
             {!isSelected && (field.status === 'empty' || field.status === 'error' || field.required) && (
               <div style={indicatorStyle} />
