@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from typing import Any
 from uuid import uuid4
 
-from app.config import get_settings
+from app.config import DEFAULT_MODEL, get_settings
 from app.models.common import BBox
 from app.models.cost import CostTracker, LLMUsage
 from app.services.structure_labelling.domain.models import (
@@ -251,7 +251,7 @@ class LangChainFieldLabellingAgent:
     Tracks token usage for cost estimation via get_cost_tracker().
     """
 
-    model_name: str = "gpt-4o-mini"
+    model_name: str = DEFAULT_MODEL
     temperature: float = 0.0
     max_retries: int = 3
     confidence_threshold: float = 0.7

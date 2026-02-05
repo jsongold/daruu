@@ -10,26 +10,7 @@ for updates rather than mutating existing state.
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 
-
-# Default pricing per 1M tokens (USD) - configurable via environment
-DEFAULT_LLM_PRICING = {
-    "gpt-4o": {
-        "input_per_1m": 2.50,
-        "output_per_1m": 10.00,
-    },
-    "gpt-4o-mini": {
-        "input_per_1m": 0.15,
-        "output_per_1m": 0.60,
-    },
-    "gpt-4-turbo": {
-        "input_per_1m": 10.00,
-        "output_per_1m": 30.00,
-    },
-    "gpt-3.5-turbo": {
-        "input_per_1m": 0.50,
-        "output_per_1m": 1.50,
-    },
-}
+from app.config import DEFAULT_LLM_PRICING, DEFAULT_MODEL
 
 # Default OCR cost estimate per page (USD)
 DEFAULT_OCR_COST_PER_PAGE = 0.0015  # Approximate cost based on cloud OCR services
@@ -125,10 +106,10 @@ class CostTracker:
     storage_bytes_downloaded: int = 0
     estimated_cost_usd: float = 0.0
     llm_usage_records: tuple[LLMUsage, ...] = ()
-    model_name: str = "gpt-4o-mini"
+    model_name: str = DEFAULT_MODEL
 
     @classmethod
-    def create(cls, model_name: str = "gpt-4o-mini") -> "CostTracker":
+    def create(cls, model_name: str = DEFAULT_MODEL) -> "CostTracker":
         """Create a new empty CostTracker.
 
         Args:
@@ -358,7 +339,7 @@ class CostTracker:
         """
         # Get pricing for model, fallback to gpt-4o-mini pricing
         pricing = DEFAULT_LLM_PRICING.get(
-            model_name, DEFAULT_LLM_PRICING["gpt-4o-mini"]
+            model_name, DEFAULT_LLM_PRICING[DEFAULT_MODEL]
         )
 
         # Calculate LLM cost (per million tokens)
@@ -386,7 +367,7 @@ class CostTracker:
             LLM cost in USD
         """
         pricing = DEFAULT_LLM_PRICING.get(
-            self.model_name, DEFAULT_LLM_PRICING["gpt-4o-mini"]
+            self.model_name, DEFAULT_LLM_PRICING[DEFAULT_MODEL]
         )
         input_cost = (self.llm_tokens_input / 1_000_000) * pricing["input_per_1m"]
         output_cost = (self.llm_tokens_output / 1_000_000) * pricing["output_per_1m"]

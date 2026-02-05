@@ -3,6 +3,7 @@
 import pytest
 from datetime import datetime, timezone
 
+from app.config import DEFAULT_MODEL
 from app.models.cost import (
     CostTracker,
     CostSummary,
@@ -346,7 +347,7 @@ class TestCostSummaryModel:
         assert model.estimated_cost_usd == 0.0
         assert model.breakdown.llm_cost_usd == 0.0
         assert model.breakdown.ocr_cost_usd == 0.0
-        assert model.model_name == "gpt-4o-mini"
+        assert model.model_name == DEFAULT_MODEL
 
     def test_model_serialization(self) -> None:
         """Test that the model serializes to JSON correctly."""

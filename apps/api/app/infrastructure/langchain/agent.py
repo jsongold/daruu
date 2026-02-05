@@ -19,7 +19,7 @@ from app.application.ports.llm_gateway import (
     LLMGateway,
     OCRToken,
 )
-from app.config import get_settings
+from app.config import DEFAULT_MODEL, get_settings
 
 
 @dataclass
@@ -34,7 +34,7 @@ class LangChainLLMGateway:
     Currently a stub implementation - will be completed with LangChain integration.
     """
 
-    model_name: str = "gpt-4o-mini"
+    model_name: str = DEFAULT_MODEL
 
     def __post_init__(self) -> None:
         """Initialize the LangChain components."""

@@ -11,6 +11,7 @@ from typing import Any, TypeVar
 
 from langchain_core.messages import BaseMessage
 
+from app.config import DEFAULT_MODEL
 from app.models.cost import CostTracker, LLMUsage
 
 logger = logging.getLogger(__name__)
@@ -246,7 +247,7 @@ class CostTrackingContext:
             total_cost = ctx.tracker
     """
 
-    def __init__(self, model_name: str = "gpt-4o-mini") -> None:
+    def __init__(self, model_name: str = DEFAULT_MODEL) -> None:
         """Initialize tracking context.
 
         Args:

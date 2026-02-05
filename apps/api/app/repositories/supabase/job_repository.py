@@ -31,6 +31,7 @@ from app.models import (
     JobStatus,
     Mapping,
 )
+from app.config import DEFAULT_MODEL
 from app.models.common import BBox, CostSummaryModel, CostBreakdown
 from app.repositories import JobRepository
 
@@ -206,7 +207,7 @@ class SupabaseJobRepository:
             storage_bytes_downloaded=cost_data.get("storage_bytes_downloaded", 0),
             estimated_cost_usd=cost_data.get("estimated_cost_usd", 0.0),
             breakdown=breakdown,
-            model_name=cost_data.get("model_name", "gpt-4o-mini"),
+            model_name=cost_data.get("model_name", DEFAULT_MODEL),
         )
 
     def _fetch_job_related_data(

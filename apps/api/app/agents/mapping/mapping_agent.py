@@ -16,6 +16,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
+from app.config import DEFAULT_MODEL
 from app.models.cost import CostTracker, LLMUsage
 from app.models.mapping import (
     FollowupQuestion,
@@ -161,7 +162,7 @@ class LangChainMappingAgent:
         self,
         llm: object | None = None,
         temperature: float = 0.0,
-        model_name: str = "gpt-4o-mini",
+        model_name: str = DEFAULT_MODEL,
     ) -> None:
         """Initialize the mapping agent.
 

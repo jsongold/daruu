@@ -17,6 +17,20 @@ from typing import Literal
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings
 
+# =============================================================================
+# Centralized Model Constants
+# =============================================================================
+
+DEFAULT_MODEL = "gpt-5-mini"
+
+DEFAULT_LLM_PRICING: dict[str, dict[str, float]] = {
+    "gpt-5-mini": {"input_per_1m": 0.15, "output_per_1m": 0.60},
+    "gpt-4o": {"input_per_1m": 2.50, "output_per_1m": 10.00},
+    "gpt-4o-mini": {"input_per_1m": 0.15, "output_per_1m": 0.60},
+    "gpt-4-turbo": {"input_per_1m": 10.00, "output_per_1m": 30.00},
+    "gpt-3.5-turbo": {"input_per_1m": 0.50, "output_per_1m": 1.50},
+}
+
 
 # =============================================================================
 # Domain Configuration Classes
@@ -79,7 +93,7 @@ class LLMConfig(BaseModel):
 
     # Model selection
     model: str = Field(
-        default="gpt-4o-mini",
+        default=DEFAULT_MODEL,
         description="OpenAI model to use",
     )
     base_url: str | None = Field(
@@ -505,12 +519,12 @@ class CostConfig(BaseModel):
     llm_input_cost_per_1k: float = Field(
         default=0.00015,
         ge=0,
-        description="Cost per 1K input tokens for gpt-4o-mini",
+        description="Cost per 1K input tokens for gpt-5-mini",
     )
     llm_output_cost_per_1k: float = Field(
         default=0.0006,
         ge=0,
-        description="Cost per 1K output tokens for gpt-4o-mini",
+        description="Cost per 1K output tokens for gpt-5-mini",
     )
 
     # OCR pricing
@@ -551,12 +565,7 @@ class CostConfig(BaseModel):
 
     # Model-specific pricing overrides (per 1M tokens for precision)
     model_pricing: dict[str, dict[str, float]] = Field(
-        default_factory=lambda: {
-            "gpt-4o": {"input_per_1m": 2.50, "output_per_1m": 10.00},
-            "gpt-4o-mini": {"input_per_1m": 0.15, "output_per_1m": 0.60},
-            "gpt-4-turbo": {"input_per_1m": 10.00, "output_per_1m": 30.00},
-            "gpt-3.5-turbo": {"input_per_1m": 0.50, "output_per_1m": 1.50},
-        },
+        default_factory=lambda: dict(DEFAULT_LLM_PRICING),
         description="Model-specific pricing per 1M tokens",
     )
 
@@ -638,7 +647,7 @@ class Settings(BaseSettings):
 
     # OpenAI/LLM settings (environment variables)
     openai_api_key: str | None = None
-    openai_model: str = "gpt-4o-mini"
+    openai_model: str = DEFAULT_MODEL
     openai_base_url: str | None = None
     openai_timeout_seconds: int = 120
     openai_max_concurrent_requests: int = 5

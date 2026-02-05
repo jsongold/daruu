@@ -4,6 +4,8 @@ from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel, Field
 
+from app.config import DEFAULT_MODEL
+
 T = TypeVar("T")
 
 
@@ -153,7 +155,7 @@ class CostSummaryModel(BaseModel):
         description="Cost breakdown by category",
     )
     model_name: str = Field(
-        default="gpt-4o-mini", description="Primary LLM model used"
+        default=DEFAULT_MODEL, description="Primary LLM model used"
     )
 
     model_config = {"frozen": True}
@@ -177,5 +179,5 @@ class CostSummaryModel(BaseModel):
             breakdown=CostBreakdown(
                 llm_cost_usd=0.0, ocr_cost_usd=0.0, storage_cost_usd=0.0
             ),
-            model_name="gpt-4o-mini",
+            model_name=DEFAULT_MODEL,
         )
