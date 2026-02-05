@@ -18,6 +18,7 @@ from app.routes import (
     analyze_router,
     auth_router,
     conversations_router,
+    data_sources_router,
     documents_router,
     edits_router,
     extract_router,
@@ -32,6 +33,7 @@ from app.routes import (
     review_service_router,
     structure_labelling_router,
     templates_router,
+    vision_autofill_router,
 )
 from app.infrastructure.observability import (
     init_tracing,
@@ -185,12 +187,20 @@ All errors follow a consistent format with `success: false` and an `error` objec
                 "description": "Agent Chat UI - conversation and message management (v2 API)",
             },
             {
+                "name": "data-sources",
+                "description": "Data sources for AI form filling (v2 API)",
+            },
+            {
                 "name": "templates",
                 "description": "Template management and matching (v2 API)",
             },
             {
                 "name": "edits",
                 "description": "Field editing and undo/redo operations (v2 API)",
+            },
+            {
+                "name": "vision-autofill",
+                "description": "AI-powered form autofill using data sources (v1 API)",
             },
         ],
         contact={
@@ -242,11 +252,17 @@ All errors follow a consistent format with `success: false` and an `error` objec
     # Agent Chat UI v2 API (has its own /api/v2 prefix)
     app.include_router(conversations_router)
 
+    # Data Sources v2 API (nested under conversations)
+    app.include_router(data_sources_router)
+
     # Template System v2 API (has its own /api/v2 prefix)
     app.include_router(templates_router)
 
     # Edit System v2 API (has its own /api/v2 prefix)
     app.include_router(edits_router)
+
+    # Vision Autofill API (v1)
+    app.include_router(vision_autofill_router, prefix=settings.api_prefix)
 
     # Root endpoint
     @app.get("/")

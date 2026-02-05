@@ -9,20 +9,24 @@ Usage:
         SupabaseDocumentRepository,
         SupabaseJobRepository,
         SupabaseFileRepository,
+        SupabaseDataSourceRepository,
     )
 
     # Create repositories
     doc_repo = SupabaseDocumentRepository()
     job_repo = SupabaseJobRepository()
     file_repo = SupabaseFileRepository()
+    data_source_repo = SupabaseDataSourceRepository()
 """
 
+from app.repositories.supabase.data_source_repository import SupabaseDataSourceRepository
 from app.repositories.supabase.document_repository import SupabaseDocumentRepository
-from app.repositories.supabase.job_repository import SupabaseJobRepository
 from app.repositories.supabase.file_repository import SupabaseFileRepository
+from app.repositories.supabase.job_repository import SupabaseJobRepository
 
 __all__ = [
+    "SupabaseDataSourceRepository",
     "SupabaseDocumentRepository",
-    "SupabaseJobRepository",
     "SupabaseFileRepository",
+    "SupabaseJobRepository",
 ]
