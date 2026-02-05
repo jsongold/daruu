@@ -222,7 +222,7 @@ test.describe('AcroForm Field Overlay - Full Flow', () => {
     const consoleCapture = setupConsoleLogCapture(page);
 
     // Step 1: Navigate to home page
-    await page.goto('/');
+    await page.goto('/admin');
     await page.waitForLoadState('networkidle');
     await captureScreenshot(page, '01-home-page');
 
@@ -230,14 +230,10 @@ test.describe('AcroForm Field Overlay - Full Flow', () => {
     await expect(page.getByText('API Connected')).toBeVisible({ timeout: 10000 });
     await captureScreenshot(page, '02-api-connected');
 
-    // Step 3: Click "Create New Job"
-    await page.getByRole('button', { name: 'Create New Job' }).click();
-    await page.waitForLoadState('networkidle');
-    await captureScreenshot(page, '03-job-create-page');
-
-    // Step 4: Select "Scratch Mode" (doesn't require source document)
-    await page.getByText('Scratch Mode').click();
-    await captureScreenshot(page, '04-scratch-mode-selected');
+    // Step 3: Select "Scratch" mode (doesn't require source document)
+    // The mode selection is on the same page, no navigation needed
+    await page.getByText('Scratch').click();
+    await captureScreenshot(page, '03-scratch-mode-selected');
 
     // Step 5: Upload target document
     // The DocumentUploader has a hidden file input - we need to set files on it
@@ -382,12 +378,13 @@ test.describe('AcroForm Field Overlay - Full Flow', () => {
     const networkMonitor = setupAcroFormNetworkMonitor(page);
 
     // Go through the flow to get to Documents tab
-    await page.goto('/');
+    await page.goto('/admin');
     await page.waitForLoadState('networkidle');
 
     // Create job in scratch mode
-    await page.getByRole('button', { name: 'Create New Job' }).click();
-    await page.getByText('Scratch Mode').click();
+    // Select Scratch mode first, then create job
+    await page.getByText('Scratch').click();
+    await page.waitForTimeout(500);
 
     // Upload target document
     const fileInput = page.locator('input[type="file"]').first();
@@ -478,7 +475,7 @@ test.describe('AcroForm Field Overlay - Full Flow', () => {
 test.describe('AcroForm API Direct Test', () => {
   test('should capture detailed API response for acroform-fields', async ({ page, request }) => {
     // First create a job to get a document ID
-    await page.goto('/');
+    await page.goto('/admin');
     await page.waitForLoadState('networkidle');
 
     // Track document IDs from network requests
@@ -499,8 +496,9 @@ test.describe('AcroForm API Direct Test', () => {
     });
 
     // Create job in scratch mode
-    await page.getByRole('button', { name: 'Create New Job' }).click();
-    await page.getByText('Scratch Mode').click();
+    // Select Scratch mode first, then create job
+    await page.getByText('Scratch').click();
+    await page.waitForTimeout(500);
 
     // Upload target document
     const fileInput = page.locator('input[type="file"]').first();
@@ -586,11 +584,12 @@ test.describe('AcroForm Overlay Rendering Conditions', () => {
     const networkMonitor = setupAcroFormNetworkMonitor(page);
 
     // Go through the flow
-    await page.goto('/');
+    await page.goto('/admin');
     await page.waitForLoadState('networkidle');
 
-    await page.getByRole('button', { name: 'Create New Job' }).click();
-    await page.getByText('Scratch Mode').click();
+    // Select Scratch mode first, then create job
+    await page.getByText('Scratch').click();
+    await page.waitForTimeout(500);
 
     const fileInput = page.locator('input[type="file"]').first();
     await fileInput.setInputFiles(TEST_PDF_PATH);
