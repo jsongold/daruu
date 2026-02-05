@@ -31,7 +31,7 @@ services:
       - DARU_API_PREFIX=${DARU_API_PREFIX:-/api/v1}
       # OpenAI/LLM settings
       - DARU_OPENAI_API_KEY=${DARU_OPENAI_API_KEY}
-      - DARU_OPENAI_MODEL=${DARU_OPENAI_MODEL:-gpt-4o-mini}
+      - DARU_OPENAI_MODEL=${DARU_OPENAI_MODEL}
       - DARU_OPENAI_BASE_URL=${DARU_OPENAI_BASE_URL:-}
       - DARU_OPENAI_TIMEOUT_SECONDS=${DARU_OPENAI_TIMEOUT_SECONDS:-120}
       # Supabase settings
@@ -139,7 +139,15 @@ services:
       api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:5173/"]
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://127.0.0.1:5173/",
+        ]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -188,7 +196,7 @@ services:
       - DARU_API_PREFIX=${DARU_API_PREFIX:-/api/v1}
       # OpenAI/LLM settings
       - DARU_OPENAI_API_KEY=${DARU_OPENAI_API_KEY}
-      - DARU_OPENAI_MODEL=${DARU_OPENAI_MODEL:-gpt-4o-mini}
+      - DARU_OPENAI_MODEL=${DARU_OPENAI_MODEL}
       - DARU_OPENAI_BASE_URL=${DARU_OPENAI_BASE_URL:-}
       - DARU_OPENAI_TIMEOUT_SECONDS=${DARU_OPENAI_TIMEOUT_SECONDS:-120}
       # Supabase settings
@@ -216,7 +224,11 @@ services:
       api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "celery -A app.infrastructure.celery inspect ping || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "celery -A app.infrastructure.celery inspect ping || exit 1",
+        ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -278,8 +290,8 @@ services:
     container_name: daru-mailhog
     restart: unless-stopped
     ports:
-      - "1025:1025"  # SMTP
-      - "8025:8025"  # Web UI
+      - "1025:1025" # SMTP
+      - "8025:8025" # Web UI
     networks:
       - daru-network
     profiles:
