@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from app.infrastructure.observability import get_logger
 from app.models.edit import (
     BatchEditResponse,
+    BboxData,
     EditHistory,
     EditRequest,
     EditResponse,
@@ -59,12 +60,13 @@ class EditService:
             source=edit_request.source,
         )
 
-        # Get current value
+        # Get current value and bbox
         current_state = self._edit_repo.get_field_value(
             conversation_id,
             edit_request.field_id,
         )
         old_value = current_state.current_value if current_state else None
+        old_bbox = current_state.bbox if current_state else None
 
         # Create the field edit
         now = datetime.now(timezone.utc)
@@ -73,6 +75,8 @@ class EditService:
             old_value=old_value,
             new_value=edit_request.value,
             bbox_id=None,  # Could be populated if we have template context
+            old_bbox=old_bbox,
+            new_bbox=edit_request.bbox,
             timestamp=now,
         )
 
@@ -292,6 +296,7 @@ class EditService:
                 value=state.current_value,
                 source=state.source,
                 last_modified=state.last_modified,
+                bbox=state.bbox,
             )
             for state in field_states
         ]

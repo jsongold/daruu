@@ -186,11 +186,24 @@ class MemoryEditRepository:
         now = datetime.now(timezone.utc)
         value = edit.new_value if is_apply else edit.old_value
 
+        # Handle bbox: apply new_bbox or revert to old_bbox
+        bbox = None
+        if is_apply and edit.new_bbox:
+            bbox = edit.new_bbox
+        elif not is_apply and edit.old_bbox:
+            bbox = edit.old_bbox
+        else:
+            # Preserve existing bbox if not changed by this edit
+            existing = self._field_values[conversation_id].get(edit.field_id)
+            if existing:
+                bbox = existing.bbox
+
         new_state = FieldState(
             field_id=edit.field_id,
             current_value=value,
             source="chat",  # Could be enhanced to track source from edit
             last_modified=now,
+            bbox=bbox,
         )
 
         self._field_values[conversation_id][edit.field_id] = new_state

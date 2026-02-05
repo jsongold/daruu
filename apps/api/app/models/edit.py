@@ -11,6 +11,26 @@ from pydantic import BaseModel, Field
 
 
 # ============================================
+# Bbox Model
+# ============================================
+
+
+class BboxData(BaseModel):
+    """Bounding box data for a field position.
+
+    Coordinates are normalized (0-1 range) relative to page dimensions.
+    """
+
+    x: float = Field(..., ge=0, le=1, description="X coordinate (0-1)")
+    y: float = Field(..., ge=0, le=1, description="Y coordinate (0-1)")
+    width: float = Field(..., ge=0, le=1, description="Width (0-1)")
+    height: float = Field(..., ge=0, le=1, description="Height (0-1)")
+    page: int = Field(..., ge=1, description="Page number (1-indexed)")
+
+    model_config = {"frozen": True}
+
+
+# ============================================
 # Core Edit Models
 # ============================================
 
@@ -19,13 +39,15 @@ class FieldEdit(BaseModel):
     """A single field edit operation.
 
     Represents one edit to a form field, storing both old and new values
-    for undo/redo support.
+    for undo/redo support. Also supports bbox changes for field positioning.
     """
 
     field_id: str = Field(..., description="ID of the field being edited")
     old_value: str | None = Field(None, description="Previous value (None if new)")
     new_value: str = Field(..., description="New value after edit")
     bbox_id: str | None = Field(None, description="Link to template bounding box")
+    old_bbox: BboxData | None = Field(None, description="Previous bbox (None if unchanged)")
+    new_bbox: BboxData | None = Field(None, description="New bbox after edit (None if unchanged)")
     timestamp: datetime = Field(..., description="When the edit was made")
 
     model_config = {"frozen": True}
@@ -78,6 +100,10 @@ class EditRequest(BaseModel):
         default="chat",
         description="How the edit was initiated",
     )
+    bbox: BboxData | None = Field(
+        default=None,
+        description="Optional bbox update for field position",
+    )
 
     model_config = {"frozen": True}
 
@@ -104,6 +130,10 @@ class FieldValueUpdate(BaseModel):
     source: Literal["chat", "inline"] = Field(
         default="inline",
         description="How the edit was initiated",
+    )
+    bbox: BboxData | None = Field(
+        default=None,
+        description="Optional bbox update for field position",
     )
 
     model_config = {"frozen": True}
@@ -166,6 +196,7 @@ class FieldValue(BaseModel):
         description="How the value was set",
     )
     last_modified: datetime | None = Field(None, description="When value was last changed")
+    bbox: BboxData | None = Field(None, description="Current bounding box position")
 
     model_config = {"frozen": True}
 
@@ -215,7 +246,7 @@ class EditErrorCode:
 class FieldState(BaseModel):
     """Internal state of a field.
 
-    Used by the repository to track current field values.
+    Used by the repository to track current field values and bounding box.
     """
 
     field_id: str = Field(..., description="ID of the field")
@@ -225,5 +256,6 @@ class FieldState(BaseModel):
         description="How the value was set",
     )
     last_modified: datetime | None = Field(None, description="When value was last changed")
+    bbox: BboxData | None = Field(None, description="Current bounding box position")
 
     model_config = {"frozen": True}
