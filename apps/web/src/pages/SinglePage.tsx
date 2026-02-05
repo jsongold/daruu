@@ -7,20 +7,25 @@
  * - Right: Activity log
  * - Bottom: Document upload + list
  *
- * URL: /single?d=<document_id>
+ * URL: /single?d=<document_id>&c=<conversation_id>
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { EditableDocumentPreview } from '../components/preview/EditableDocumentPreview';
 import { DocumentBar } from '../components/single/DocumentBar';
 import { FieldListReadOnly } from '../components/single/FieldListReadOnly';
 import { ActivityLog, type Activity } from '../components/single/ActivityLog';
-import { uploadDocument, getPagePreviewUrl, getAcroFormFields, getDocument } from '../api/client';
-import type { FieldData } from '../api/editClient';
+import { uploadDocument, getPagePreviewUrl, getAcroFormFields, getDocument, fillAndDownloadPdf } from '../api/client';
+import { createConversation, getConversation } from '../api/conversationClient';
+import { autofillWithVision } from '../api/autofillClient';
+import { updateField as apiUpdateField, getFields as apiGetFields } from '../api/editClient';
+import { useDataSources } from '../hooks/useDataSources';
+import type { FieldData, FontStyle } from '../api/editClient';
 import type { AcroFormFieldInfo, PageDimensions } from '../types/api';
 
 interface DocumentWithPages {
   document_id: string;
+  document_ref: string;
   filename: string;
   page_count: number;
   pageUrls: string[];
@@ -33,12 +38,22 @@ function getDocumentIdFromUrl(): string | null {
   return params.get('d');
 }
 
-function updateUrl(documentId: string | null): void {
+function getConversationIdFromUrl(): string | null {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('c');
+}
+
+function updateUrl(documentId: string | null, conversationId?: string | null): void {
   const url = new URL(window.location.href);
   if (documentId) {
     url.searchParams.set('d', documentId);
   } else {
     url.searchParams.delete('d');
+  }
+  if (conversationId) {
+    url.searchParams.set('c', conversationId);
+  } else if (conversationId === null) {
+    url.searchParams.delete('c');
   }
   window.history.pushState({}, '', url.toString());
 }
@@ -48,6 +63,12 @@ export function SinglePage() {
   const [documents, setDocuments] = useState<DocumentWithPages[]>([]);
   const [activeDocumentId, setActiveDocumentId] = useState<string | null>(getDocumentIdFromUrl);
 
+  // Conversation state (persisted in URL for reload support)
+  const [conversationId, setConversationId] = useState<string | null>(getConversationIdFromUrl);
+
+  // Track pending saves to avoid race conditions
+  const pendingSaveRef = useRef<AbortController | null>(null);
+
   // Field state
   const [fields, setFields] = useState<FieldData[]>([]);
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
@@ -55,10 +76,22 @@ export function SinglePage() {
   // UI state
   const [isUploading, setIsUploading] = useState(false);
   const [isLoadingFields, setIsLoadingFields] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isAutofilling, setIsAutofilling] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Activity state
   const [activities, setActivities] = useState<Activity[]>([]);
+
+  // Data sources hook
+  const {
+    dataSources,
+    isUploading: isDataSourceUploading,
+    uploadFiles: uploadDataSourceFiles,
+    createText: createDataSourceText,
+    remove: removeDataSource,
+    error: dataSourceError,
+  } = useDataSources(conversationId);
 
   // Get active document
   const activeDocument = documents.find(d => d.document_id === activeDocumentId);
@@ -74,6 +107,36 @@ export function SinglePage() {
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, [documents]);
+
+  // Helper: ensure a conversation exists (reuse from URL or create new)
+  const ensureConversation = useCallback(async (filename: string): Promise<string | null> => {
+    const existingConvId = getConversationIdFromUrl();
+
+    // Try to reuse conversation from URL
+    if (existingConvId) {
+      try {
+        await getConversation(existingConvId);
+        console.log('[SinglePage] Reusing conversation from URL:', existingConvId);
+        setConversationId(existingConvId);
+        return existingConvId;
+      } catch {
+        console.warn('[SinglePage] Conversation from URL not found, creating new');
+      }
+    }
+
+    // Create a new conversation
+    try {
+      const conversation = await createConversation({
+        title: `SinglePage: ${filename}`,
+      });
+      setConversationId(conversation.id);
+      console.log('[SinglePage] Created conversation:', conversation.id);
+      return conversation.id;
+    } catch (convErr) {
+      console.warn('[SinglePage] Failed to create conversation:', convErr);
+      return null;
+    }
+  }, []);
 
   // Initialize document from URL on mount
   useEffect(() => {
@@ -114,6 +177,7 @@ export function SinglePage() {
 
         const docWithPages: DocumentWithPages = {
           document_id: docId,
+          document_ref: doc.document_ref,
           filename,
           page_count: pageCount,
           pageUrls,
@@ -124,8 +188,14 @@ export function SinglePage() {
         setActiveDocumentId(docId);
         addActivity('info', `Loaded ${filename}`, `${pageCount} pages`);
 
-        // Load fields for the document
-        await loadFields(docId, pageDimensions);
+        // Ensure conversation exists (reuse or create)
+        const convId = await ensureConversation(filename);
+
+        // Persist both document and conversation in URL
+        updateUrl(docId, convId);
+
+        // Load fields for the document, then merge saved edits from backend
+        await loadFields(docId, pageDimensions, convId);
 
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to load document';
@@ -133,7 +203,7 @@ export function SinglePage() {
         setError(message);
         addActivity('error', 'Failed to load document', message);
         // Clear the invalid document ID from URL
-        updateUrl(null);
+        updateUrl(null, null);
         setActiveDocumentId(null);
       } finally {
         setIsUploading(false);
@@ -194,8 +264,8 @@ export function SinglePage() {
     };
   };
 
-  // Load fields for a document
-  const loadFields = useCallback(async (documentId: string, pageDimensions?: PageDimensions[]) => {
+  // Load fields for a document, optionally merging saved edits from the backend
+  const loadFields = useCallback(async (documentId: string, pageDimensions?: PageDimensions[], convId?: string | null) => {
     setIsLoadingFields(true);
     console.log('[SinglePage] Loading fields for document:', documentId);
 
@@ -241,6 +311,35 @@ export function SinglePage() {
         };
       });
 
+      // Try to restore saved edits from the backend
+      const activeConvId = convId ?? conversationId;
+      let restoredCount = 0;
+
+      if (activeConvId) {
+        try {
+          const savedFields = await apiGetFields(activeConvId);
+          if (savedFields.fields.length > 0) {
+            const savedMap = new Map(savedFields.fields.map(f => [f.field_id, f]));
+
+            const mergedFields = fieldData.map(field => {
+              const saved = savedMap.get(field.field_id);
+              if (saved?.value) {
+                restoredCount++;
+                return { ...field, value: saved.value };
+              }
+              return field;
+            });
+
+            setFields(mergedFields);
+            console.log('[SinglePage] Fields loaded:', mergedFields.length, `(${restoredCount} restored from backend)`);
+            addActivity('info', `Found ${mergedFields.length} fields${restoredCount > 0 ? ` (${restoredCount} values restored)` : ''}`);
+            return;
+          }
+        } catch (err) {
+          console.warn('[SinglePage] Could not load saved edits from backend:', err);
+        }
+      }
+
       setFields(fieldData);
       console.log('[SinglePage] Fields loaded:', fieldData.length);
       addActivity('info', `Found ${fieldData.length} fields`);
@@ -252,7 +351,7 @@ export function SinglePage() {
     } finally {
       setIsLoadingFields(false);
     }
-  }, [addActivity]);
+  }, [addActivity, conversationId]);
 
   // Handle document upload
   const handleUpload = useCallback(async (file: File) => {
@@ -283,6 +382,7 @@ export function SinglePage() {
 
       const docWithPages: DocumentWithPages = {
         document_id: doc.document_id,
+        document_ref: doc.document_ref,
         filename,
         page_count: pageCount,
         pageUrls,
@@ -291,12 +391,17 @@ export function SinglePage() {
 
       setDocuments(prev => [...prev, docWithPages]);
       setActiveDocumentId(doc.document_id);
-      updateUrl(doc.document_id);
 
       addActivity('upload', `Uploaded ${filename}`, `${pageCount} pages`);
 
+      // Ensure conversation exists
+      const convId = await ensureConversation(filename);
+
+      // Persist both document and conversation in URL
+      updateUrl(doc.document_id, convId);
+
       // Load fields for the document
-      await loadFields(doc.document_id, pageDimensions);
+      await loadFields(doc.document_id, pageDimensions, convId);
 
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Upload failed';
@@ -312,11 +417,11 @@ export function SinglePage() {
     const doc = documents.find(d => d.document_id === documentId);
     setActiveDocumentId(documentId);
     setSelectedFieldId(null);
-    updateUrl(documentId);
+    updateUrl(documentId, conversationId);
 
     // Load fields for selected document
-    loadFields(documentId, doc?.pageDimensions);
-  }, [documents, loadFields]);
+    loadFields(documentId, doc?.pageDimensions, conversationId);
+  }, [documents, conversationId, loadFields]);
 
   // Handle document removal
   const handleRemoveDocument = useCallback((documentId: string) => {
@@ -326,55 +431,300 @@ export function SinglePage() {
       const remaining = documents.filter(d => d.document_id !== documentId);
       if (remaining.length > 0) {
         setActiveDocumentId(remaining[0].document_id);
-        updateUrl(remaining[0].document_id);
+        updateUrl(remaining[0].document_id, conversationId);
       } else {
         setActiveDocumentId(null);
-        updateUrl(null);
+        updateUrl(null, null);
       }
       setFields([]);
     }
 
     addActivity('info', 'Document removed');
-  }, [activeDocumentId, documents, addActivity]);
+  }, [activeDocumentId, documents, conversationId, addActivity]);
 
   // Handle field selection (from left panel)
   const handleFieldSelect = useCallback((fieldId: string | null) => {
     setSelectedFieldId(fieldId);
   }, []);
 
-  // Handle field edit (from preview)
-  const handleFieldEdit = useCallback((fieldId: string, value: string) => {
+  // Handle field edit (from preview) - updates state and persists to backend
+  const handleFieldEdit = useCallback((fieldId: string, value: string, fontStyle?: FontStyle) => {
     setFields(prev => prev.map(field =>
       field.field_id === fieldId
-        ? { ...field, value }
+        ? { ...field, value, ...(fontStyle && { fontStyle }) }
         : field
     ));
 
     const field = fields.find(f => f.field_id === fieldId);
     addActivity('edit', `Updated "${field?.label || fieldId}"`, value || '(cleared)');
-  }, [fields, addActivity]);
+
+    // Persist to backend (fire-and-forget, cancel previous pending save for same field)
+    if (conversationId) {
+      if (pendingSaveRef.current) {
+        pendingSaveRef.current.abort();
+      }
+      const controller = new AbortController();
+      pendingSaveRef.current = controller;
+
+      apiUpdateField(conversationId, fieldId, value, 'inline')
+        .then(() => {
+          if (!controller.signal.aborted) {
+            console.log('[SinglePage] Field saved to backend:', fieldId);
+          }
+        })
+        .catch((err) => {
+          if (!controller.signal.aborted) {
+            console.warn('[SinglePage] Failed to save field to backend:', err);
+          }
+        });
+    }
+  }, [fields, conversationId, addActivity]);
+
+  // Convert hex color to RGB tuple [0-1, 0-1, 0-1]
+  const hexToRgbTuple = (hex: string): [number, number, number] => {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    if (result) {
+      return [
+        parseInt(result[1], 16) / 255,
+        parseInt(result[2], 16) / 255,
+        parseInt(result[3], 16) / 255,
+      ];
+    }
+    return [0, 0, 0]; // Default to black
+  };
 
   // Handle export
-  const handleExport = useCallback(() => {
+  const handleExport = useCallback(async () => {
     if (!activeDocument) return;
 
+    // Filter fields that have values
+    const fieldsWithValues = fields.filter(field => field.value);
+
+    if (fieldsWithValues.length === 0) {
+      addActivity('error', 'Cannot export', 'Please fill in at least one field before exporting');
+      return;
+    }
+
+    setIsExporting(true);
     addActivity('export', 'Exporting PDF...');
 
-    // TODO: Implement actual export via API
-    setTimeout(() => {
-      addActivity('export', 'PDF exported successfully');
-    }, 1000);
-  }, [activeDocument, addActivity]);
+    try {
+      // Collect field values with bbox coordinates for the fill service
+      // Need to denormalize bbox back to PDF points for the API
+      const fillFields = fieldsWithValues
+        .map(field => {
+          // Find page dimensions to denormalize coordinates
+          const pageDim = activeDocument.pageDimensions?.find(
+            d => d.page === (field.bbox?.page || 1)
+          );
+
+          // Denormalize bbox from 0-1 range back to PDF points
+          let denormalizedBbox: {
+            x: number;
+            y: number;
+            width: number;
+            height: number;
+            page: number;
+          } | null = null;
+
+          if (field.bbox && pageDim) {
+            denormalizedBbox = {
+              x: field.bbox.x * pageDim.width,
+              y: field.bbox.y * pageDim.height,
+              width: field.bbox.width * pageDim.width,
+              height: field.bbox.height * pageDim.height,
+              page: field.bbox.page,
+            };
+          } else if (field.bbox) {
+            // Fallback: assume standard letter size if no dimensions
+            denormalizedBbox = {
+              x: field.bbox.x * 612,
+              y: field.bbox.y * 792,
+              width: field.bbox.width * 612,
+              height: field.bbox.height * 792,
+              page: field.bbox.page,
+            };
+          }
+
+          return {
+            field_id: field.field_id,
+            value: field.value,
+            ...(denormalizedBbox && {
+              x: denormalizedBbox.x,
+              y: denormalizedBbox.y,
+              width: denormalizedBbox.width,
+              height: denormalizedBbox.height,
+              page: denormalizedBbox.page,
+            }),
+          };
+        });
+
+      // Collect per-field font style parameters
+      const fieldParams: Record<string, {
+        font_name?: string;
+        font_size?: number;
+        font_color?: [number, number, number];
+        alignment?: 'left' | 'center' | 'right';
+      }> = {};
+
+      fieldsWithValues.forEach(field => {
+        if (field.fontStyle) {
+          const params: typeof fieldParams[string] = {};
+          if (field.fontStyle.fontFamily) {
+            params.font_name = field.fontStyle.fontFamily;
+          }
+          if (field.fontStyle.fontSize) {
+            params.font_size = field.fontStyle.fontSize;
+          }
+          if (field.fontStyle.fontColor) {
+            params.font_color = hexToRgbTuple(field.fontStyle.fontColor);
+          }
+          if (field.fontStyle.alignment) {
+            params.alignment = field.fontStyle.alignment;
+          }
+          if (Object.keys(params).length > 0) {
+            fieldParams[field.field_id] = params;
+          }
+        }
+      });
+
+      // Generate download filename from original filename
+      const baseName = activeDocument.filename.replace(/\.pdf$/i, '');
+      const downloadFilename = `${baseName}-filled.pdf`;
+
+      // Call fill service and trigger download
+      const result = await fillAndDownloadPdf(
+        activeDocument.document_ref,
+        fillFields,
+        downloadFilename,
+        'auto',
+        Object.keys(fieldParams).length > 0 ? fieldParams : undefined
+      );
+
+      addActivity(
+        'export',
+        'PDF exported successfully',
+        `Filled ${result.filledCount} fields${result.failedCount > 0 ? `, ${result.failedCount} failed` : ''}`
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Export failed';
+      addActivity('error', 'Export failed', message);
+      // Don't set global error - it would hide the preview
+    } finally {
+      setIsExporting(false);
+    }
+  }, [activeDocument, fields, addActivity]);
+
+  // Handle autofill
+  const handleAutofill = useCallback(async () => {
+    if (!activeDocument || !conversationId) {
+      addActivity('error', 'Cannot auto-fill', 'No document or conversation');
+      return;
+    }
+
+    if (dataSources.length === 0) {
+      addActivity('error', 'Cannot auto-fill', 'Add data sources first');
+      return;
+    }
+
+    setIsAutofilling(true);
+    addActivity('info', 'Running AI auto-fill...');
+
+    try {
+      const result = await autofillWithVision(
+        activeDocument.document_id,
+        conversationId,
+        fields.map(f => ({
+          field_id: f.field_id,
+          label: f.label,
+          type: f.type,
+          bbox: f.bbox,
+        }))
+      );
+
+      if (result.success && result.filled_fields.length > 0) {
+        // Apply filled values to fields
+        setFields(prev => prev.map(field => {
+          const filled = result.filled_fields.find(f => f.field_id === field.field_id);
+          return filled ? { ...field, value: filled.value } : field;
+        }));
+
+        // Persist autofill results to backend
+        if (conversationId) {
+          for (const filled of result.filled_fields) {
+            apiUpdateField(conversationId, filled.field_id, filled.value, 'inline')
+              .catch(err => console.warn('[SinglePage] Failed to save autofill value:', err));
+          }
+        }
+
+        addActivity(
+          'info',
+          `Auto-filled ${result.filled_fields.length} fields`,
+          result.unfilled_fields.length > 0
+            ? `${result.unfilled_fields.length} fields could not be filled`
+            : undefined
+        );
+
+        // Log any warnings
+        result.warnings.forEach(warning => {
+          addActivity('info', 'Auto-fill warning', warning);
+        });
+      } else {
+        addActivity(
+          'error',
+          'Auto-fill found no matches',
+          result.error || 'Try adding more data sources'
+        );
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Auto-fill failed';
+      addActivity('error', 'Auto-fill failed', message);
+      // Don't set global error - it would hide the preview
+    } finally {
+      setIsAutofilling(false);
+    }
+  }, [activeDocument, conversationId, dataSources.length, fields, addActivity]);
 
   // Handle clear all
   const handleClearAll = useCallback(() => {
     setDocuments([]);
     setActiveDocumentId(null);
+    setConversationId(null);
     setFields([]);
     setSelectedFieldId(null);
     setActivities([]);
-    updateUrl(null);
+    updateUrl(null, null);
   }, []);
+
+  // Data source handlers
+  const handleDataSourceUpload = useCallback(async (files: File[]) => {
+    const results = await uploadDataSourceFiles(files);
+    if (results.length > 0) {
+      addActivity('upload', `Added ${results.length} data source(s)`, results.map(r => r.name).join(', '));
+    }
+  }, [uploadDataSourceFiles, addActivity]);
+
+  const handleDataSourceTextAdd = useCallback(async (name: string, content: string) => {
+    const result = await createDataSourceText(name, content);
+    if (result) {
+      addActivity('upload', `Added text data: ${name}`);
+    }
+  }, [createDataSourceText, addActivity]);
+
+  const handleDataSourceRemove = useCallback(async (id: string) => {
+    const source = dataSources.find(ds => ds.id === id);
+    const removed = await removeDataSource(id);
+    if (removed && source) {
+      addActivity('info', `Removed data source: ${source.name}`);
+    }
+  }, [removeDataSource, dataSources, addActivity]);
+
+  // Log data source errors
+  useEffect(() => {
+    if (dataSourceError) {
+      addActivity('error', 'Data source error', dataSourceError);
+    }
+  }, [dataSourceError, addActivity]);
 
   return (
     <div className="h-screen flex flex-col bg-gray-50">
@@ -385,12 +735,22 @@ export function SinglePage() {
           <span className="text-sm text-gray-500">Single Page Editor</span>
         </div>
         <div className="flex items-center gap-2">
+          {activeDocument && conversationId && dataSources.length > 0 && (
+            <button
+              onClick={handleAutofill}
+              disabled={isAutofilling}
+              className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors disabled:bg-green-400 disabled:cursor-not-allowed"
+            >
+              {isAutofilling ? 'Auto-filling...' : 'Auto-Fill'}
+            </button>
+          )}
           {activeDocument && (
             <button
               onClick={handleExport}
-              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              disabled={isExporting}
+              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400 disabled:cursor-not-allowed"
             >
-              Export PDF
+              {isExporting ? 'Exporting...' : 'Export PDF'}
             </button>
           )}
         </div>
@@ -449,6 +809,12 @@ export function SinglePage() {
         onRemove={handleRemoveDocument}
         onClearAll={handleClearAll}
         isUploading={isUploading}
+        // Data sources props
+        dataSources={dataSources}
+        onDataSourceUpload={handleDataSourceUpload}
+        onDataSourceTextAdd={handleDataSourceTextAdd}
+        onDataSourceRemove={handleDataSourceRemove}
+        isDataSourceUploading={isDataSourceUploading}
       />
     </div>
   );

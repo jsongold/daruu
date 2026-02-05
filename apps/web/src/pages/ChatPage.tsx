@@ -2,13 +2,15 @@
  * Main chat page for agent-driven form filling.
  * Combines all chat components into a complete user experience.
  * Phase 3: Added inline editing and field info panel support.
+ *
+ * Uses Vercel AI SDK (ai package) as specified in PRD.
  */
 
 import { useState, useCallback, useMemo, type CSSProperties } from 'react';
 import { ChatContainer } from '../components/chat/ChatContainer';
 import { EditableDocumentPreview } from '../components/preview/EditableDocumentPreview';
 import { FieldInfoPanel, type FieldInfo } from '../components/editor/FieldInfoPanel';
-import { useConversation } from '../hooks/useConversation';
+import { useAgentChat } from '../hooks/useAgentChat';
 import { useEdits } from '../hooks/useEdits';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { getPreviewUrl } from '../api/conversationClient';
@@ -42,8 +44,8 @@ function parseEditCommand(content: string): { fieldName: string; value: string }
   return null;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function ChatPage({ initialConversationId: _initialConversationId }: ChatPageProps) {
+export function ChatPage({ initialConversationId }: ChatPageProps) {
+  // Use Vercel AI SDK based hook as specified in PRD
   const {
     // Conversation list
     conversations,
@@ -62,7 +64,7 @@ export function ChatPage({ initialConversationId: _initialConversationId }: Chat
     // Actions
     selectConversation,
     startNewConversation,
-    sendMessage,
+    sendMessageWithFiles,
     approve,
     download,
 
@@ -72,9 +74,10 @@ export function ChatPage({ initialConversationId: _initialConversationId }: Chat
     approvingMessageId,
     error: conversationError,
     clearError: clearConversationError,
-  } = useConversation({
+  } = useAgentChat({
     autoLoadList: true,
     useSSE: true,
+    initialConversationId,
   });
 
   // Edit state management
@@ -150,19 +153,7 @@ export function ChatPage({ initialConversationId: _initialConversationId }: Chat
 
   // Handle sending a message - check for edit commands first
   const handleSendMessage = useCallback(async (content: string, files?: File[]) => {
-    let conversationId = activeConversationId;
-
-    // Auto-create conversation if none exists
-    if (!conversationId) {
-      try {
-        conversationId = await startNewConversation();
-      } catch {
-        // Error handled by hook
-        return;
-      }
-    }
-
-    // Check if this is an edit command
+    // Check if this is an edit command (only when no files)
     const editCommand = parseEditCommand(content);
     if (editCommand && !files?.length) {
       // Find the field by name (case-insensitive)
@@ -175,14 +166,14 @@ export function ChatPage({ initialConversationId: _initialConversationId }: Chat
         // Execute the edit
         await updateField(field.field_id, editCommand.value, 'chat');
         // Still send the message so the agent knows what happened
-        await sendMessage(content, files, conversationId);
+        await sendMessageWithFiles(content, files);
         return;
       }
     }
 
-    // Regular message - pass conversationId to avoid race condition
-    await sendMessage(content, files, conversationId);
-  }, [activeConversationId, startNewConversation, fieldsArray, updateField, sendMessage]);
+    // Regular message - Vercel AI SDK hook handles conversation creation
+    await sendMessageWithFiles(content, files);
+  }, [fieldsArray, updateField, sendMessageWithFiles]);
 
   // Handle approval
   const handleApprove = useCallback(async (messageId: string) => {

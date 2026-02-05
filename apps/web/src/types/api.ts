@@ -368,3 +368,58 @@ export interface CostDetailedBreakdown {
   formatted_cost: string;
   formatted_storage: Record<string, string>;
 }
+
+// ============================================================================
+// Fill Service Types
+// ============================================================================
+
+export interface FillValueRequest {
+  field_id: string;
+  value: string;
+  x?: number | null;
+  y?: number | null;
+  width?: number | null;
+  height?: number | null;
+  page?: number | null;
+}
+
+export interface RenderParamsRequest {
+  font_name?: string;
+  font_size?: number;
+  font_color?: [number, number, number];
+  alignment?: 'left' | 'center' | 'right';
+  line_height?: number;
+  word_wrap?: boolean;
+  overflow_handling?: 'truncate' | 'shrink' | 'error';
+}
+
+export interface FillServiceRequest {
+  target_document_ref: string;
+  fields: FillValueRequest[];
+  method?: 'auto' | 'acroform' | 'overlay';
+  render_params?: RenderParamsRequest | null;
+  field_params?: Record<string, RenderParamsRequest> | null;
+}
+
+export interface FillIssue {
+  field_id: string;
+  issue_type: string;
+  severity: string;
+  message: string;
+}
+
+export interface FieldResult {
+  field_id: string;
+  success: boolean;
+  value_written: string | null;
+  issues: FillIssue[];
+}
+
+export interface FillServiceResponse {
+  filled_document_ref: string | null;
+  method_used: string;
+  filled_count: number;
+  failed_count: number;
+  field_results: FieldResult[];
+  errors: string[];
+}

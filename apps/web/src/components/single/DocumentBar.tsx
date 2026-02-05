@@ -1,9 +1,14 @@
 /**
  * Bottom bar with document upload and document list.
  * Combines upload dropzone with horizontal document list.
+ * Extended to support data sources for AI form filling.
  */
 
 import { useCallback, useRef, useState } from 'react';
+import type { DataSourceResponse } from '../../lib/api-types';
+import { DataSourceChip } from './DataSourceChip';
+import { TextInputModal } from './TextInputModal';
+import { getAcceptedFileTypes, isSupportedFileType } from '../../api/dataSourceClient';
 
 interface DocumentWithPages {
   document_id: string;
@@ -20,6 +25,12 @@ interface DocumentBarProps {
   onRemove: (documentId: string) => void;
   onClearAll: () => void;
   isUploading: boolean;
+  // Data sources props (optional for backwards compatibility)
+  dataSources?: DataSourceResponse[];
+  onDataSourceUpload?: (files: File[]) => void;
+  onDataSourceTextAdd?: (name: string, content: string) => void;
+  onDataSourceRemove?: (id: string) => void;
+  isDataSourceUploading?: boolean;
 }
 
 export function DocumentBar({
@@ -30,9 +41,21 @@ export function DocumentBar({
   onRemove,
   onClearAll,
   isUploading,
+  // Data sources
+  dataSources = [],
+  onDataSourceUpload,
+  onDataSourceTextAdd,
+  onDataSourceRemove,
+  isDataSourceUploading = false,
 }: DocumentBarProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dataSourceInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [isDataSourceDragOver, setIsDataSourceDragOver] = useState(false);
+  const [isTextModalOpen, setIsTextModalOpen] = useState(false);
+
+  // Check if data sources feature is enabled
+  const hasDataSourcesFeature = Boolean(onDataSourceUpload || onDataSourceTextAdd);
 
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -65,6 +88,62 @@ export function DocumentBar({
   const handleUploadClick = useCallback(() => {
     fileInputRef.current?.click();
   }, []);
+
+  // Data source handlers
+  const handleDataSourceFileChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (files && files.length > 0 && onDataSourceUpload) {
+        const validFiles = Array.from(files).filter((f) => isSupportedFileType(f.name));
+        if (validFiles.length > 0) {
+          onDataSourceUpload(validFiles);
+        }
+        e.target.value = '';
+      }
+    },
+    [onDataSourceUpload]
+  );
+
+  const handleDataSourceDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDataSourceDragOver(true);
+  }, []);
+
+  const handleDataSourceDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDataSourceDragOver(false);
+  }, []);
+
+  const handleDataSourceDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDataSourceDragOver(false);
+
+      if (onDataSourceUpload) {
+        const files = Array.from(e.dataTransfer.files).filter((f) =>
+          isSupportedFileType(f.name)
+        );
+        if (files.length > 0) {
+          onDataSourceUpload(files);
+        }
+      }
+    },
+    [onDataSourceUpload]
+  );
+
+  const handleDataSourceUploadClick = useCallback(() => {
+    dataSourceInputRef.current?.click();
+  }, []);
+
+  const handleTextModalSubmit = useCallback(
+    (name: string, content: string) => {
+      if (onDataSourceTextAdd) {
+        onDataSourceTextAdd(name, content);
+        setIsTextModalOpen(false);
+      }
+    },
+    [onDataSourceTextAdd]
+  );
 
   return (
     <div className="h-24 bg-white border-t border-gray-200 flex items-center px-4 gap-4 shrink-0">
@@ -138,6 +217,98 @@ export function DocumentBar({
           </button>
         </>
       )}
+
+      {/* Data Sources Section */}
+      {hasDataSourcesFeature && (
+        <>
+          {/* Section Divider */}
+          <div className="w-px h-16 bg-gray-300 mx-2" />
+
+          {/* Data Sources Label */}
+          <div className="flex flex-col items-center shrink-0">
+            <span className="text-xs font-medium text-gray-500 mb-1">YOUR DATA</span>
+
+            {/* Data Source Upload Buttons */}
+            <div className="flex gap-2">
+              {/* File Upload */}
+              <div
+                onClick={handleDataSourceUploadClick}
+                onDragOver={handleDataSourceDragOver}
+                onDragLeave={handleDataSourceDragLeave}
+                onDrop={handleDataSourceDrop}
+                className={`
+                  w-16 h-10 border-2 border-dashed rounded-lg flex flex-col items-center justify-center
+                  cursor-pointer transition-colors
+                  ${isDataSourceDragOver
+                    ? 'border-green-500 bg-green-50'
+                    : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+                  }
+                  ${isDataSourceUploading ? 'opacity-50 pointer-events-none' : ''}
+                `}
+                title="Upload files (PDF, images, text, CSV)"
+              >
+                <input
+                  ref={dataSourceInputRef}
+                  type="file"
+                  accept={getAcceptedFileTypes()}
+                  onChange={handleDataSourceFileChange}
+                  multiple
+                  className="hidden"
+                />
+                {isDataSourceUploading ? (
+                  <div className="w-4 h-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                )}
+              </div>
+
+              {/* Text Input Button */}
+              {onDataSourceTextAdd && (
+                <button
+                  onClick={() => setIsTextModalOpen(true)}
+                  className="
+                    w-16 h-10 border-2 border-dashed border-gray-300 rounded-lg
+                    flex flex-col items-center justify-center
+                    cursor-pointer transition-colors
+                    hover:border-gray-400 hover:bg-gray-50
+                  "
+                  title="Add text data"
+                >
+                  <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Data Source List */}
+          {dataSources.length > 0 && (
+            <>
+              <div className="w-px h-12 bg-gray-200" />
+              <div className="flex items-center gap-2 overflow-x-auto py-2">
+                {dataSources.map((ds) => (
+                  <DataSourceChip
+                    key={ds.id}
+                    dataSource={ds}
+                    onRemove={() => onDataSourceRemove?.(ds.id)}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+        </>
+      )}
+
+      {/* Text Input Modal */}
+      <TextInputModal
+        isOpen={isTextModalOpen}
+        onClose={() => setIsTextModalOpen(false)}
+        onSubmit={handleTextModalSubmit}
+        isSubmitting={isDataSourceUploading}
+      />
     </div>
   );
 }

@@ -60,6 +60,46 @@ export interface EditHistoryState {
   redo_count: number;
 }
 
+/** Font style options for field rendering */
+export interface FontStyle {
+  /** Font size in points */
+  fontSize?: number;
+  /** Font family name */
+  fontFamily?: 'Helvetica' | 'Times' | 'Courier';
+  /** Font color as hex string (e.g., "#000000") */
+  fontColor?: string;
+  /** Text alignment */
+  alignment?: 'left' | 'center' | 'right';
+}
+
+/** Default font style values */
+export const DEFAULT_FONT_STYLE: Required<FontStyle> = {
+  fontSize: 12,
+  fontFamily: 'Helvetica',
+  fontColor: '#000000',
+  alignment: 'left',
+};
+
+/** Available font size presets */
+export const FONT_SIZE_PRESETS = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32] as const;
+
+/** Available font family options */
+export const FONT_FAMILY_OPTIONS: Array<{ value: FontStyle['fontFamily']; label: string }> = [
+  { value: 'Helvetica', label: 'Helvetica (Sans-serif)' },
+  { value: 'Times', label: 'Times (Serif)' },
+  { value: 'Courier', label: 'Courier (Monospace)' },
+];
+
+/** Common color presets */
+export const FONT_COLOR_PRESETS = [
+  { value: '#000000', label: 'Black' },
+  { value: '#1f2937', label: 'Dark Gray' },
+  { value: '#374151', label: 'Gray' },
+  { value: '#1e40af', label: 'Blue' },
+  { value: '#dc2626', label: 'Red' },
+  { value: '#16a34a', label: 'Green' },
+];
+
 /** Field data with value */
 export interface FieldData {
   /** Field ID */
@@ -84,6 +124,8 @@ export interface FieldData {
   validation_status?: 'valid' | 'invalid' | 'warning' | null;
   /** Validation message */
   validation_message?: string | null;
+  /** Font style for this field */
+  fontStyle?: FontStyle;
 }
 
 /** Response from getting fields */
@@ -92,13 +134,6 @@ export interface FieldsResponse {
   fields: FieldData[];
   /** Edit history state */
   history: EditHistoryState;
-}
-
-/** API Response wrapper */
-interface ApiResponse<T> {
-  success: boolean;
-  data?: T;
-  error?: string;
 }
 
 // ============================================================================
@@ -169,52 +204,34 @@ export async function updateField(
   value: string,
   source: EditSource = 'inline'
 ): Promise<EditResponse> {
-  const response = await request<ApiResponse<EditResponse>>(
+  // Backend returns EditResponse directly (not wrapped in ApiResponse)
+  return request<EditResponse>(
     `${API_PREFIX}/conversations/${conversationId}/fields/${encodeURIComponent(fieldId)}`,
     {
       method: 'PATCH',
       body: JSON.stringify({ value, source }),
     }
   );
-
-  if (!response.success || !response.data) {
-    throw new ApiError(
-      response.error || 'Failed to update field',
-      'EDIT_ERROR',
-      400
-    );
-  }
-
-  return response.data;
 }
 
 /**
  * Update multiple fields at once.
  * @param conversationId - The conversation ID
  * @param edits - Array of field edits
- * @returns Array of edit responses
+ * @returns Batch edit response with individual results
  */
 export async function batchUpdateFields(
   conversationId: string,
   edits: FieldEdit[]
-): Promise<EditResponse[]> {
-  const response = await request<ApiResponse<EditResponse[]>>(
+): Promise<{ success: boolean; results: EditResponse[]; summary: string }> {
+  // Backend returns BatchEditResponse directly (not wrapped in ApiResponse)
+  return request<{ success: boolean; results: EditResponse[]; summary: string }>(
     `${API_PREFIX}/conversations/${conversationId}/fields/batch`,
     {
       method: 'PATCH',
       body: JSON.stringify({ edits }),
     }
   );
-
-  if (!response.success || !response.data) {
-    throw new ApiError(
-      response.error || 'Failed to batch update fields',
-      'BATCH_EDIT_ERROR',
-      400
-    );
-  }
-
-  return response.data;
 }
 
 /**
@@ -223,22 +240,11 @@ export async function batchUpdateFields(
  * @returns Undo response with reverted edits
  */
 export async function undo(conversationId: string): Promise<UndoRedoResponse> {
-  const response = await request<ApiResponse<UndoRedoResponse>>(
+  // Backend returns UndoRedoResponse directly
+  return request<UndoRedoResponse>(
     `${API_PREFIX}/conversations/${conversationId}/undo`,
-    {
-      method: 'POST',
-    }
+    { method: 'POST' }
   );
-
-  if (!response.success || !response.data) {
-    throw new ApiError(
-      response.error || 'Failed to undo',
-      'UNDO_ERROR',
-      400
-    );
-  }
-
-  return response.data;
 }
 
 /**
@@ -247,22 +253,11 @@ export async function undo(conversationId: string): Promise<UndoRedoResponse> {
  * @returns Redo response with reapplied edits
  */
 export async function redo(conversationId: string): Promise<UndoRedoResponse> {
-  const response = await request<ApiResponse<UndoRedoResponse>>(
+  // Backend returns UndoRedoResponse directly
+  return request<UndoRedoResponse>(
     `${API_PREFIX}/conversations/${conversationId}/redo`,
-    {
-      method: 'POST',
-    }
+    { method: 'POST' }
   );
-
-  if (!response.success || !response.data) {
-    throw new ApiError(
-      response.error || 'Failed to redo',
-      'REDO_ERROR',
-      400
-    );
-  }
-
-  return response.data;
 }
 
 /**
@@ -271,19 +266,35 @@ export async function redo(conversationId: string): Promise<UndoRedoResponse> {
  * @returns Fields with values and edit history state
  */
 export async function getFields(conversationId: string): Promise<FieldsResponse> {
-  const response = await request<ApiResponse<FieldsResponse>>(
-    `${API_PREFIX}/conversations/${conversationId}/fields`
-  );
+  // Backend returns FieldValuesResponse directly (not wrapped in ApiResponse)
+  // Map backend field format: { conversation_id, fields, can_undo, can_redo }
+  const response = await request<{
+    conversation_id: string;
+    fields: Array<{
+      field_id: string;
+      value: string | null;
+      source: string | null;
+      last_modified: string | null;
+      bbox: unknown;
+    }>;
+    can_undo: boolean;
+    can_redo: boolean;
+  }>(`${API_PREFIX}/conversations/${conversationId}/fields`);
 
-  if (!response.success || !response.data) {
-    throw new ApiError(
-      response.error || 'Failed to get fields',
-      'GET_FIELDS_ERROR',
-      400
-    );
-  }
-
-  return response.data;
+  return {
+    fields: response.fields.map(f => ({
+      field_id: f.field_id,
+      label: f.field_id,
+      value: f.value || '',
+      type: 'text' as const,
+    })),
+    history: {
+      can_undo: response.can_undo,
+      can_redo: response.can_redo,
+      undo_count: 0,
+      redo_count: 0,
+    },
+  };
 }
 
 /**
@@ -292,19 +303,19 @@ export async function getFields(conversationId: string): Promise<FieldsResponse>
  * @returns Edit history state with undo/redo availability
  */
 export async function getEditHistory(conversationId: string): Promise<EditHistoryState> {
-  const response = await request<ApiResponse<EditHistoryState>>(
-    `${API_PREFIX}/conversations/${conversationId}/edit-history`
-  );
+  // Backend returns EditHistoryResponse directly
+  const response = await request<{
+    conversation_id: string;
+    history: { edits: unknown[]; current_index: number };
+    total_edits: number;
+  }>(`${API_PREFIX}/conversations/${conversationId}/edit-history`);
 
-  if (!response.success || !response.data) {
-    throw new ApiError(
-      response.error || 'Failed to get edit history',
-      'HISTORY_ERROR',
-      400
-    );
-  }
-
-  return response.data;
+  return {
+    can_undo: response.history.current_index >= 0,
+    can_redo: response.history.current_index < response.history.edits.length - 1,
+    undo_count: response.history.current_index + 1,
+    redo_count: response.history.edits.length - 1 - response.history.current_index,
+  };
 }
 
 // ============================================================================

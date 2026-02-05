@@ -858,3 +858,74 @@ export interface TemplateSelectionMetadata {
 export type AskUserInputMetadata =
   | TemplateSelectionMetadata
   | { type: AskUserInputType; [key: string]: unknown };
+
+// ============================================
+// Data Source Types (for AI form filling)
+// ============================================
+
+/** Type of data source */
+export type DataSourceType = 'pdf' | 'image' | 'text' | 'csv';
+
+/** A data source for AI form filling */
+export interface DataSource {
+  /** Unique data source ID */
+  id: string;
+  /** Type of data source */
+  type: DataSourceType;
+  /** Display name (usually original filename) */
+  name: string;
+  /** Reference to documents table for files */
+  document_id?: string | null;
+  /** First 500 chars for preview */
+  content_preview?: string | null;
+  /** Cached AI extraction results */
+  extracted_data?: Record<string, unknown> | null;
+  /** File size in bytes */
+  file_size_bytes?: number | null;
+  /** MIME type */
+  mime_type?: string | null;
+  /** Creation timestamp */
+  created_at: string;
+}
+
+/** Response for a single data source */
+export interface DataSourceResponse {
+  /** Unique data source ID */
+  id: string;
+  /** Type of data source */
+  type: DataSourceType;
+  /** Display name */
+  name: string;
+  /** Reference to documents table */
+  document_id?: string | null;
+  /** First 500 chars for preview */
+  content_preview?: string | null;
+  /** Cached extraction results */
+  extracted_data?: Record<string, unknown> | null;
+  /** File size in bytes */
+  file_size_bytes?: number | null;
+  /** MIME type */
+  mime_type?: string | null;
+  /** Creation timestamp */
+  created_at: string;
+}
+
+/** Response for list of data sources */
+export interface DataSourceListResponse {
+  /** List of data sources */
+  items: DataSourceResponse[];
+  /** Total count */
+  total: number;
+}
+
+/** Result of AI extraction from a data source */
+export interface ExtractionResult {
+  /** Data source ID */
+  data_source_id: string;
+  /** Extracted field name-value pairs */
+  extracted_fields: Record<string, unknown>;
+  /** Overall extraction confidence */
+  confidence: number;
+  /** Raw extracted text */
+  raw_text?: string | null;
+}

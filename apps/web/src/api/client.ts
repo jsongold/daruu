@@ -24,6 +24,9 @@ import type {
   RunAsyncResponse,
   TaskStatusResponse,
   AcroFormFieldsResponse,
+  FillServiceRequest,
+  FillServiceResponse,
+  FillValueRequest,
 } from '../types/api';
 
 // ============================================================================
@@ -196,8 +199,17 @@ export async function uploadDocument(
   return response.data;
 }
 
+// The backend Document model has different field names than DocumentResponse
+interface DocumentGetResponse {
+  id: string;
+  ref: string;
+  document_type: string;
+  meta: DocumentResponse['meta'];
+  created_at: string;
+}
+
 export async function getDocument(documentId: string): Promise<DocumentResponse> {
-  const response = await request<ApiResponse<DocumentResponse>>(
+  const response = await request<ApiResponse<DocumentGetResponse>>(
     `${API_PREFIX}/documents/${documentId}`
   );
 
@@ -209,7 +221,12 @@ export async function getDocument(documentId: string): Promise<DocumentResponse>
     );
   }
 
-  return response.data;
+  // Transform Document response to DocumentResponse format
+  return {
+    document_id: response.data.id,
+    document_ref: response.data.ref,
+    meta: response.data.meta,
+  };
 }
 
 export function getPagePreviewUrl(documentId: string, page: number): string {
@@ -548,5 +565,110 @@ export function subscribeToJobEvents(
 
   return () => {
     eventSource.close();
+  };
+}
+
+// ============================================================================
+// Fill Service API
+// ============================================================================
+
+/**
+ * Fill a PDF document with values using the Fill Service.
+ */
+export async function fillDocument(
+  fillRequest: FillServiceRequest
+): Promise<FillServiceResponse> {
+  const response = await request<ApiResponse<FillServiceResponse>>(
+    `${API_PREFIX}/fill/service`,
+    {
+      method: 'POST',
+      body: JSON.stringify(fillRequest),
+    }
+  );
+
+  if (!response.success || !response.data) {
+    throw new ApiError(
+      response.error || 'Failed to fill document',
+      'FILL_ERROR',
+      400
+    );
+  }
+
+  return response.data;
+}
+
+/**
+ * Download a filled PDF by reference.
+ */
+export async function downloadFilledPdf(
+  ref: string,
+  filename?: string
+): Promise<Blob> {
+  const params = new URLSearchParams({ ref });
+  if (filename) {
+    params.append('filename', filename);
+  }
+  return requestBlob(`${API_PREFIX}/fill/download?${params.toString()}`);
+}
+
+/**
+ * Fill a PDF and trigger browser download.
+ *
+ * This is a convenience function that:
+ * 1. Calls the fill service to fill the PDF with values
+ * 2. Downloads the filled PDF blob
+ * 3. Triggers a browser download
+ *
+ * @param targetDocumentRef - Path/reference to the target PDF
+ * @param fields - Array of field values to fill
+ * @param downloadFilename - Optional filename for the download
+ * @param method - Fill method (auto, acroform, overlay)
+ * @param fieldParams - Optional per-field render parameters (font styles)
+ * @returns Promise that resolves when download starts
+ */
+export async function fillAndDownloadPdf(
+  targetDocumentRef: string,
+  fields: FillValueRequest[],
+  downloadFilename?: string,
+  method: 'auto' | 'acroform' | 'overlay' = 'auto',
+  fieldParams?: Record<string, { font_name?: string; font_size?: number; font_color?: [number, number, number]; alignment?: 'left' | 'center' | 'right' }>
+): Promise<{ filledCount: number; failedCount: number }> {
+  // Step 1: Call fill service
+  const fillRequest: FillServiceRequest = {
+    target_document_ref: targetDocumentRef,
+    fields,
+    method,
+    ...(fieldParams && Object.keys(fieldParams).length > 0 && { field_params: fieldParams }),
+  };
+
+  const fillResponse = await fillDocument(fillRequest);
+
+  if (!fillResponse.filled_document_ref) {
+    throw new ApiError(
+      'Fill service did not return a document reference',
+      'FILL_NO_REF',
+      400
+    );
+  }
+
+  // Step 2: Download the filled PDF blob
+  const blob = await downloadFilledPdf(
+    fillResponse.filled_document_ref,
+    downloadFilename
+  );
+
+  // Step 3: Trigger browser download
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = downloadFilename || 'filled-document.pdf';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+
+  return {
+    filledCount: fillResponse.filled_count,
+    failedCount: fillResponse.failed_count,
   };
 }
