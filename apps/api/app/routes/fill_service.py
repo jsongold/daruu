@@ -1,12 +1,18 @@
 """Fill Service routes.
 
 POST /api/v1/fill/service - Fill target document with values using the Fill Service.
+GET /api/v1/fill/download - Download a filled PDF by reference path.
 Supports AcroForm filling or overlay drawing with deterministic behavior.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+import uuid
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from app.infrastructure.repositories import get_file_repository
 from app.models import ApiResponse
 from app.models.common import BBox
 from app.models.fill import (
@@ -16,6 +22,7 @@ from app.models.fill import (
     FillValue,
     RenderParams,
 )
+from app.repositories import FileRepository
 from app.services.fill import (
     FillService,
     LocalStorageAdapter,
@@ -159,6 +166,51 @@ def get_fill_service() -> FillService:
     )
 
 
+# Directory for temporary document downloads
+TEMP_DOCUMENT_DIR = Path("/tmp/fill-service/source-docs")
+TEMP_DOCUMENT_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _resolve_document_ref(
+    document_ref: str,
+    file_repo: FileRepository,
+) -> str:
+    """Resolve a document reference to a local file path.
+
+    If the reference is a Supabase URL (starts with 'supabase://'),
+    downloads the content to a temporary file and returns the local path.
+    Otherwise, assumes it's already a local path.
+
+    Args:
+        document_ref: Document reference (Supabase URL or local path).
+        file_repo: File repository for downloading from Supabase.
+
+    Returns:
+        Local file path to the document.
+
+    Raises:
+        HTTPException: If document cannot be loaded.
+    """
+    # Check if it's a Supabase URL
+    if document_ref.startswith("supabase://"):
+        # Download from Supabase
+        content = file_repo.get_content(document_ref)
+        if content is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Could not load document: {document_ref}",
+            )
+
+        # Save to temporary file
+        temp_filename = f"{uuid.uuid4()}.pdf"
+        temp_path = TEMP_DOCUMENT_DIR / temp_filename
+        temp_path.write_bytes(content)
+        return str(temp_path)
+
+    # Already a local path
+    return document_ref
+
+
 def _dto_to_fill_value(dto: FillValueDTO) -> FillValue:
     """Convert API DTO to domain model.
 
@@ -274,12 +326,14 @@ Returns the reference to the filled PDF and detailed per-field results.
 async def fill_document_service(
     request: FillServiceRequestDTO,
     service: FillService = Depends(get_fill_service),
+    file_repo: FileRepository = Depends(get_file_repository),
 ) -> ApiResponse[FillServiceResponseDTO]:
     """Fill target document with values using Fill Service.
 
     Args:
         request: Fill request with document reference and values
         service: Injected FillService instance
+        file_repo: File repository for resolving Supabase URLs
 
     Returns:
         API response with fill result
@@ -294,6 +348,9 @@ async def fill_document_service(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid fill method: {request.method}. Must be one of: {valid_methods}",
         )
+
+    # Resolve document reference (download from Supabase if needed)
+    local_document_path = _resolve_document_ref(request.target_document_ref, file_repo)
 
     # Convert DTOs to domain models
     fill_values = tuple(_dto_to_fill_value(dto) for dto in request.fields)
@@ -316,7 +373,7 @@ async def fill_document_service(
     }
 
     fill_request = FillRequest(
-        target_document_ref=request.target_document_ref,
+        target_document_ref=local_document_path,
         fields=fill_values,
         render_params=default_render_params,
         field_params=field_params,
@@ -334,7 +391,9 @@ async def fill_document_service(
         return ApiResponse(
             success=False,
             data=response_dto,
-            error="; ".join(response_dto.errors) if response_dto.errors else "Fill operation failed",
+            error=(
+                "; ".join(response_dto.errors) if response_dto.errors else "Fill operation failed"
+            ),
             meta={
                 "method_requested": request.method,
                 "field_count": len(request.fields),
@@ -350,5 +409,123 @@ async def fill_document_service(
             "field_count": len(request.fields),
             "filled_count": response_dto.filled_count,
             "failed_count": response_dto.failed_count,
+        },
+    )
+
+
+# Allowed base paths for downloads (security: prevent path traversal)
+ALLOWED_DOWNLOAD_PATHS = [
+    "/tmp/fill-service",
+    "/tmp/fill-artifacts",
+]
+
+
+def _validate_download_path(ref: str) -> Path:
+    """Validate that the download path is within allowed directories.
+
+    Args:
+        ref: The file reference/path to validate
+
+    Returns:
+        Resolved Path object
+
+    Raises:
+        HTTPException: If path is invalid or outside allowed directories
+    """
+    try:
+        # Resolve the path to handle any .. or symlinks
+        resolved_path = Path(ref).resolve()
+
+        # Check if the path is within any allowed base path
+        is_allowed = any(
+            str(resolved_path).startswith(allowed_base)
+            for allowed_base in ALLOWED_DOWNLOAD_PATHS
+        )
+
+        if not is_allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access to this file is not allowed",
+            )
+
+        if not resolved_path.exists():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="File not found",
+            )
+
+        if not resolved_path.is_file():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Path is not a file",
+            )
+
+        return resolved_path
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid file path: {e}",
+        )
+
+
+@router.get(
+    "/download",
+    response_class=FileResponse,
+    summary="Download filled PDF",
+    description="""
+Download a filled PDF document by its reference path.
+
+The reference path is returned from the fill service endpoint as `filled_document_ref`.
+Only files within the allowed fill-service directories can be downloaded.
+""",
+    responses={
+        200: {
+            "description": "PDF file download",
+            "content": {"application/pdf": {}},
+        },
+        403: {"description": "Access denied - path outside allowed directories"},
+        404: {"description": "File not found"},
+    },
+)
+async def download_filled_pdf(
+    ref: str = Query(
+        ...,
+        description="Reference path to the filled PDF (from fill service response)",
+        example="/tmp/fill-service/abc123-filled.pdf",
+    ),
+    filename: str | None = Query(
+        None,
+        description="Optional custom filename for the download",
+        example="my-document-filled.pdf",
+    ),
+) -> FileResponse:
+    """Download a filled PDF by reference path.
+
+    Args:
+        ref: Reference path to the filled PDF
+        filename: Optional custom filename for the Content-Disposition header
+
+    Returns:
+        FileResponse with the PDF file
+    """
+    # Validate and resolve the path
+    file_path = _validate_download_path(ref)
+
+    # Determine the download filename
+    download_filename = filename or file_path.name
+
+    # Ensure .pdf extension
+    if not download_filename.lower().endswith(".pdf"):
+        download_filename += ".pdf"
+
+    return FileResponse(
+        path=str(file_path),
+        media_type="application/pdf",
+        filename=download_filename,
+        headers={
+            "Content-Disposition": f'attachment; filename="{download_filename}"',
         },
     )
