@@ -34,6 +34,7 @@ Directory structure:
 """
 
 from app.repositories.conversation_repository import ConversationRepository
+from app.repositories.data_source_repository import DataSourceRepository
 from app.repositories.document_repository import DocumentRepository
 from app.repositories.edit_repository import EditRepository
 from app.repositories.event_publisher import EventPublisher
@@ -44,6 +45,7 @@ from app.repositories.template_repository import TemplateRepository
 
 __all__ = [
     "ConversationRepository",
+    "DataSourceRepository",
     "DocumentRepository",
     "EditRepository",
     "EventPublisher",

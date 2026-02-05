@@ -35,6 +35,7 @@ def _is_test_mode() -> bool:
     return os.environ.get("DARU_REPOSITORY_MODE", "").lower() == "memory"
 from app.repositories import (
     ConversationRepository,
+    DataSourceRepository,
     DocumentRepository,
     EditRepository,
     EventPublisher,
@@ -70,6 +71,9 @@ _memory_template_repo: "TemplateRepository | None" = None
 
 # Edit repository (in-memory only for now)
 _memory_edit_repo: "EditRepository | None" = None
+
+# Data source repository (Supabase)
+_supabase_data_source_repo: "DataSourceRepository | None" = None
 
 
 def _get_memory_document_repository() -> DocumentRepository:
@@ -333,6 +337,38 @@ def get_edit_repository(
     return _memory_edit_repo
 
 
+def _get_supabase_data_source_repository() -> DataSourceRepository:
+    """Get Supabase data source repository singleton."""
+    global _supabase_data_source_repo
+    _ensure_supabase_configured()
+    if _supabase_data_source_repo is None:
+        from app.repositories.supabase import SupabaseDataSourceRepository
+        _supabase_data_source_repo = SupabaseDataSourceRepository()
+        logger.debug("Initialized Supabase data source repository")
+    return _supabase_data_source_repo
+
+
+def get_data_source_repository(
+    mode: RepositoryMode = "supabase",
+) -> DataSourceRepository:
+    """Get the data source repository.
+
+    Args:
+        mode: Repository mode:
+            - "supabase": Use Supabase (default, required for production)
+            - "memory": Use in-memory storage (for unit tests only)
+
+    Returns:
+        DataSourceRepository implementation.
+
+    Raises:
+        RuntimeError: If supabase mode but Supabase is not configured.
+    """
+    # For now, only Supabase is supported
+    # Memory implementation can be added later for tests
+    return _get_supabase_data_source_repository()
+
+
 def clear_repository_singletons() -> None:
     """Clear all repository singleton instances.
 
@@ -341,6 +377,7 @@ def clear_repository_singletons() -> None:
     global _memory_doc_repo, _memory_job_repo, _memory_file_repo, _memory_event_pub
     global _supabase_doc_repo, _supabase_job_repo, _supabase_file_repo
     global _memory_conv_repo, _memory_msg_repo, _memory_template_repo, _memory_edit_repo
+    global _supabase_data_source_repo
 
     _memory_doc_repo = None
     _memory_job_repo = None
@@ -353,6 +390,7 @@ def clear_repository_singletons() -> None:
     _memory_msg_repo = None
     _memory_template_repo = None
     _memory_edit_repo = None
+    _supabase_data_source_repo = None
 
 
 def get_active_mode() -> str:

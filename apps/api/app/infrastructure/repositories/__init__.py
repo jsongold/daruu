@@ -44,16 +44,17 @@ from app.infrastructure.repositories.memory_template_repository import (
     MemoryTemplateRepository,
 )
 from app.infrastructure.repositories.factory import (
+    clear_repository_singletons,
+    get_active_mode,
+    get_conversation_repository,
+    get_data_source_repository,
     get_document_repository,
     get_edit_repository,
     get_event_publisher,
     get_file_repository,
     get_job_repository,
-    get_conversation_repository,
     get_message_repository,
     get_template_repository,
-    get_active_mode,
-    clear_repository_singletons,
 )
 
 __all__ = [
@@ -67,12 +68,13 @@ __all__ = [
     "MemoryMessageRepository",
     "MemoryTemplateRepository",
     # Factory functions (preferred way to get repositories)
+    "get_conversation_repository",
+    "get_data_source_repository",
     "get_document_repository",
     "get_edit_repository",
-    "get_job_repository",
-    "get_file_repository",
     "get_event_publisher",
-    "get_conversation_repository",
+    "get_file_repository",
+    "get_job_repository",
     "get_message_repository",
     "get_template_repository",
     # Utility functions
