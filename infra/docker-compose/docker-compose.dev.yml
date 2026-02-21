@@ -313,5 +313,11 @@ networks:
 volumes:
   redis-data:
     name: daru-redis-data
+    labels:
+      - "com.daru-pdf.volume=redis-data"
+      - "com.daru-pdf.description=Redis persistence data"
   uploads:
     name: daru-uploads
+    labels:
+      - "com.daru-pdf.volume=uploads"
+      - "com.daru-pdf.description=Shared upload directory for API and Celery"
