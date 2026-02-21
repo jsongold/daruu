@@ -7,15 +7,17 @@
  *   /single     - Single-page editor (simple PDF editing)
  *   /admin      - Admin dashboard (legacy job management)
  *   /admin?jobId=x - View specific job
+ *   /prompt_tuning  - Prompt tuning for vision autofill
  */
 
 import { useState, useCallback, useEffect } from 'react';
 import { AdminPage } from './pages/AdminPage';
 import { ChatPage } from './pages/ChatPage';
 import { SinglePage } from './pages/SinglePage';
+import { PromptingPage } from './pages/PromptingPage';
 import './App.css';
 
-type AppRoute = 'chat' | 'single' | 'admin';
+type AppRoute = 'chat' | 'single' | 'admin' | 'prompt_tuning';
 
 /**
  * Determine current route from URL path.
@@ -27,6 +29,9 @@ function getCurrentRoute(): AppRoute {
   }
   if (path === '/single' || path === '/single/') {
     return 'single';
+  }
+  if (path === '/prompt_tuning' || path === '/prompt_tuning/') {
+    return 'prompt_tuning';
   }
   // Default to chat for /, /chat, or any other path
   return 'chat';
@@ -83,6 +88,7 @@ function App() {
       chat: '/',
       single: '/single',
       admin: '/admin',
+      prompt_tuning: '/prompt_tuning',
     };
     window.history.pushState({}, '', pathMap[newRoute]);
     setRoute(newRoute);
@@ -108,6 +114,10 @@ function App() {
 
   if (route === 'single') {
     return <SinglePage />;
+  }
+
+  if (route === 'prompt_tuning') {
+    return <PromptingPage />;
   }
 
   // Default: Chat page

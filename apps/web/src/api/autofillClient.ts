@@ -39,6 +39,8 @@ export interface VisionAutofillRequest {
   fields: AutofillFieldInfo[];
   /** Optional rules for field filling */
   rules?: string[];
+  /** Optional system prompt override for LLM */
+  system_prompt?: string;
 }
 
 /** A field that was successfully filled */
@@ -67,6 +69,25 @@ export interface VisionAutofillResponse {
   processing_time_ms: number;
   /** Error message if success=False */
   error?: string | null;
+}
+
+/** Summary of a data source extraction */
+export interface ExtractionSummary {
+  source_name: string;
+  source_type: string;
+  field_count: number;
+}
+
+/** Response from prompt preview */
+export interface PromptPreviewResponse {
+  /** System prompt that would be sent to LLM */
+  system_prompt: string;
+  /** User prompt that would be sent to LLM */
+  user_prompt: string;
+  /** Number of data sources found */
+  data_source_count: number;
+  /** Summary of each extraction */
+  extractions_summary: ExtractionSummary[];
 }
 
 /** API response wrapper */
@@ -157,6 +178,34 @@ export async function visionAutofill(
 }
 
 /**
+ * Preview the autofill prompt without calling the LLM.
+ *
+ * @param req - Same request body as autofill
+ * @returns The system and user prompts that would be sent to the LLM
+ */
+export async function previewPrompt(
+  req: VisionAutofillRequest
+): Promise<PromptPreviewResponse> {
+  const response = await request<ApiResponse<PromptPreviewResponse>>(
+    `${API_PREFIX}/vision-autofill/preview-prompt`,
+    {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }
+  );
+
+  if (!response.success || !response.data) {
+    throw new ApiError(
+      response.error || 'Preview prompt failed',
+      'PREVIEW_PROMPT_ERROR',
+      400
+    );
+  }
+
+  return response.data;
+}
+
+/**
  * Auto-fill form fields with simplified parameters.
  *
  * Convenience wrapper that builds the request from common parameters.
@@ -165,6 +214,7 @@ export async function visionAutofill(
  * @param conversationId - Conversation ID with data sources
  * @param fields - Array of fields to fill
  * @param rules - Optional rules for field filling
+ * @param systemPrompt - Optional system prompt override
  * @returns Autofill response with filled fields
  */
 export async function autofillWithVision(
@@ -176,9 +226,10 @@ export async function autofillWithVision(
     type?: string;
     bbox?: { x: number; y: number; width: number; height: number; page: number } | null;
   }>,
-  rules?: string[]
+  rules?: string[],
+  systemPrompt?: string
 ): Promise<VisionAutofillResponse> {
-  const request: VisionAutofillRequest = {
+  const req: VisionAutofillRequest = {
     document_id: documentId,
     conversation_id: conversationId,
     fields: fields.map(f => ({
@@ -194,7 +245,9 @@ export async function autofillWithVision(
       }),
     })),
     rules,
+    ...(systemPrompt && { system_prompt: systemPrompt }),
   };
 
-  return visionAutofill(request);
+  return visionAutofill(req);
 }
+
