@@ -33,6 +33,7 @@ from mcp.types import (
 
 from app.mcp.tools import register_form, form_operations, export_pdf, render_preview
 from app.mcp.tools import visual_editing
+from app.mcp.tools import autofill_form
 from app.mcp.session import set_current_session
 from app.mcp.logging import server_logger, log_tool_call, log_tool_result
 
@@ -50,7 +51,7 @@ def create_mcp_server() -> Server:
     }
     set_current_session(session)
     server_logger.info(f"MCP Server started - Session: {session_id}")
-    server_logger.info("Available tools: register_form, add_fields, update_fields, get_form_summary, list_forms, export_pdf, render_preview, visual_edit_field, get_form_visual_summary, get_next_unfilled_field")
+    server_logger.info("Available tools: register_form, add_fields, update_fields, get_form_summary, list_forms, export_pdf, render_preview, visual_edit_field, get_form_visual_summary, get_next_unfilled_field, autofill_form")
 
     @server.list_tools()
     async def list_tools() -> list[Tool]:
@@ -343,6 +344,35 @@ def create_mcp_server() -> Server:
                     "required": ["form_id"],
                 },
             ),
+            # Auto-fill tool
+            Tool(
+                name="autofill_form",
+                description=(
+                    "Automatically fill form fields using data from uploaded source documents, "
+                    "user profile, and data sources. Implements the Golden Flow: fill first, "
+                    "user edits later. Returns a summary of filled fields."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "form_id": {
+                            "type": "string",
+                            "description": "ID of the form to fill",
+                        },
+                        "source_doc_ids": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Optional list of source document IDs to use for filling",
+                        },
+                        "use_profile": {
+                            "type": "boolean",
+                            "description": "Whether to use user profile data for filling",
+                            "default": True,
+                        },
+                    },
+                    "required": ["form_id"],
+                },
+            ),
         ]
 
     @server.call_tool()
@@ -365,6 +395,8 @@ def create_mcp_server() -> Server:
             "visual_edit_field": visual_editing.handle_visual_edit_field,
             "get_form_visual_summary": visual_editing.handle_get_form_visual_summary,
             "get_next_unfilled_field": visual_editing.handle_get_next_unfilled_field,
+            # Auto-fill tool
+            "autofill_form": autofill_form.handle,
         }
 
         handler = handlers.get(name)

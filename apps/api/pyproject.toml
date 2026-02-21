@@ -55,6 +55,11 @@ celery = [
     "celery[redis]>=5.3.0",
 ]
 
+# MCP integration (Model Context Protocol server)
+mcp = [
+    "mcp[cli]>=1.0.0",
+]
+
 # All integrations
 integrations = [
     "daru-pdf-api[supabase]",
@@ -63,6 +68,7 @@ integrations = [
     "daru-pdf-api[observability]",
     "daru-pdf-api[redis]",
     "daru-pdf-api[celery]",
+    "daru-pdf-api[mcp]",
 ]
 
 dev = [
@@ -79,6 +85,9 @@ dev-full = [
     "daru-pdf-api[dev]",
     "daru-pdf-api[integrations]",
 ]
+
+[project.scripts]
+daru-mcp = "app.mcp.server:main"
 
 [build-system]
 requires = ["hatchling"]
