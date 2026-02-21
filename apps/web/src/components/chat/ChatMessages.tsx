@@ -1,135 +1,177 @@
 /**
- * Chat messages list component with auto-scroll.
+ * Chat messages list component using AI Elements.
  * Displays the conversation history and thinking indicator.
+ *
+ * Uses AI Elements: https://github.com/vercel/ai-elements
  */
 
-import { useEffect, useRef, useCallback, type CSSProperties } from 'react';
-import type { Message, AgentStage } from '../../lib/api-types';
-import { ChatMessage } from './ChatMessage';
+import type { Message as AppMessage, AgentStage } from '../../lib/api-types';
 import { AgentThinking } from './AgentThinking';
+import {
+  Conversation,
+  ConversationContent,
+  ConversationEmptyState,
+  ConversationScrollButton,
+  Message,
+  MessageContent,
+  MessageResponse,
+  MessageAvatar,
+  MessageTimestamp,
+  MessageActions,
+} from '@/components/ai-elements';
+import { CheckIcon, PencilIcon, BotIcon, UserIcon, FileTextIcon, Loader2Icon } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export interface ChatMessagesProps {
-  messages: Message[];
+  messages: AppMessage[];
   agentStage?: AgentStage;
   thinkingMessage?: string;
   onApprove?: (messageId: string) => void;
   onEdit?: (messageId: string) => void;
   approvingMessageId?: string | null;
   isLoading?: boolean;
-  /** Handler for template selection (for ask_user_input messages) */
   onTemplateSelect?: (templateId: string, messageId: string) => void;
-  /** Handler for skipping template selection */
   onTemplateSkip?: (messageId: string) => void;
-  /** Whether template matching is in progress */
   isMatchingTemplates?: boolean;
 }
 
-function WelcomeMessage() {
-  const containerStyle: CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '16px',
-    padding: '48px 24px',
-    textAlign: 'center',
-  };
+function WelcomeState() {
+  return (
+    <ConversationEmptyState
+      icon={<FileTextIcon className="h-12 w-12" />}
+      title="Welcome to Form Assistant"
+      description="Upload your PDF documents and I'll help you fill them out quickly and accurately."
+    >
+      <div className="mt-4 space-y-3 text-left">
+        <div className="flex items-start gap-3 rounded-lg bg-muted/50 p-3">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+            1
+          </span>
+          <span className="text-sm text-muted-foreground">
+            Drop your form PDF and any source documents
+          </span>
+        </div>
+        <div className="flex items-start gap-3 rounded-lg bg-muted/50 p-3">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+            2
+          </span>
+          <span className="text-sm text-muted-foreground">
+            I'll analyze and auto-fill what I can
+          </span>
+        </div>
+        <div className="flex items-start gap-3 rounded-lg bg-muted/50 p-3">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+            3
+          </span>
+          <span className="text-sm text-muted-foreground">
+            Review, edit, and approve the filled form
+          </span>
+        </div>
+      </div>
+    </ConversationEmptyState>
+  );
+}
 
-  const iconStyle: CSSProperties = {
-    width: '64px',
-    height: '64px',
-    borderRadius: '16px',
-    backgroundColor: '#eff6ff',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    color: '#3b82f6',
-  };
+interface ChatMessageItemProps {
+  message: AppMessage;
+  onApprove?: (messageId: string) => void;
+  onEdit?: (messageId: string) => void;
+  isApproving?: boolean;
+}
 
-  const titleStyle: CSSProperties = {
-    fontSize: '20px',
-    fontWeight: 600,
-    color: '#1f2937',
-    margin: 0,
-  };
-
-  const descriptionStyle: CSSProperties = {
-    fontSize: '14px',
-    color: '#6b7280',
-    maxWidth: '400px',
-    lineHeight: 1.6,
-  };
-
-  const tipStyle: CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-    marginTop: '16px',
-    padding: '16px',
-    backgroundColor: '#f9fafb',
-    borderRadius: '12px',
-    width: '100%',
-    maxWidth: '400px',
-  };
-
-  const tipItemStyle: CSSProperties = {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: '8px',
-    fontSize: '13px',
-    color: '#374151',
-    textAlign: 'left',
-  };
-
-  const bulletStyle: CSSProperties = {
-    width: '20px',
-    height: '20px',
-    borderRadius: '50%',
-    backgroundColor: '#dbeafe',
-    color: '#3b82f6',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: '11px',
-    fontWeight: 600,
-    flexShrink: 0,
-  };
+function ChatMessageItem({
+  message,
+  onApprove,
+  onEdit,
+  isApproving,
+}: ChatMessageItemProps) {
+  const isUser = message.role === 'user';
+  const isAgent = message.role === 'agent';
+  const showApprovalActions = message.approval_required && message.approval_status === 'pending';
 
   return (
-    <div style={containerStyle}>
-      <div style={iconStyle}>
-        <svg width="32" height="32" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={1.5}
-            d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
-          />
-        </svg>
-      </div>
-
-      <h2 style={titleStyle}>Welcome to Form Assistant</h2>
-
-      <p style={descriptionStyle}>
-        I can help you fill out forms quickly and accurately. Upload your documents
-        and I will guide you through the process.
-      </p>
-
-      <div style={tipStyle}>
-        <div style={tipItemStyle}>
-          <span style={bulletStyle}>1</span>
-          <span>Drop your form PDF and any source documents</span>
+    <Message from={isUser ? 'user' : 'assistant'}>
+      {/* Avatar for assistant messages */}
+      {isAgent && (
+        <div className="flex items-center gap-2">
+          <MessageAvatar fallback={<BotIcon className="h-4 w-4" />} />
+          <span className="text-xs font-medium text-muted-foreground">Assistant</span>
+          <MessageTimestamp date={message.created_at} />
         </div>
-        <div style={tipItemStyle}>
-          <span style={bulletStyle}>2</span>
-          <span>I will analyze and auto-fill what I can</span>
+      )}
+
+      {/* User avatar and timestamp */}
+      {isUser && (
+        <div className="flex items-center gap-2 justify-end">
+          <MessageTimestamp date={message.created_at} />
+          <span className="text-xs font-medium text-muted-foreground">You</span>
+          <MessageAvatar fallback={<UserIcon className="h-4 w-4" />} />
         </div>
-        <div style={tipItemStyle}>
-          <span style={bulletStyle}>3</span>
-          <span>Review, edit, and approve the filled form</span>
+      )}
+
+      <MessageContent>
+        <MessageResponse>{message.content}</MessageResponse>
+
+        {/* Attachments */}
+        {message.attachments && message.attachments.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-2">
+            {message.attachments.map((attachment, index) => (
+              <div
+                key={index}
+                className="flex items-center gap-2 rounded-md bg-muted px-3 py-1.5 text-xs"
+              >
+                <FileTextIcon className="h-3.5 w-3.5" />
+                <span>{attachment.filename}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </MessageContent>
+
+      {/* Approval actions */}
+      {showApprovalActions && (
+        <MessageActions className="mt-2">
+          <button
+            onClick={() => onApprove?.(message.id)}
+            disabled={isApproving}
+            className={cn(
+              "inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium",
+              "bg-primary text-primary-foreground hover:bg-primary/90",
+              "disabled:opacity-50 disabled:pointer-events-none",
+              "transition-colors"
+            )}
+          >
+            {isApproving ? (
+              <Loader2Icon className="h-4 w-4 animate-spin" />
+            ) : (
+              <CheckIcon className="h-4 w-4" />
+            )}
+            {isApproving ? 'Approving...' : 'Approve'}
+          </button>
+          <button
+            onClick={() => onEdit?.(message.id)}
+            disabled={isApproving}
+            className={cn(
+              "inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium",
+              "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+              "disabled:opacity-50 disabled:pointer-events-none",
+              "transition-colors"
+            )}
+          >
+            <PencilIcon className="h-4 w-4" />
+            Edit
+          </button>
+        </MessageActions>
+      )}
+
+      {/* Approval status badge */}
+      {message.approval_status === 'approved' && (
+        <div className="flex items-center gap-1.5 text-xs text-green-600 mt-2">
+          <CheckIcon className="h-3.5 w-3.5" />
+          <span>Approved</span>
         </div>
-      </div>
-    </div>
+      )}
+    </Message>
   );
 }
 
@@ -141,75 +183,45 @@ export function ChatMessages({
   onEdit,
   approvingMessageId,
   isLoading = false,
-  onTemplateSelect,
-  onTemplateSkip,
-  isMatchingTemplates = false,
 }: ChatMessagesProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const lastMessageRef = useRef<HTMLDivElement>(null);
-  const shouldAutoScroll = useRef(true);
-
-  const scrollToBottom = useCallback(() => {
-    if (shouldAutoScroll.current && lastMessageRef.current) {
-      lastMessageRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
-    }
-  }, []);
-
-  // Auto-scroll when messages change or thinking state changes
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, agentStage, scrollToBottom]);
-
-  // Detect manual scroll to disable auto-scroll temporarily
-  const handleScroll = useCallback(() => {
-    if (!containerRef.current) return;
-
-    const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
-    const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
-    shouldAutoScroll.current = isNearBottom;
-  }, []);
-
-  const containerStyle: CSSProperties = {
-    flex: 1,
-    overflowY: 'auto',
-    padding: '16px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-  };
-
   const hasMessages = messages.length > 0;
   const showThinking = agentStage !== 'idle' && agentStage !== 'complete';
 
   if (!hasMessages && !showThinking && !isLoading) {
     return (
-      <div style={containerStyle} ref={containerRef}>
-        <WelcomeMessage />
-      </div>
+      <Conversation className="flex-1">
+        <WelcomeState />
+      </Conversation>
     );
   }
 
   return (
-    <div style={containerStyle} ref={containerRef} onScroll={handleScroll}>
-      {messages.map((message) => (
-        <ChatMessage
-          key={message.id}
-          message={message}
-          onApprove={onApprove}
-          onEdit={onEdit}
-          isApproving={approvingMessageId === message.id}
-          onTemplateSelect={onTemplateSelect}
-          onTemplateSkip={onTemplateSkip}
-          isMatchingTemplates={isMatchingTemplates}
-        />
-      ))}
+    <Conversation className="flex-1">
+      <ConversationContent>
+        {messages.map((message) => (
+          <ChatMessageItem
+            key={message.id}
+            message={message}
+            onApprove={onApprove}
+            onEdit={onEdit}
+            isApproving={approvingMessageId === message.id}
+          />
+        ))}
 
-      {showThinking && (
-        <AgentThinking stage={agentStage} message={thinkingMessage} />
-      )}
+        {showThinking && (
+          <Message from="assistant">
+            <div className="flex items-center gap-2">
+              <MessageAvatar fallback={<BotIcon className="h-4 w-4" />} />
+              <span className="text-xs font-medium text-muted-foreground">Assistant</span>
+            </div>
+            <MessageContent>
+              <AgentThinking stage={agentStage} message={thinkingMessage} />
+            </MessageContent>
+          </Message>
+        )}
+      </ConversationContent>
 
-      {/* Scroll anchor */}
-      <div ref={lastMessageRef} style={{ height: '1px' }} />
-    </div>
+      <ConversationScrollButton />
+    </Conversation>
   );
 }

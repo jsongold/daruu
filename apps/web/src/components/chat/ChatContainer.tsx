@@ -1,9 +1,11 @@
 /**
- * Main chat container component.
- * Combines sidebar, message list, input, and preview into a unified layout.
+ * Main chat container component using AI Elements.
+ * Layout: Sidebar | Document (Center) | Chat
+ * Document view is the main focus in the center.
+ *
+ * Uses AI Elements: https://github.com/vercel/ai-elements
  */
 
-import type { CSSProperties } from 'react';
 import type {
   ConversationSummary,
   Message,
@@ -12,6 +14,8 @@ import type {
 import { ChatSidebar } from './ChatSidebar';
 import { ChatMessages } from './ChatMessages';
 import { ChatInput } from './ChatInput';
+import { cn } from '@/lib/utils';
+import { XCircleIcon } from 'lucide-react';
 
 export interface ChatContainerProps {
   // Sidebar props
@@ -75,70 +79,11 @@ export function ChatContainer({
   error,
   onDismissError,
 }: ChatContainerProps) {
-  const containerStyle: CSSProperties = {
-    display: 'flex',
-    height: '100vh',
-    width: '100%',
-    overflow: 'hidden',
-  };
-
-  const mainStyle: CSSProperties = {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'row',
-    overflow: 'hidden',
-  };
-
-  const chatPanelStyle: CSSProperties = {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    minWidth: 0,
-    borderRight: showPreview ? '1px solid #e5e7eb' : 'none',
-  };
-
-  const previewPanelStyle: CSSProperties = {
-    width: showPreview ? '45%' : '0',
-    maxWidth: '600px',
-    overflow: 'hidden',
-    transition: 'width 0.3s ease',
-    backgroundColor: '#f9fafb',
-    display: 'flex',
-    flexDirection: 'column',
-  };
-
-  const errorBannerStyle: CSSProperties = {
-    padding: '12px 16px',
-    backgroundColor: '#fee2e2',
-    borderBottom: '1px solid #fecaca',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '12px',
-  };
-
-  const errorTextStyle: CSSProperties = {
-    color: '#991b1b',
-    fontSize: '14px',
-    flex: 1,
-  };
-
-  const dismissButtonStyle: CSSProperties = {
-    padding: '4px 8px',
-    fontSize: '12px',
-    backgroundColor: 'white',
-    color: '#991b1b',
-    border: '1px solid #fecaca',
-    borderRadius: '4px',
-    cursor: 'pointer',
-  };
-
-  // Only disable during active operations, not when no conversation exists
-  // (uploading files will auto-create a conversation)
   const inputDisabled = isSending || agentStage === 'analyzing' || agentStage === 'mapping' || agentStage === 'filling';
 
   return (
-    <div style={containerStyle}>
+    <div className="flex h-screen w-full overflow-hidden bg-background">
+      {/* Left: Conversation Sidebar */}
       <ChatSidebar
         conversations={conversations}
         activeConversationId={activeConversationId}
@@ -148,57 +93,78 @@ export function ChatContainer({
         isCreating={isCreatingConversation}
       />
 
-      <div style={mainStyle}>
-        <div style={chatPanelStyle}>
-          {error && (
-            <div style={errorBannerStyle}>
-              <span style={errorTextStyle}>{error}</span>
-              {onDismissError && (
-                <button style={dismissButtonStyle} onClick={onDismissError}>
-                  Dismiss
-                </button>
-              )}
-            </div>
+      {/* Center: Document Preview (main focus) */}
+      {showPreview && (
+        <div
+          className={cn(
+            "flex flex-col overflow-hidden bg-card",
+            "border-x border-border",
+            "flex-[2] min-w-[400px] max-w-[800px]",
+            "transition-all duration-300 ease-in-out"
           )}
-
-          <ChatMessages
-            messages={messages}
-            agentStage={agentStage}
-            thinkingMessage={thinkingMessage}
-            onApprove={onApprove}
-            onEdit={onEdit}
-            approvingMessageId={approvingMessageId}
-            isLoading={isLoadingMessages}
-            onTemplateSelect={onTemplateSelect}
-            onTemplateSkip={onTemplateSkip}
-            isMatchingTemplates={isMatchingTemplates}
-          />
-
-          <ChatInput
-            onSend={onSendMessage}
-            disabled={inputDisabled}
-            placeholder={
-              !activeConversationId
-                ? 'Start a new conversation to begin'
-                : isSending
-                ? 'Sending...'
-                : 'Type a message or drop files here...'
-            }
-          />
+        >
+          {previewComponent}
         </div>
+      )}
 
-        {showPreview && (
-          <div style={previewPanelStyle}>
-            {previewComponent}
+      {/* Right: Chat Messages & Input */}
+      <div
+        className={cn(
+          "flex flex-1 flex-col overflow-hidden bg-card",
+          "min-w-[320px] max-w-[480px]"
+        )}
+      >
+        {/* Error banner */}
+        {error && (
+          <div className="flex items-center justify-between gap-3 border-b border-destructive/20 bg-destructive/10 px-4 py-3">
+            <p className="flex-1 text-sm text-destructive">{error}</p>
+            {onDismissError && (
+              <button
+                onClick={onDismissError}
+                className="flex items-center gap-1 rounded-md border border-destructive/20 bg-background px-2 py-1 text-xs font-medium text-destructive hover:bg-destructive/10 transition-colors"
+              >
+                <XCircleIcon className="h-3.5 w-3.5" />
+                Dismiss
+              </button>
+            )}
           </div>
         )}
+
+        {/* Messages */}
+        <ChatMessages
+          messages={messages}
+          agentStage={agentStage}
+          thinkingMessage={thinkingMessage}
+          onApprove={onApprove}
+          onEdit={onEdit}
+          approvingMessageId={approvingMessageId}
+          isLoading={isLoadingMessages}
+          onTemplateSelect={onTemplateSelect}
+          onTemplateSkip={onTemplateSkip}
+          isMatchingTemplates={isMatchingTemplates}
+        />
+
+        {/* Input */}
+        <ChatInput
+          onSend={onSendMessage}
+          disabled={inputDisabled}
+          loading={isSending}
+          placeholder={
+            !activeConversationId
+              ? 'Upload a PDF to start'
+              : isSending
+              ? 'Sending...'
+              : 'Type a message or drop files here...'
+          }
+        />
       </div>
     </div>
   );
 }
 
 /**
- * Layout variant with preview on the left instead of right.
+ * Layout variant: Chat | Document | Sidebar
+ * Chat on the left, document in center, sidebar on right.
  */
 export function ChatContainerReversed(props: ChatContainerProps) {
   const {
@@ -210,43 +176,76 @@ export function ChatContainerReversed(props: ChatContainerProps) {
     ...rest
   } = props;
 
-  const containerStyle: CSSProperties = {
-    display: 'flex',
-    height: '100vh',
-    width: '100%',
-    overflow: 'hidden',
-  };
-
-  const mainStyle: CSSProperties = {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'row',
-    overflow: 'hidden',
-  };
-
-  const previewPanelStyle: CSSProperties = {
-    width: showPreview ? '45%' : '0',
-    maxWidth: '600px',
-    overflow: 'hidden',
-    transition: 'width 0.3s ease',
-    backgroundColor: '#f9fafb',
-    borderRight: showPreview ? '1px solid #e5e7eb' : 'none',
-    display: 'flex',
-    flexDirection: 'column',
-  };
-
-  const chatPanelStyle: CSSProperties = {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    minWidth: 0,
-  };
-
   const inputDisabled = rest.isSending ||
     rest.agentStage === 'analyzing' || rest.agentStage === 'mapping' || rest.agentStage === 'filling';
 
   return (
-    <div style={containerStyle}>
+    <div className="flex h-screen w-full overflow-hidden bg-background">
+      {/* Left: Chat Messages & Input */}
+      <div
+        className={cn(
+          "flex flex-1 flex-col overflow-hidden bg-card",
+          "min-w-[320px] max-w-[480px]",
+          "border-r border-border"
+        )}
+      >
+        {/* Error banner */}
+        {rest.error && (
+          <div className="flex items-center justify-between gap-3 border-b border-destructive/20 bg-destructive/10 px-4 py-3">
+            <p className="flex-1 text-sm text-destructive">{rest.error}</p>
+            {rest.onDismissError && (
+              <button
+                onClick={rest.onDismissError}
+                className="flex items-center gap-1 rounded-md border border-destructive/20 bg-background px-2 py-1 text-xs font-medium text-destructive hover:bg-destructive/10 transition-colors"
+              >
+                <XCircleIcon className="h-3.5 w-3.5" />
+                Dismiss
+              </button>
+            )}
+          </div>
+        )}
+
+        <ChatMessages
+          messages={rest.messages}
+          agentStage={rest.agentStage}
+          thinkingMessage={rest.thinkingMessage}
+          onApprove={rest.onApprove}
+          onEdit={rest.onEdit}
+          approvingMessageId={rest.approvingMessageId}
+          isLoading={rest.isLoadingMessages}
+          onTemplateSelect={onTemplateSelect}
+          onTemplateSkip={onTemplateSkip}
+          isMatchingTemplates={isMatchingTemplates}
+        />
+
+        <ChatInput
+          onSend={rest.onSendMessage}
+          disabled={inputDisabled}
+          loading={rest.isSending}
+          placeholder={
+            !rest.activeConversationId
+              ? 'Upload a PDF to start'
+              : rest.isSending
+              ? 'Sending...'
+              : 'Type a message or drop files here...'
+          }
+        />
+      </div>
+
+      {/* Center: Document Preview (main focus) */}
+      {showPreview && (
+        <div
+          className={cn(
+            "flex flex-col overflow-hidden bg-card",
+            "flex-[2] min-w-[400px] max-w-[800px]",
+            "transition-all duration-300 ease-in-out"
+          )}
+        >
+          {previewComponent}
+        </div>
+      )}
+
+      {/* Right: Conversation Sidebar */}
       <ChatSidebar
         conversations={rest.conversations}
         activeConversationId={rest.activeConversationId}
@@ -255,71 +254,6 @@ export function ChatContainerReversed(props: ChatContainerProps) {
         isLoading={rest.isLoadingConversations}
         isCreating={rest.isCreatingConversation}
       />
-
-      <div style={mainStyle}>
-        {showPreview && (
-          <div style={previewPanelStyle}>
-            {previewComponent}
-          </div>
-        )}
-
-        <div style={chatPanelStyle}>
-          {rest.error && (
-            <div style={{
-              padding: '12px 16px',
-              backgroundColor: '#fee2e2',
-              borderBottom: '1px solid #fecaca',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '12px',
-            }}>
-              <span style={{ color: '#991b1b', fontSize: '14px', flex: 1 }}>{rest.error}</span>
-              {rest.onDismissError && (
-                <button
-                  style={{
-                    padding: '4px 8px',
-                    fontSize: '12px',
-                    backgroundColor: 'white',
-                    color: '#991b1b',
-                    border: '1px solid #fecaca',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                  }}
-                  onClick={rest.onDismissError}
-                >
-                  Dismiss
-                </button>
-              )}
-            </div>
-          )}
-
-          <ChatMessages
-            messages={rest.messages}
-            agentStage={rest.agentStage}
-            thinkingMessage={rest.thinkingMessage}
-            onApprove={rest.onApprove}
-            onEdit={rest.onEdit}
-            approvingMessageId={rest.approvingMessageId}
-            isLoading={rest.isLoadingMessages}
-            onTemplateSelect={onTemplateSelect}
-            onTemplateSkip={onTemplateSkip}
-            isMatchingTemplates={isMatchingTemplates}
-          />
-
-          <ChatInput
-            onSend={rest.onSendMessage}
-            disabled={inputDisabled}
-            placeholder={
-              !rest.activeConversationId
-                ? 'Start a new conversation to begin'
-                : rest.isSending
-                ? 'Sending...'
-                : 'Type a message or drop files here...'
-            }
-          />
-        </div>
-      </div>
     </div>
   );
 }

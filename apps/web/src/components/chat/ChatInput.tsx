@@ -1,10 +1,13 @@
 /**
- * Chat input component with text input and file drop zone.
+ * Chat input component using AI Elements styling.
  * Supports drag-and-drop file uploads and keyboard shortcuts.
+ *
+ * Uses Tailwind CSS for styling (AI Elements pattern)
  */
 
-import { useState, useRef, useCallback, type CSSProperties, type DragEvent, type KeyboardEvent, type ChangeEvent } from 'react';
-import { Button } from '../ui/Button';
+import { useState, useRef, useCallback, type DragEvent, type KeyboardEvent, type ChangeEvent } from 'react';
+import { cn } from '@/lib/utils';
+import { SendIcon, PaperclipIcon, XIcon, FileIcon, Loader2Icon } from 'lucide-react';
 
 export interface ChatInputProps {
   onSend: (message: string, files?: File[]) => void;
@@ -13,6 +16,7 @@ export interface ChatInputProps {
   placeholder?: string;
   maxFiles?: number;
   acceptedFileTypes?: string[];
+  loading?: boolean;
 }
 
 const DEFAULT_ACCEPTED_TYPES = [
@@ -31,6 +35,7 @@ export function ChatInput({
   placeholder = 'Type a message or drop files here...',
   maxFiles = 5,
   acceptedFileTypes = DEFAULT_ACCEPTED_TYPES,
+  loading = false,
 }: ChatInputProps) {
   const [message, setMessage] = useState('');
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
@@ -105,7 +110,6 @@ export function ChatInput({
   const handleFileInputChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files ? Array.from(e.target.files) : [];
     handleFilesAdded(files);
-    // Reset input so the same file can be selected again
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -137,209 +141,127 @@ export function ChatInput({
 
   const handleTextareaChange = useCallback((e: ChangeEvent<HTMLTextAreaElement>) => {
     setMessage(e.target.value);
-    // Auto-resize textarea
     const textarea = e.target;
     textarea.style.height = 'auto';
     textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
   }, []);
 
-  const containerStyle: CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-    padding: '16px',
-    borderTop: '1px solid #e5e7eb',
-    backgroundColor: 'white',
-  };
-
-  const dropZoneStyle: CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-    padding: '12px',
-    borderRadius: '12px',
-    border: isDragging ? '2px dashed #3b82f6' : '2px dashed transparent',
-    backgroundColor: isDragging ? '#eff6ff' : 'transparent',
-    transition: 'all 0.15s ease',
-  };
-
-  const inputRowStyle: CSSProperties = {
-    display: 'flex',
-    gap: '8px',
-    alignItems: 'flex-end',
-  };
-
-  const textareaStyle: CSSProperties = {
-    flex: 1,
-    minHeight: '44px',
-    maxHeight: '200px',
-    padding: '12px',
-    fontSize: '14px',
-    lineHeight: '1.5',
-    border: '1px solid #d1d5db',
-    borderRadius: '12px',
-    resize: 'none',
-    outline: 'none',
-    fontFamily: 'inherit',
-  };
-
-  const fileListStyle: CSSProperties = {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '8px',
-  };
-
-  const fileChipStyle: CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    padding: '6px 10px',
-    backgroundColor: '#eff6ff',
-    borderRadius: '6px',
-    fontSize: '13px',
-    color: '#1e40af',
-  };
-
-  const removeButtonStyle: CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '16px',
-    height: '16px',
-    padding: 0,
-    border: 'none',
-    borderRadius: '50%',
-    backgroundColor: 'transparent',
-    color: '#6b7280',
-    cursor: 'pointer',
-  };
-
-  const attachButtonStyle: CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '44px',
-    height: '44px',
-    padding: 0,
-    border: '1px solid #d1d5db',
-    borderRadius: '12px',
-    backgroundColor: 'white',
-    color: '#6b7280',
-    cursor: disabled ? 'not-allowed' : 'pointer',
-    opacity: disabled ? 0.5 : 1,
-  };
-
-  const errorStyle: CSSProperties = {
-    fontSize: '12px',
-    color: '#dc2626',
-    padding: '4px 0',
-  };
+  const isDisabled = disabled || loading;
+  const canSend = !isDisabled && (message.trim() || pendingFiles.length > 0);
 
   return (
-    <div style={containerStyle}>
+    <div className="border-t border-border bg-background p-4">
       <div
-        style={dropZoneStyle}
+        className={cn(
+          "flex flex-col gap-3 rounded-lg p-3 transition-colors",
+          isDragging && "border-2 border-dashed border-primary bg-primary/5"
+        )}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
+        {/* Pending files */}
         {pendingFiles.length > 0 && (
-          <div style={fileListStyle}>
+          <div className="flex flex-wrap gap-2">
             {pendingFiles.map((file, index) => (
-              <div key={`${file.name}-${index}`} style={fileChipStyle}>
-                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
-                  />
-                </svg>
-                <span>{file.name}</span>
+              <div
+                key={`${file.name}-${index}`}
+                className="flex items-center gap-2 rounded-md bg-muted px-3 py-1.5 text-sm"
+              >
+                <FileIcon className="h-4 w-4 text-muted-foreground" />
+                <span className="max-w-[150px] truncate">{file.name}</span>
                 <button
-                  style={removeButtonStyle}
-                  onClick={() => handleRemoveFile(index)}
                   type="button"
+                  onClick={() => handleRemoveFile(index)}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
                   aria-label={`Remove ${file.name}`}
                 >
-                  <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
+                  <XIcon className="h-4 w-4" />
                 </button>
               </div>
             ))}
           </div>
         )}
 
-        {fileError && <div style={errorStyle}>{fileError}</div>}
+        {/* Error message */}
+        {fileError && (
+          <p className="text-sm text-destructive">{fileError}</p>
+        )}
 
-        <div style={inputRowStyle}>
+        {/* Input row */}
+        <div className="flex items-end gap-2">
+          {/* Attach button */}
           <button
-            style={attachButtonStyle}
-            onClick={() => fileInputRef.current?.click()}
-            disabled={disabled}
             type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isDisabled}
+            className={cn(
+              "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
+              "border border-input bg-background",
+              "text-muted-foreground hover:bg-muted hover:text-foreground",
+              "transition-colors",
+              "disabled:pointer-events-none disabled:opacity-50"
+            )}
             aria-label="Attach files"
           >
-            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
-              />
-            </svg>
+            <PaperclipIcon className="h-5 w-5" />
           </button>
 
+          {/* Text input */}
           <textarea
             ref={textareaRef}
             value={message}
             onChange={handleTextareaChange}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
-            disabled={disabled}
-            style={textareaStyle}
+            disabled={isDisabled}
             rows={1}
+            className={cn(
+              "flex-1 min-h-[44px] max-h-[200px] resize-none rounded-lg",
+              "border border-input bg-background px-4 py-2.5",
+              "text-sm placeholder:text-muted-foreground",
+              "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+              "disabled:cursor-not-allowed disabled:opacity-50"
+            )}
           />
 
-          <Button
-            variant="primary"
+          {/* Send button */}
+          <button
+            type="button"
             onClick={handleSend}
-            disabled={disabled || (!message.trim() && pendingFiles.length === 0)}
-            style={{ height: '44px', minWidth: '44px', padding: '0 16px' }}
+            disabled={!canSend}
+            className={cn(
+              "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
+              "bg-primary text-primary-foreground",
+              "hover:bg-primary/90 transition-colors",
+              "disabled:pointer-events-none disabled:opacity-50"
+            )}
+            aria-label="Send message"
           >
-            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-              />
-            </svg>
-          </Button>
+            {loading ? (
+              <Loader2Icon className="h-5 w-5 animate-spin" />
+            ) : (
+              <SendIcon className="h-5 w-5" />
+            )}
+          </button>
         </div>
       </div>
 
+      {/* Hidden file input */}
       <input
         ref={fileInputRef}
         type="file"
         multiple
         accept={acceptedFileTypes.join(',')}
         onChange={handleFileInputChange}
-        style={{ display: 'none' }}
+        className="hidden"
       />
 
+      {/* Drop indicator */}
       {isDragging && (
-        <div
-          style={{
-            textAlign: 'center',
-            color: '#3b82f6',
-            fontSize: '13px',
-            fontWeight: 500,
-          }}
-        >
+        <p className="mt-2 text-center text-sm font-medium text-primary">
           Drop files here to upload
-        </div>
+        </p>
       )}
     </div>
   );
