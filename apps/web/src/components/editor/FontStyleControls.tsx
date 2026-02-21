@@ -27,10 +27,18 @@ const FIT_TEXT_CONFIG = {
   MIN_FONT_SIZE: 6,
   /** Maximum font size */
   MAX_FONT_SIZE: 72,
-  /** Padding inside the field (horizontal) */
-  HORIZONTAL_PADDING: 8,
-  /** Padding inside the field (vertical) */
-  VERTICAL_PADDING: 4,
+  /**
+   * Horizontal padding per side: must match FieldHighlight rendering.
+   * FieldHighlight uses border-box with 2px border + left/right 4px = 6px per side.
+   * Add 1px buffer for canvas/CSS measurement differences.
+   */
+  HORIZONTAL_PADDING: 7,
+  /**
+   * Vertical padding per side: must match FieldHighlight rendering.
+   * FieldHighlight uses border-box with 2px border + text is vertically centered.
+   * Add 1px buffer for canvas/CSS measurement differences.
+   */
+  VERTICAL_PADDING: 3,
   /** Line height multiplier for height calculation */
   LINE_HEIGHT: 1.2,
 };
@@ -76,7 +84,14 @@ function calculateFitFontSize(
     const mid = Math.floor((low + high) / 2);
     ctx.font = `${mid}px ${mappedFont}`;
     const metrics = ctx.measureText(text);
-    const textWidth = metrics.width;
+    // Use actualBoundingBox for more accurate width when available,
+    // falling back to advance width
+    const textWidth = (
+      typeof metrics.actualBoundingBoxLeft === 'number' &&
+      typeof metrics.actualBoundingBoxRight === 'number'
+    )
+      ? metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight
+      : metrics.width;
     const textHeight = mid * FIT_TEXT_CONFIG.LINE_HEIGHT;
 
     if (textWidth <= availableWidth && textHeight <= availableHeight) {
@@ -280,6 +295,12 @@ export function FontStyleControls({
           style={selectStyle}
           title="Font size"
         >
+          {/* Include current font size if not in presets (e.g. from fit calculation) */}
+          {!FONT_SIZE_PRESETS.includes(currentStyle.fontSize as typeof FONT_SIZE_PRESETS[number]) && (
+            <option key={currentStyle.fontSize} value={currentStyle.fontSize}>
+              {currentStyle.fontSize}pt (fit)
+            </option>
+          )}
           {FONT_SIZE_PRESETS.map((size) => (
             <option key={size} value={size}>
               {size}pt

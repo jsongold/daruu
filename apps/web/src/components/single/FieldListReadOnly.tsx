@@ -10,6 +10,8 @@ interface FieldListReadOnlyProps {
   selectedFieldId: string | null;
   onFieldSelect: (fieldId: string | null) => void;
   isLoading?: boolean;
+  /** Optional confidence scores per field (0-1). Shows colored dot when provided. */
+  confidenceMap?: Record<string, number>;
 }
 
 export function FieldListReadOnly({
@@ -17,6 +19,7 @@ export function FieldListReadOnly({
   selectedFieldId,
   onFieldSelect,
   isLoading = false,
+  confidenceMap,
 }: FieldListReadOnlyProps) {
   if (isLoading) {
     return (
@@ -91,6 +94,7 @@ export function FieldListReadOnly({
                 field={field}
                 isSelected={field.field_id === selectedFieldId}
                 onSelect={() => onFieldSelect(field.field_id)}
+                confidence={confidenceMap?.[field.field_id]}
               />
             ))}
           </div>
@@ -104,9 +108,10 @@ interface FieldItemProps {
   field: FieldData;
   isSelected: boolean;
   onSelect: () => void;
+  confidence?: number;
 }
 
-function FieldItem({ field, isSelected, onSelect }: FieldItemProps) {
+function FieldItem({ field, isSelected, onSelect, confidence }: FieldItemProps) {
   const hasValue = field.value && field.value.trim() !== '';
 
   return (
@@ -151,6 +156,20 @@ function FieldItem({ field, isSelected, onSelect }: FieldItemProps) {
           </span>
         ) : (
           <span className="text-xs text-gray-400">Not filled</span>
+        )}
+        {confidence !== undefined && (
+          <span className="ml-auto flex items-center gap-1">
+            <span
+              className={`inline-block w-2 h-2 rounded-full ${
+                confidence >= 0.9
+                  ? 'bg-green-500'
+                  : confidence >= 0.7
+                    ? 'bg-yellow-400'
+                    : 'bg-orange-400'
+              }`}
+            />
+            <span className="text-xs text-gray-400">{Math.round(confidence * 100)}%</span>
+          </span>
         )}
       </div>
     </div>

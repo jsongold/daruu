@@ -209,6 +209,7 @@ export function EditableDocumentPreview({
     position: { x: number; y: number };
   } | null>(null);
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
+  const [previewFontStyle, setPreviewFontStyle] = useState<FontStyle | null>(null);
 
   const imageRef = useRef<HTMLImageElement>(null);
 
@@ -233,6 +234,12 @@ export function EditableDocumentPreview({
               ? 'filled'
               : 'empty';
 
+        // Merge live preview font style for the currently-editing field
+        const fontStyle =
+          editingField && field.field_id === editingField.fieldId && previewFontStyle
+            ? previewFontStyle
+            : field.fontStyle;
+
         return {
           id: field.field_id,
           label: field.label,
@@ -246,11 +253,11 @@ export function EditableDocumentPreview({
           type: field.type,
           status,
           required: field.required,
-          fontStyle: field.fontStyle,
+          fontStyle,
         };
       })
       .filter((field) => field.bbox.width > 0 && field.bbox.height > 0);
-  }, [fields, currentPage]);
+  }, [fields, currentPage, editingField, previewFontStyle]);
 
   // Get field data for inline editor
   const getFieldForEditor = useCallback((fieldId: string) => {
@@ -293,15 +300,22 @@ export function EditableDocumentPreview({
     setEditingField({ fieldId, position });
   }, [onFieldSelect]);
 
+  // Handle font style change for live preview
+  const handleFontStylePreview = useCallback((fontStyle: FontStyle) => {
+    setPreviewFontStyle(fontStyle);
+  }, []);
+
   // Handle save from inline editor
   const handleInlineEditorSave = useCallback((fieldId: string, value: string, fontStyle?: FontStyle) => {
     onFieldEdit?.(fieldId, value, fontStyle);
     setEditingField(null);
+    setPreviewFontStyle(null);
   }, [onFieldEdit]);
 
   // Handle cancel from inline editor
   const handleInlineEditorCancel = useCallback(() => {
     setEditingField(null);
+    setPreviewFontStyle(null);
   }, []);
 
   // Handle click outside field highlights
@@ -557,6 +571,7 @@ export function EditableDocumentPreview({
           currentFontStyle={getFieldForEditor(editingField.fieldId)?.fontStyle}
           showFontControls={true}
           bbox={getFieldBboxInPixels(editingField.fieldId)}
+          onFontStyleChange={handleFontStylePreview}
         />
       )}
     </div>

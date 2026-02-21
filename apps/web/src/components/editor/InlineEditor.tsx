@@ -43,6 +43,8 @@ export interface InlineEditorProps {
   showFontControls?: boolean;
   /** Bounding box dimensions in pixels (for fit text feature) */
   bbox?: { width: number; height: number };
+  /** Called immediately when font style changes (for live preview) */
+  onFontStyleChange?: (fontStyle: FontStyle) => void;
 }
 
 const POPOVER_WIDTH = 320;
@@ -63,6 +65,7 @@ export function InlineEditor({
   currentFontStyle,
   showFontControls = true,
   bbox,
+  onFontStyleChange,
 }: InlineEditorProps) {
   const [value, setValue] = useState(currentValue);
   const [isCheckbox, setIsCheckbox] = useState(
@@ -158,7 +161,8 @@ export function InlineEditor({
 
   const handleFontStyleChange = useCallback((newFontStyle: FontStyle) => {
     setFontStyle(newFontStyle);
-  }, []);
+    onFontStyleChange?.(newFontStyle);
+  }, [onFontStyleChange]);
 
   const handleInputChange = useCallback((e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setValue(e.target.value);
