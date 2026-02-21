@@ -39,6 +39,9 @@ class VisionAutofillRequest(BaseModel):
     rules: list[str] | None = Field(
         None, description="Optional rules for field filling (e.g., date format)"
     )
+    system_prompt: str | None = Field(
+        None, description="Optional system prompt override for LLM autofill"
+    )
 
     model_config = {"frozen": True}
 
@@ -76,5 +79,14 @@ class VisionAutofillResponse(BaseModel):
         default=0, ge=0, description="Processing time in milliseconds"
     )
     error: str | None = Field(None, description="Error message if success=False")
+    raw_response: str | None = Field(
+        None, description="Raw LLM response text (populated when LLM is used)"
+    )
+    system_prompt: str | None = Field(
+        None, description="System prompt sent to LLM (populated when LLM is used)"
+    )
+    user_prompt: str | None = Field(
+        None, description="User prompt sent to LLM (populated when LLM is used)"
+    )
 
     model_config = {"frozen": True}

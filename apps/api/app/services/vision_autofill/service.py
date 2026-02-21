@@ -9,6 +9,7 @@ import logging
 import time
 from typing import Any
 
+from app.agents.llm_wrapper import log_llm_io
 from app.models.data_source import DataSource
 from app.repositories import DataSourceRepository
 from app.services.text_extraction_service import TextExtractionService
@@ -90,7 +91,11 @@ class VisionAutofillService:
 
             # Step 3: Try LLM-based matching if available
             if self._llm_client:
-                result = await self._llm_autofill(request, extractions)
+                result = await self._llm_autofill(
+                    request,
+                    extractions,
+                    system_prompt_override=request.system_prompt,
+                )
             else:
                 # Fall back to rule-based matching
                 result = self._rule_based_autofill(request, extractions)
@@ -153,16 +158,82 @@ class VisionAutofillService:
 
         return extractions
 
+    async def preview_prompt(
+        self,
+        request: VisionAutofillRequest,
+    ) -> dict[str, Any]:
+        """Build and return the prompts without calling the LLM.
+
+        Reuses the same extraction and prompt-building logic as autofill
+        so the user can inspect and tune the prompt before running.
+
+        Args:
+            request: Autofill request with document and field info.
+
+        Returns:
+            Dict with system_prompt, user_prompt, data_source_count,
+            and extractions_summary.
+        """
+        data_sources = self._data_source_repo.list_by_conversation(
+            request.conversation_id
+        )
+
+        extractions: list[dict[str, Any]] = []
+        if data_sources:
+            extractions = await self._extract_from_sources(data_sources)
+
+        fields_json = json.dumps(
+            [f.model_dump() for f in request.fields],
+            indent=2,
+        )
+        data_sources_text = format_data_sources(extractions)
+        user_prompt = build_autofill_prompt(
+            fields_json=fields_json,
+            data_sources_text=data_sources_text,
+            rules=request.rules,
+        )
+
+        system_prompt = request.system_prompt or AUTOFILL_SYSTEM_PROMPT
+
+        return {
+            "system_prompt": system_prompt,
+            "user_prompt": user_prompt,
+            "data_source_count": len(data_sources),
+            "extractions_summary": [
+                {
+                    "source_name": e.get("source_name", "unknown"),
+                    "source_type": e.get("source_type", "unknown"),
+                    "field_count": len(e.get("extracted_fields", {})),
+                }
+                for e in extractions
+            ],
+        }
+
+    @log_llm_io
+    async def _invoke_llm(
+        self,
+        messages: list[dict[str, str]],
+        agent_name: str = "VisionAutofillService",
+        operation: str = "autofill",
+    ) -> Any:
+        """Call LLM. Decorated with log_llm_io for debug prompt logging."""
+        return await self._llm_client.complete(
+            messages=messages,
+            response_format={"type": "json_object"},
+        )
+
     async def _llm_autofill(
         self,
         request: VisionAutofillRequest,
         extractions: list[dict[str, Any]],
+        system_prompt_override: str | None = None,
     ) -> VisionAutofillResponse:
         """Use LLM to match extracted data to fields.
 
         Args:
             request: Autofill request.
             extractions: Extracted data from sources.
+            system_prompt_override: Optional system prompt to use instead of default.
 
         Returns:
             VisionAutofillResponse with LLM-matched values.
@@ -179,18 +250,23 @@ class VisionAutofillService:
             rules=request.rules,
         )
 
+        system_prompt = system_prompt_override or AUTOFILL_SYSTEM_PROMPT
+        start_time = time.time()
+
         try:
             # Call LLM
-            response = await self._llm_client.complete(
+            response = await self._invoke_llm(
                 messages=[
-                    {"role": "system", "content": AUTOFILL_SYSTEM_PROMPT},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
-                response_format={"type": "json_object"},
             )
 
+            raw_response = response.content
+            processing_time_ms = int((time.time() - start_time) * 1000)
+
             # Parse response
-            result = json.loads(response.content)
+            result = json.loads(raw_response)
 
             filled_fields = [
                 FilledField(**f) for f in result.get("filled_fields", [])
@@ -203,6 +279,9 @@ class VisionAutofillService:
                 filled_fields=filled_fields,
                 unfilled_fields=unfilled_fields,
                 warnings=warnings,
+                raw_response=raw_response,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
             )
 
         except Exception as e:

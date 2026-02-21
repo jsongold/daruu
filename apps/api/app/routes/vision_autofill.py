@@ -135,6 +135,9 @@ class VisionAutofillRequestDTO(BaseModel):
     rules: list[str] | None = Field(
         None, description="Optional rules for field filling"
     )
+    system_prompt: str | None = Field(
+        None, description="Optional system prompt override for LLM"
+    )
 
     model_config = {"frozen": True}
 
@@ -167,6 +170,29 @@ class VisionAutofillResponseDTO(BaseModel):
         default=0, ge=0, description="Processing time in ms"
     )
     error: str | None = Field(None, description="Error message if failed")
+
+    model_config = {"frozen": True}
+
+
+class ExtractionSummaryDTO(BaseModel):
+    """Summary of a single data source extraction."""
+
+    source_name: str = Field(..., description="Name of the data source")
+    source_type: str = Field(..., description="Type of the data source")
+    field_count: int = Field(..., ge=0, description="Number of extracted fields")
+
+    model_config = {"frozen": True}
+
+
+class PromptPreviewResponseDTO(BaseModel):
+    """Response body for prompt preview."""
+
+    system_prompt: str = Field(..., description="System prompt sent to LLM")
+    user_prompt: str = Field(..., description="User prompt sent to LLM")
+    data_source_count: int = Field(..., ge=0, description="Number of data sources")
+    extractions_summary: list[ExtractionSummaryDTO] = Field(
+        default_factory=list, description="Summary of each extraction"
+    )
 
     model_config = {"frozen": True}
 
@@ -298,6 +324,7 @@ async def vision_autofill(
             for f in request.fields
         ],
         rules=request.rules,
+        system_prompt=request.system_prompt,
     )
 
     # Call the service
@@ -338,4 +365,67 @@ async def vision_autofill(
             "unfilled_count": len(response_dto.unfilled_fields),
             "processing_time_ms": response_dto.processing_time_ms,
         },
+    )
+
+
+@router.post(
+    "/preview-prompt",
+    response_model=ApiResponse[PromptPreviewResponseDTO],
+    status_code=status.HTTP_200_OK,
+    summary="Preview the autofill prompt without calling LLM",
+    description="Build and return the system and user prompts that would be sent "
+    "to the LLM, so the user can inspect and tune them before running autofill.",
+)
+async def preview_prompt(
+    request: VisionAutofillRequestDTO,
+    service: VisionAutofillService = Depends(get_vision_autofill_service),
+) -> ApiResponse[PromptPreviewResponseDTO]:
+    """Preview the assembled autofill prompts.
+
+    Args:
+        request: Same request body as autofill.
+        service: Injected VisionAutofillService instance.
+
+    Returns:
+        API response with system prompt, user prompt, and extraction summary.
+    """
+    logger.info(
+        f"Preview prompt request: document={request.document_id}, "
+        f"conversation={request.conversation_id}, fields={len(request.fields)}"
+    )
+
+    domain_request = VisionAutofillRequest(
+        document_id=request.document_id,
+        conversation_id=request.conversation_id,
+        fields=[
+            FieldInfo(
+                field_id=f.field_id,
+                label=f.label,
+                type=f.type,
+                x=f.x,
+                y=f.y,
+                width=f.width,
+                height=f.height,
+                page=f.page,
+            )
+            for f in request.fields
+        ],
+        rules=request.rules,
+        system_prompt=request.system_prompt,
+    )
+
+    result = await service.preview_prompt(domain_request)
+
+    response_dto = PromptPreviewResponseDTO(
+        system_prompt=result["system_prompt"],
+        user_prompt=result["user_prompt"],
+        data_source_count=result["data_source_count"],
+        extractions_summary=[
+            ExtractionSummaryDTO(**s) for s in result["extractions_summary"]
+        ],
+    )
+
+    return ApiResponse(
+        success=True,
+        data=response_dto,
     )
