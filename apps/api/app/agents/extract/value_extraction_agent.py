@@ -25,7 +25,7 @@ from langchain_openai import ChatOpenAI
 from app.config import get_settings
 from app.models.cost import CostTracker, LLMUsage
 from app.models.extract.models import ExtractField, FollowupQuestion
-from app.agents.llm_wrapper import extract_usage_from_response
+from app.agents.llm_wrapper import extract_usage_from_response, log_llm_io
 from app.services.extract.domain.models import ValueCandidate
 from app.services.extract.ports import ValueExtractionAgentPort
 
@@ -113,6 +113,16 @@ class LangChainValueExtractionAgent:
         )
         self._cost_tracker = self._cost_tracker.add_llm_usage(usage)
 
+    @log_llm_io
+    async def _invoke_llm(
+        self,
+        messages: list[Any],
+        agent_name: str = "ValueExtractionAgent",
+        operation: str = "",
+    ) -> Any:
+        """Call LLM. Decorated with log_llm_io for debug prompt logging."""
+        return await self._llm.ainvoke(messages)
+
     async def resolve_candidates(
         self,
         field: ExtractField,
@@ -163,11 +173,12 @@ class LangChainValueExtractionAgent:
         )
 
         try:
-            response = await self._llm.ainvoke(
-                [
+            response = await self._invoke_llm(
+                messages=[
                     SystemMessage(content=system_prompt),
                     HumanMessage(content=user_prompt),
-                ]
+                ],
+                operation="resolve_candidates",
             )
 
             # Track token usage
@@ -270,11 +281,12 @@ class LangChainValueExtractionAgent:
         )
 
         try:
-            response = await self._llm.ainvoke(
-                [
+            response = await self._invoke_llm(
+                messages=[
                     SystemMessage(content=system_prompt),
                     HumanMessage(content=user_prompt),
-                ]
+                ],
+                operation="normalize_value",
             )
 
             # Track token usage
@@ -333,11 +345,12 @@ class LangChainValueExtractionAgent:
         )
 
         try:
-            response = await self._llm.ainvoke(
-                [
+            response = await self._invoke_llm(
+                messages=[
                     SystemMessage(content=system_prompt),
                     HumanMessage(content=user_prompt),
-                ]
+                ],
+                operation="detect_conflicts",
             )
 
             # Track token usage
@@ -398,11 +411,12 @@ class LangChainValueExtractionAgent:
         )
 
         try:
-            response = await self._llm.ainvoke(
-                [
+            response = await self._invoke_llm(
+                messages=[
                     SystemMessage(content=system_prompt),
                     HumanMessage(content=user_prompt),
-                ]
+                ],
+                operation="generate_question",
             )
 
             # Track token usage

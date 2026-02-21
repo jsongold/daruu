@@ -4,6 +4,8 @@ This module provides utilities for wrapping LLM calls to extract
 and track token usage for cost estimation.
 """
 
+import functools
+import inspect
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -12,12 +14,66 @@ from typing import Any, TypeVar
 from langchain_core.messages import BaseMessage
 
 from app.config import DEFAULT_MODEL
+from app.infrastructure.observability.logging import get_logger
 from app.models.cost import CostTracker, LLMUsage
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+_stdlib_logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
+
+# ---------------------------------------------------------------------------
+# Debug-logging decorator
+# ---------------------------------------------------------------------------
+
+def log_llm_io(func):
+    """Decorator: logs full LLM prompts and responses at DEBUG level."""
+    sig = inspect.signature(func)
+
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs):
+        if not _stdlib_logger.isEnabledFor(logging.DEBUG):
+            return await func(*args, **kwargs)
+
+        bound = sig.bind(*args, **kwargs)
+        bound.apply_defaults()
+        p = bound.arguments
+
+        agent = p.get("agent_name", "?")
+        op = p.get("operation", "?")
+
+        for msg in p.get("messages", []):
+            if isinstance(msg, dict):
+                role, content = msg.get("role", "?"), msg.get("content", "")
+            else:
+                role = getattr(msg, "type", "unknown")
+                content = msg.content if hasattr(msg, "content") else str(msg)
+            logger.debug("llm_prompt", agent=agent, operation=op, role=role, content=content)
+
+        result = await func(*args, **kwargs)
+
+        if isinstance(result, LLMResult):
+            resp_str = str(result.content)
+        elif isinstance(result, tuple) and len(result) >= 1:
+            resp = result[0]
+            resp_str = resp.model_dump_json(indent=2) if hasattr(resp, "model_dump_json") else str(resp)
+        elif hasattr(result, "model_dump_json"):
+            resp_str = result.model_dump_json(indent=2)
+        elif hasattr(result, "content"):
+            resp_str = str(result.content)
+        else:
+            resp_str = str(result)
+        logger.debug("llm_response", agent=agent, operation=op, content=resp_str)
+
+        return result
+
+    return wrapper
+
+
+# ---------------------------------------------------------------------------
+# Data classes
+# ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
 class LLMResult:
@@ -99,6 +155,7 @@ def extract_usage_from_response(
     )
 
 
+@log_llm_io
 async def invoke_with_tracking(
     llm: Any,
     messages: list[BaseMessage],
@@ -142,6 +199,7 @@ async def invoke_with_tracking(
     )
 
 
+@log_llm_io
 async def invoke_structured_with_tracking(
     llm: Any,
     messages: list[BaseMessage],

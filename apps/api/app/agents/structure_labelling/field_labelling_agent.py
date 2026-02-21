@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from typing import Any
 from uuid import uuid4
 
+from app.agents.llm_wrapper import log_llm_io
 from app.config import DEFAULT_MODEL, get_settings
 from app.models.common import BBox
 from app.models.cost import CostTracker, LLMUsage
@@ -310,6 +311,17 @@ class LangChainFieldLabellingAgent:
             operation=operation,
         )
         self._cost_tracker = self._cost_tracker.add_llm_usage(usage)
+
+    @log_llm_io
+    async def _invoke_llm(
+        self,
+        messages: list[Any],
+        agent_name: str = "FieldLabellingAgent",
+        operation: str = "",
+    ) -> Any:
+        """Call LLM with structured output. Decorated for debug logging."""
+        structured_llm = self._llm.with_structured_output(LinkageResponse)
+        return await structured_llm.ainvoke(messages)
 
     def _initialize_llm(self) -> None:
         """Initialize the LangChain LLM client."""
@@ -770,9 +782,10 @@ class LangChainFieldLabellingAgent:
         ]
 
         try:
-            # Use structured output with with_structured_output
-            structured_llm = self._llm.with_structured_output(LinkageResponse)
-            response = await structured_llm.ainvoke(messages)
+            response = await self._invoke_llm(
+                messages=messages,
+                operation="link_labels_to_boxes",
+            )
 
             # Track token usage
             self._track_usage(response, "link_labels_to_boxes")

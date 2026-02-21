@@ -16,6 +16,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
+from app.agents.llm_wrapper import log_llm_io
 from app.config import DEFAULT_MODEL
 from app.models.cost import CostTracker, LLMUsage
 from app.models.mapping import (
@@ -190,6 +191,20 @@ class LangChainMappingAgent:
         """Reset the cost tracker to zero."""
         self._cost_tracker = CostTracker.create(model_name=self._model_name)
 
+    @log_llm_io
+    async def _invoke_llm(
+        self,
+        messages: list[Any],
+        schema: type[Any] | None = None,
+        agent_name: str = "MappingAgent",
+        operation: str = "",
+    ) -> Any:
+        """Call LLM (optionally with structured output). Decorated for debug logging."""
+        llm = self._get_llm()
+        if schema is not None:
+            return await llm.with_structured_output(schema).ainvoke(messages)
+        return await llm.ainvoke(messages)
+
     def _track_usage(self, response: Any, operation: str) -> None:
         """Track token usage from an LLM response.
 
@@ -296,8 +311,6 @@ class LangChainMappingAgent:
             return None
 
         try:
-            llm = self._get_llm()
-
             # Build the prompt
             prompt_text = self._build_resolution_prompt(
                 source_field=source_field,
@@ -306,9 +319,6 @@ class LangChainMappingAgent:
                 context=context,
             )
 
-            # Use structured output for reliable parsing
-            structured_llm = llm.with_structured_output(MappingDecisionOutput)
-
             from langchain_core.messages import HumanMessage, SystemMessage
 
             messages = [
@@ -316,7 +326,11 @@ class LangChainMappingAgent:
                 HumanMessage(content=prompt_text),
             ]
 
-            decision: MappingDecisionOutput = await structured_llm.ainvoke(messages)
+            decision: MappingDecisionOutput = await self._invoke_llm(
+                messages=messages,
+                schema=MappingDecisionOutput,
+                operation="resolve_mapping",
+            )
 
             # Track token usage
             self._track_usage(decision, "resolve_mapping")
@@ -422,16 +436,12 @@ class LangChainMappingAgent:
         ]
 
         try:
-            llm = self._get_llm()
-
             # Build prompt for question generation
             prompt_text = self._build_question_prompt(
                 source_field=source_field,
                 candidates=candidates,
                 target_fields=target_fields,
             )
-
-            structured_llm = llm.with_structured_output(FollowupQuestionOutput)
 
             from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -440,7 +450,11 @@ class LangChainMappingAgent:
                 HumanMessage(content=prompt_text),
             ]
 
-            output: FollowupQuestionOutput = await structured_llm.ainvoke(messages)
+            output: FollowupQuestionOutput = await self._invoke_llm(
+                messages=messages,
+                schema=FollowupQuestionOutput,
+                operation="generate_question",
+            )
 
             # Track token usage
             self._track_usage(output, "generate_question")
@@ -495,16 +509,12 @@ class LangChainMappingAgent:
             return ()
 
         try:
-            llm = self._get_llm()
-
             # Build prompt for batch mapping
             prompt_text = self._build_batch_prompt(
                 source_fields=source_fields,
                 target_fields=target_fields,
                 existing_mappings=existing_mappings,
             )
-
-            structured_llm = llm.with_structured_output(BatchMappingOutput)
 
             from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -513,7 +523,11 @@ class LangChainMappingAgent:
                 HumanMessage(content=prompt_text),
             ]
 
-            output: BatchMappingOutput = await structured_llm.ainvoke(messages)
+            output: BatchMappingOutput = await self._invoke_llm(
+                messages=messages,
+                schema=BatchMappingOutput,
+                operation="infer_mappings_batch",
+            )
 
             # Track token usage
             self._track_usage(output, "infer_mappings_batch")
