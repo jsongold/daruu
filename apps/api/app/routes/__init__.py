@@ -19,6 +19,7 @@ from app.routes.review import router as review_router
 from app.routes.review_service import router as review_service_router
 from app.routes.structure_labelling import router as structure_labelling_router
 from app.routes.templates import router as templates_router
+from app.routes.prompt_attempts import router as prompt_attempts_router
 from app.routes.vision_autofill import router as vision_autofill_router
 
 __all__ = [
@@ -40,6 +41,7 @@ __all__ = [
     "review_router",
     "review_service_router",
     "structure_labelling_router",
+    "prompt_attempts_router",
     "templates_router",
     "vision_autofill_router",
 ]

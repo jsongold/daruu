@@ -29,6 +29,7 @@ from app.routes import (
     ingest_router,
     jobs_router,
     mapping_router,
+    prompt_attempts_router,
     review_router,
     review_service_router,
     structure_labelling_router,
@@ -202,6 +203,10 @@ All errors follow a consistent format with `success: false` and an `error` objec
                 "name": "vision-autofill",
                 "description": "AI-powered form autofill using data sources (v1 API)",
             },
+            {
+                "name": "prompt-attempts",
+                "description": "Prompt tuning history for vision autofill (v1 API)",
+            },
         ],
         contact={
             "name": "Daru PDF Team",
@@ -263,6 +268,9 @@ All errors follow a consistent format with `success: false` and an `error` objec
 
     # Vision Autofill API (v1)
     app.include_router(vision_autofill_router, prefix=settings.api_prefix)
+
+    # Prompt Attempts API (prompt tuning feature)
+    app.include_router(prompt_attempts_router, prefix=settings.api_prefix)
 
     # Root endpoint
     @app.get("/")

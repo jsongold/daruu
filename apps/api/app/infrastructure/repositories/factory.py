@@ -42,6 +42,7 @@ from app.repositories import (
     FileRepository,
     JobRepository,
     MessageRepository,
+    PromptAttemptRepository,
     TemplateRepository,
 )
 
@@ -74,6 +75,9 @@ _memory_edit_repo: "EditRepository | None" = None
 
 # Data source repository (Supabase)
 _supabase_data_source_repo: "DataSourceRepository | None" = None
+
+# Prompt attempt repository (Supabase)
+_supabase_prompt_attempt_repo: "PromptAttemptRepository | None" = None
 
 
 def _get_memory_document_repository() -> DocumentRepository:
@@ -369,6 +373,36 @@ def get_data_source_repository(
     return _get_supabase_data_source_repository()
 
 
+def _get_supabase_prompt_attempt_repository() -> PromptAttemptRepository:
+    """Get Supabase prompt attempt repository singleton."""
+    global _supabase_prompt_attempt_repo
+    _ensure_supabase_configured()
+    if _supabase_prompt_attempt_repo is None:
+        from app.repositories.supabase import SupabasePromptAttemptRepository
+        _supabase_prompt_attempt_repo = SupabasePromptAttemptRepository()
+        logger.debug("Initialized Supabase prompt attempt repository")
+    return _supabase_prompt_attempt_repo
+
+
+def get_prompt_attempt_repository(
+    mode: RepositoryMode = "supabase",
+) -> PromptAttemptRepository:
+    """Get the prompt attempt repository.
+
+    Args:
+        mode: Repository mode:
+            - "supabase": Use Supabase (default, required for production)
+            - "memory": Use in-memory storage (for unit tests only)
+
+    Returns:
+        PromptAttemptRepository implementation.
+
+    Raises:
+        RuntimeError: If supabase mode but Supabase is not configured.
+    """
+    return _get_supabase_prompt_attempt_repository()
+
+
 def clear_repository_singletons() -> None:
     """Clear all repository singleton instances.
 
@@ -377,7 +411,7 @@ def clear_repository_singletons() -> None:
     global _memory_doc_repo, _memory_job_repo, _memory_file_repo, _memory_event_pub
     global _supabase_doc_repo, _supabase_job_repo, _supabase_file_repo
     global _memory_conv_repo, _memory_msg_repo, _memory_template_repo, _memory_edit_repo
-    global _supabase_data_source_repo
+    global _supabase_data_source_repo, _supabase_prompt_attempt_repo
 
     _memory_doc_repo = None
     _memory_job_repo = None
@@ -391,6 +425,7 @@ def clear_repository_singletons() -> None:
     _memory_template_repo = None
     _memory_edit_repo = None
     _supabase_data_source_repo = None
+    _supabase_prompt_attempt_repo = None
 
 
 def get_active_mode() -> str:

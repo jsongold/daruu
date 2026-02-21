@@ -23,10 +23,12 @@ from app.repositories.supabase.data_source_repository import SupabaseDataSourceR
 from app.repositories.supabase.document_repository import SupabaseDocumentRepository
 from app.repositories.supabase.file_repository import SupabaseFileRepository
 from app.repositories.supabase.job_repository import SupabaseJobRepository
+from app.repositories.supabase.prompt_attempt_repository import SupabasePromptAttemptRepository
 
 __all__ = [
     "SupabaseDataSourceRepository",
     "SupabaseDocumentRepository",
     "SupabaseFileRepository",
     "SupabaseJobRepository",
+    "SupabasePromptAttemptRepository",
 ]

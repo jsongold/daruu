@@ -54,6 +54,7 @@ from app.infrastructure.repositories.factory import (
     get_file_repository,
     get_job_repository,
     get_message_repository,
+    get_prompt_attempt_repository,
     get_template_repository,
 )
 
@@ -76,6 +77,7 @@ __all__ = [
     "get_file_repository",
     "get_job_repository",
     "get_message_repository",
+    "get_prompt_attempt_repository",
     "get_template_repository",
     # Utility functions
     "get_active_mode",
