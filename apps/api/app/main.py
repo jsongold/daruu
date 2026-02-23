@@ -17,6 +17,7 @@ from app.routes import (
     adjust_router,
     analyze_router,
     auth_router,
+    autofill_pipeline_router,
     conversations_router,
     data_sources_router,
     documents_router,
@@ -204,6 +205,10 @@ All errors follow a consistent format with `success: false` and an `error` objec
                 "description": "AI-powered form autofill using data sources (v1 API)",
             },
             {
+                "name": "autofill-pipeline",
+                "description": "To-Be autofill pipeline: FormContextBuilder -> FillPlanner -> FormRenderer",
+            },
+            {
                 "name": "prompt-attempts",
                 "description": "Prompt tuning history for vision autofill (v1 API)",
             },
@@ -268,6 +273,9 @@ All errors follow a consistent format with `success: false` and an `error` objec
 
     # Vision Autofill API (v1)
     app.include_router(vision_autofill_router, prefix=settings.api_prefix)
+
+    # Autofill Pipeline API (To-Be architecture)
+    app.include_router(autofill_pipeline_router, prefix=settings.api_prefix)
 
     # Prompt Attempts API (prompt tuning feature)
     app.include_router(prompt_attempts_router, prefix=settings.api_prefix)

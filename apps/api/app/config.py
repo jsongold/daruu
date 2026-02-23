@@ -675,6 +675,10 @@ class Settings(BaseSettings):
     cost_max_per_job: float | None = None
     cost_warn_threshold: float | None = None
 
+    # Autofill architecture toggle: "legacy" uses VisionAutofillService,
+    # "tobe" uses the new FormContextBuilder -> FillPlanner -> FormRenderer pipeline
+    autofill_architecture: str = "legacy"
+
     # Celery settings (can also use CELERY_ prefix directly)
     celery_broker_url: str = "redis://localhost:6379/0"
     celery_result_backend: str = "redis://localhost:6379/1"
