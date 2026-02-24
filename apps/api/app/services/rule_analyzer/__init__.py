@@ -1,5 +1,5 @@
 """RuleAnalyzer service package."""
 
-from app.services.rule_analyzer.analyzer import RuleAnalyzerStub
+from app.services.rule_analyzer.analyzer import RuleAnalyzer, RuleAnalyzerStub
 
-__all__ = ["RuleAnalyzerStub"]
+__all__ = ["RuleAnalyzer", "RuleAnalyzerStub"]
