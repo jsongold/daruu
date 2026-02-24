@@ -74,6 +74,114 @@ Return your response as a valid JSON object with:
 """
 
 
+DETAILED_MODE_SYSTEM_PROMPT = """You are a form-filling assistant. You can either:
+1. Ask the user a clarifying question (when data is ambiguous or missing)
+2. Return a fill plan (when you have enough information)
+
+For each turn, respond with EXACTLY ONE of:
+
+A) A question (JSON):
+{
+  "type": "question",
+  "question": "clear question text in the form's language",
+  "question_type": "single_choice | multiple_choice | free_text | confirm",
+  "options": [{"id": "opt1", "label": "..."}],
+  "context": "why you are asking this"
+}
+
+B) A fill plan (JSON):
+{
+  "type": "fill_plan",
+  "filled_fields": [
+    {"field_id": "...", "value": "...", "confidence": 0.95, "source": "..."}
+  ],
+  "unfilled_fields": ["field_id_1", "field_id_2"],
+  "warnings": ["any warnings about data quality"]
+}
+
+## Field Identification:
+Each field may include a `nearby_labels` array — text found near the field on \
+the PDF page. When `field_id` is generic (e.g. Text1, Text2, Dropdown1), use \
+`nearby_labels` to understand the field's semantic purpose. The first label in \
+the array is the closest to the field and most likely to be the actual label.
+
+## Data Source Interpretation:
+- If data sources contain structured key-value pairs, match keys to fields semantically
+- If data sources contain unstructured text, infer values by recognizing patterns \
+(names, addresses, numbers, dates) and matching them to field labels or nearby_labels
+- Match field labels/names semantically across languages
+
+## Question Guidelines:
+- Ask only the most impactful questions (3-5 max across all turns)
+- Prioritize questions that resolve ambiguity for MANY fields at once
+- When the user answers, use their answer to inform your next decision
+- When you have enough info, return the fill plan — do not keep asking
+- Use the form's language for questions (match the language of nearby_labels)
+- For single_choice/multiple_choice, provide 2-4 clear options
+- For confirm, phrase as a yes/no question
+
+## Fill Plan Rules (same as quick mode):
+- Only fill fields where you have confidence >= 0.5
+- Match date formats to field type (use YYYY-MM-DD for date fields)
+- For checkboxes, return "true" or "false"
+- Include the source name/identifier for each filled field
+"""
+
+DETAILED_MODE_USER_PROMPT_TEMPLATE = """## Target Form Fields
+
+{fields_json}
+
+## Available Data Sources
+
+{data_sources_text}
+
+## Additional Rules
+
+{rules_text}
+
+## Conversation History
+
+{conversation_history}
+
+## Task
+
+Analyze the form fields and data sources. If you need clarification to fill \
+the form accurately, ask ONE question. If you have enough information, return \
+a fill plan.
+
+Return your response as a valid JSON object — either a question or a fill plan.
+"""
+
+
+def build_detailed_prompt(
+    fields_json: str,
+    data_sources_text: str,
+    conversation_history: str = "No previous conversation.",
+    rules: list[str] | None = None,
+) -> str:
+    """Build the user prompt for detailed mode.
+
+    Args:
+        fields_json: JSON string of field definitions.
+        data_sources_text: Formatted text of extracted data from sources.
+        conversation_history: Formatted previous Q&A turns.
+        rules: Optional list of custom rules.
+
+    Returns:
+        Formatted prompt string.
+    """
+    rules_text = "None specified."
+    if rules:
+        rules_text = "\n".join(f"- {rule}" for rule in rules)
+
+    return DETAILED_MODE_USER_PROMPT_TEMPLATE.format(
+        fields_json=fields_json,
+        data_sources_text=data_sources_text,
+        rules_text=rules_text,
+        conversation_history=conversation_history,
+    )
+
+
 def build_autofill_prompt(
     fields_json: str,
     data_sources_text: str,

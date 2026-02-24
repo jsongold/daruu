@@ -475,11 +475,7 @@ async def autofill_turn(
     pipeline: AutofillPipelineService = Depends(get_pipeline_service),
     doc_service: DocumentService = Depends(get_document_service),
 ) -> ApiResponse[AutofillTurnResponseDTO]:
-    """Handle a single turn in detailed autofill mode.
-
-    Phase 3+: Currently returns a fill plan (same as quick mode).
-    Will be extended to support question/answer flow.
-    """
+    """Handle a single turn in detailed autofill mode."""
     logger.info(
         f"Autofill turn: document={request.document_id}, "
         f"conversation_turns={len(request.conversation)}, "
@@ -505,15 +501,29 @@ async def autofill_turn(
     doc = doc_service.get_document(request.document_id)
     target_ref = doc.ref if doc else request.document_id
 
+    # Convert conversation DTOs to dicts for the planner
+    conversation_history = [
+        {
+            "role": turn.role,
+            "type": turn.type,
+            "question": turn.question,
+            "question_type": turn.question_type,
+            "options": [{"id": o.id, "label": o.label} for o in turn.options],
+            "selected_option_ids": turn.selected_option_ids,
+            "free_text": turn.free_text,
+        }
+        for turn in request.conversation
+    ]
+
     try:
-        # Phase 2: Detailed mode falls through to quick mode
-        # Phase 3+: Will add question/answer support here
-        result = await pipeline.autofill(
+        turn_result, step_logs, pipeline_result = await pipeline.autofill_turn(
             document_id=request.document_id,
             conversation_id=request.conversation_id,
             fields=fields,
             target_document_ref=target_ref,
             user_rules=user_rules,
+            conversation_history=conversation_history,
+            just_fill=request.just_fill,
         )
     except Exception as e:
         logger.exception(f"Autofill turn failed: {e}")
@@ -523,32 +533,51 @@ async def autofill_turn(
         )
         return ApiResponse(success=False, data=error_dto, error=str(e))
 
-    # Build fill plan response
+    if turn_result.type == "question" and turn_result.question:
+        response_dto = AutofillTurnResponseDTO(
+            type="question",
+            question=turn_result.question.text,
+            question_type=turn_result.question.type.value,
+            options=[
+                QuestionOptionDTO(id=o.id, label=o.label)
+                for o in turn_result.question.options
+            ],
+            context=turn_result.question.context,
+            step_logs=[log.model_dump() for log in step_logs],
+        )
+        return ApiResponse(success=True, data=response_dto)
+
+    # Fill plan response
     filled_fields: list[FilledFieldDTO] = []
     unfilled_fields: list[str] = []
     skipped_fields: list[str] = []
 
-    for action in result.plan.actions:
-        if action.action == FillActionType.FILL and action.value:
-            filled_fields.append(FilledFieldDTO(
-                field_id=action.field_id,
-                value=action.value,
-                confidence=action.confidence,
-                source=action.source,
-            ))
-        elif action.action == FillActionType.SKIP:
-            skipped_fields.append(action.field_id)
-        else:
-            unfilled_fields.append(action.field_id)
+    if pipeline_result:
+        for action in pipeline_result.plan.actions:
+            if action.action == FillActionType.FILL and action.value:
+                filled_fields.append(FilledFieldDTO(
+                    field_id=action.field_id,
+                    value=action.value,
+                    confidence=action.confidence,
+                    source=action.source,
+                ))
+            elif action.action == FillActionType.SKIP:
+                skipped_fields.append(action.field_id)
+            else:
+                unfilled_fields.append(action.field_id)
 
     response_dto = AutofillTurnResponseDTO(
         type="fill_plan",
         filled_fields=filled_fields,
         unfilled_fields=unfilled_fields,
         skipped_fields=skipped_fields,
-        filled_document_ref=result.report.filled_document_ref,
-        processing_time_ms=result.processing_time_ms,
-        step_logs=[log.model_dump() for log in result.step_logs],
+        filled_document_ref=(
+            pipeline_result.report.filled_document_ref if pipeline_result else None
+        ),
+        processing_time_ms=(
+            pipeline_result.processing_time_ms if pipeline_result else 0
+        ),
+        step_logs=[log.model_dump() for log in step_logs],
     )
 
     return ApiResponse(success=True, data=response_dto)

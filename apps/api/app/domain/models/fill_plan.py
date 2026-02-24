@@ -1,6 +1,7 @@
 """Domain models for the FillPlan — output of FillPlanner.
 
 FillPlan describes what to do with each field: fill, skip, or ask the user.
+Also includes models for interactive Q&A in detailed autofill mode.
 """
 
 from enum import StrEnum
@@ -14,6 +15,42 @@ class FillActionType(StrEnum):
     FILL = "fill"
     SKIP = "skip"
     ASK_USER = "ask_user"
+
+
+class QuestionType(StrEnum):
+    """Type of question to ask the user."""
+
+    SINGLE_CHOICE = "single_choice"
+    MULTIPLE_CHOICE = "multiple_choice"
+    FREE_TEXT = "free_text"
+    CONFIRM = "confirm"
+
+
+class QuestionOption(BaseModel):
+    """An option in a question."""
+
+    id: str = Field(..., description="Option identifier")
+    label: str = Field(..., description="Option display text")
+
+    model_config = {"frozen": True}
+
+
+class FieldQuestion(BaseModel):
+    """A question to ask the user about one or more fields."""
+
+    text: str = Field(..., description="Question text")
+    type: QuestionType = Field(..., description="Question type")
+    options: tuple[QuestionOption, ...] = Field(
+        default=(), description="Options for choice questions"
+    )
+    placeholder: str | None = Field(
+        None, description="Placeholder text for free_text type"
+    )
+    context: str | None = Field(
+        None, description="Why the system is asking this question"
+    )
+
+    model_config = {"frozen": True}
 
 
 class FieldFillAction(BaseModel):
@@ -32,6 +69,9 @@ class FieldFillAction(BaseModel):
     )
     reason: str | None = Field(
         None, description="Reason for skipping or asking user"
+    )
+    question: FieldQuestion | None = Field(
+        None, description="Question for ASK_USER actions"
     )
 
     model_config = {"frozen": True}

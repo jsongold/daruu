@@ -6,11 +6,14 @@ Pipeline:
   3. FillPlanner.plan(context) -> FillPlan
   4. FormRenderer.render(plan, pdf_ref) -> RenderReport
   5. Return AutofillPipelineResult with per-step logs
+
+For Detailed mode, also supports multi-turn Q&A via autofill_turn().
 """
 
 import asyncio
 import logging
 import time
+from typing import Any
 
 from app.domain.models.fill_plan import FillActionType
 from app.domain.models.form_context import FormContext, FormFieldSpec
@@ -21,6 +24,7 @@ from app.domain.protocols.form_renderer import FormRendererProtocol
 from app.domain.protocols.rule_analyzer import RuleAnalyzerProtocol
 from app.services.autofill_pipeline.models import AutofillPipelineResult
 from app.services.autofill_pipeline.step_log import PipelineStepLog
+from app.services.fill_planner.planner import TurnResult
 
 logger = logging.getLogger(__name__)
 
@@ -220,3 +224,116 @@ class AutofillPipelineService:
             processing_time_ms=processing_time_ms,
             step_logs=tuple(step_logs),
         )
+
+    async def autofill_turn(
+        self,
+        document_id: str,
+        conversation_id: str,
+        fields: tuple[FormFieldSpec, ...],
+        target_document_ref: str,
+        user_rules: tuple[str, ...] = (),
+        rule_docs: tuple[str, ...] = (),
+        conversation_history: list[dict[str, Any]] | None = None,
+        just_fill: bool = False,
+    ) -> tuple[TurnResult, tuple[PipelineStepLog, ...], AutofillPipelineResult | None]:
+        """Execute a single turn in detailed autofill mode.
+
+        Returns:
+            Tuple of (TurnResult, step_logs, pipeline_result).
+            pipeline_result is only set when TurnResult.type == "fill_plan".
+        """
+        start_time = time.time()
+        step_logs: list[PipelineStepLog] = []
+
+        # Step 1: Build context (same as quick mode)
+        t0 = time.time()
+        context_task = self._context_builder.build(
+            document_id=document_id,
+            conversation_id=conversation_id,
+            field_hints=fields,
+            user_rules=user_rules,
+        )
+        rule_task = self._rule_analyzer.analyze(
+            rule_docs=rule_docs,
+            field_hints=fields,
+        )
+        context, rule_snippets = await asyncio.gather(context_task, rule_task)
+        context_duration = int((time.time() - t0) * 1000)
+
+        step_logs.append(PipelineStepLog(
+            step_name="context_build",
+            status="success",
+            duration_ms=context_duration,
+            summary=f"{len(context.data_sources)} sources, {len(context.mapping_candidates)} candidates",
+            details={
+                "data_sources_count": len(context.data_sources),
+                "candidates_count": len(context.mapping_candidates),
+            },
+        ))
+
+        # Step 2: Merge rules
+        if rule_snippets:
+            merged_rules = context.rules + tuple(
+                snippet.rule_text for snippet in rule_snippets
+            )
+            context = FormContext(
+                document_id=context.document_id,
+                conversation_id=context.conversation_id,
+                fields=context.fields,
+                data_sources=context.data_sources,
+                mapping_candidates=context.mapping_candidates,
+                rules=merged_rules,
+            )
+
+        # Step 3: Plan turn (may return question or fill plan)
+        t2 = time.time()
+        turn_result = await self._fill_planner.plan_turn(
+            context,
+            conversation_history=conversation_history,
+            just_fill=just_fill,
+        )
+        turn_duration = int((time.time() - t2) * 1000)
+
+        step_logs.append(PipelineStepLog(
+            step_name="fill_plan_turn",
+            status="success",
+            duration_ms=turn_duration,
+            summary=f"type={turn_result.type}",
+            details={
+                "turn_type": turn_result.type,
+                "raw_llm_response": turn_result.raw_llm_response,
+            },
+        ))
+
+        # Step 4: If fill plan, render
+        pipeline_result: AutofillPipelineResult | None = None
+        if turn_result.type == "fill_plan" and turn_result.plan:
+            t3 = time.time()
+            report = await self._form_renderer.render(
+                plan=turn_result.plan,
+                target_document_ref=target_document_ref,
+            )
+            render_duration = int((time.time() - t3) * 1000)
+
+            step_logs.append(PipelineStepLog(
+                step_name="render",
+                status="success",
+                duration_ms=render_duration,
+                summary=f"{report.filled_count} filled, {report.failed_count} failed",
+                details={
+                    "filled_count": report.filled_count,
+                    "failed_count": report.failed_count,
+                    "filled_document_ref": report.filled_document_ref,
+                },
+            ))
+
+            processing_time_ms = int((time.time() - start_time) * 1000)
+            pipeline_result = AutofillPipelineResult(
+                context=context,
+                plan=turn_result.plan,
+                report=report,
+                processing_time_ms=processing_time_ms,
+                step_logs=tuple(step_logs),
+            )
+
+        return turn_result, tuple(step_logs), pipeline_result

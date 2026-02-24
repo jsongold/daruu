@@ -4,7 +4,7 @@ FillPlanner uses LLM (or rules) to decide what value to fill into each
 form field, producing a FillPlan.
 """
 
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from app.domain.models.fill_plan import FillPlan
 from app.domain.models.form_context import FormContext
@@ -33,5 +33,17 @@ class FillPlannerProtocol(Protocol):
 
         Raises:
             RuntimeError: If the LLM call fails and no fallback is available.
+        """
+        ...
+
+    async def plan_turn(
+        self,
+        context: FormContext,
+        conversation_history: list[dict[str, Any]] | None = None,
+        just_fill: bool = False,
+    ) -> Any:
+        """Execute a single turn in detailed mode.
+
+        Returns either a question or a fill plan.
         """
         ...
