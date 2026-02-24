@@ -118,11 +118,11 @@ VisionAutofill v2 は既に **1回** で完結している。
 
 | # | 旧名（抽象的） | 新名 | 責務（1文） | LLM |
 |---|---|---|---|---|
-| S1 | Compiler | **FormContextBuilder** | フォーム構造+データソース+候補+ルールスニペットを収集・正規化し、`FormContext` を組み立てる | 非LLM |
+| S1 | Compiler | **FormContextBuilder** | フォーム構造+データソース+候補を収集・正規化し、RuleAnalyzer の出力と merge して `FormContext` を組み立てる | 非LLM |
 | S2 | Decision Engine | **FillPlanner** | `FormContext` を受け取り、LLM 1回の推論で各フィールドの fill/skip/ask_user を計画する | **LLM 1回** |
 | S3 | Executor | **FormRenderer** | `FillPlan` に従って PDF に値を描画し、検証結果付きの完成 PDF を出力する | 非LLM |
 | S4 | Learning Adapter | **CorrectionTracker** | ユーザーの修正差分を収集・分類し、FormContextBuilder/FillPlanner の改善に資産化する | 非LLM（非同期） |
-| S5 | （新規） | **RuleIndexer** | ルールドキュメントを事前に取り込み、フィールド⇔スニペットの対応を永続化する。FormContextBuilder が実行時に参照する | 非LLM（オフライン）or LLM（事前1回） |
+| S5 | （新規） | **RuleAnalyzer** | ルールドキュメントを LLM で読解し、関連スニペットを抽出・**永続化**する。2回目以降は DB 参照でスキップ。FormContextBuilder と並行実行 | **LLM**（初回のみ） |
 
 ### データ構造命名
 
@@ -134,35 +134,63 @@ VisionAutofill v2 は既に **1回** で完結している。
 | FieldDecision | **FieldFillAction** | FillPlan の要素 | 1 フィールドの判断結果（fill/skip/ask_user + 値 + 根拠） |
 | render_report | **RenderReport** | FormRenderer → API/UI | 描画結果（成功/失敗/警告）+ validation_result |
 | （なし） | **CorrectionRecord** | CorrectionTracker → DB | 修正差分（before/after + 分類 + FillPlan スナップショット） |
-| （なし） | **RuleSnippet** | RuleIndexer → DB → FormContextBuilder → FillPlanner | ルールドキュメントから抽出した断片（セクション名+テキスト+関連フィールド） |
+| （なし） | **RuleSnippet** | RuleAnalyzer → **DB（永続化）** → FormContext → FillPlanner | ルールドキュメントから LLM が抽出・永続化した断片（セクション名+テキスト+関連フィールド+判断理由）。2回目以降は DB 参照 |
 
 ### To-Be データフロー
 
 ```
-  オフライン（事前）                オンライン（フォーム処理時）
-┌─────────────────────┐
-│    RuleIndexer       │
-│                      │
-│ ルールDoc取込        │    非LLM                    LLM 1回                   非LLM
-│ → セクション分割     │  ┌──────────────────────┐  ┌─────────────────────┐  ┌──────────────────────┐
-│ → フィールド紐付     │  │ FormContextBuilder   │  │    FillPlanner      │  │   FormRenderer       │
-│ → RuleSnippet永続化  │  │                      │  │                     │  │                      │
-│                      │  │ PDF構造検出          │  │ FormContext →       │  │ FillPlan →           │
-│ ※フォーム種別登録時  │──▶│ データソース抽出      │──▶│ LLM 1回呼び出し →  │──▶│ PDF描画（AcroForm/   │
-│   に1回実行          │  │ 候補生成(fuzzy/prox) │  │ FillPlan生成        │  │   Overlay）          │
-│                      │  │ 正規化（決定論）     │  │                     │  │ 検証(required/format/│
-└─────────────────────┘  │ DB→関連スニペット取得 │  │ fill / skip /       │  │   overflow/overlap)  │
-                         │                      │  │ ask_user を判定     │  │ RenderReport 出力    │
-                         │ → FormContext 出力    │  │                     │  │ → 完成PDF + 検証結果 │
-                         └──────────────────────┘  └─────────────────────┘  └──────────────────────┘
-                                                                                     │
-                                                                          ┌──────────▼───────────┐
-                                                                          │  CorrectionTracker    │
-                                                                          │  （非同期・オプション）│
-                                                                          └──────────────────────┘
+  オンライン（フォーム処理時） ── 並行実行フェーズ + 統合フェーズ
+
+  ユーザー入力: 申告書PDF + ルールDoc(不定) + データソース
+                          │
+            ┌─────────────┴─────────────┐
+            ▼                           ▼
+  ┌──────────────────────┐   ┌──────────────────────────┐
+  │ FormContextBuilder   │   │   RuleAnalyzer             │
+  │ （非LLM）            │   │   （LLM or DB参照）        │
+  │                      │   │                            │
+  │ PDF構造検出          │   │ doc_hash で DB 検索        │
+  │ データソース抽出      │   │ ├─ HIT → DB から取得      │
+  │ 候補生成(fuzzy/prox) │   │ └─ MISS → LLM で解析      │
+  │ 正規化（決定論）     │   │          → DB に永続化     │
+  │                      │   │ → RuleSnippet[] 生成       │
+  │ → PartialContext     │   │                            │
+  └──────────┬───────────┘   └────────────┬───────────────┘
+             │                           │
+             └─────────────┬─────────────┘
+                           ▼
+                  ┌─────────────────┐
+                  │  FormContext     │
+                  │  統合（merge）   │
+                  │  PartialContext  │
+                  │  + RuleSnippet[] │
+                  └────────┬────────┘
+                           ▼
+                  ┌─────────────────────┐       ┌──────────────────────┐
+                  │    FillPlanner      │       │   FormRenderer       │
+                  │    （LLM 1回）      │       │   （非LLM）          │
+                  │                     │       │                      │
+                  │ FormContext →       │       │ FillPlan →           │
+                  │ LLM 1回呼び出し →  │──────▶│ PDF描画（AcroForm/   │
+                  │ FillPlan生成        │       │   Overlay）          │
+                  │                     │       │ 検証(required/format/│
+                  │ fill / skip /       │       │   overflow/overlap)  │
+                  │ ask_user を判定     │       │ RenderReport 出力    │
+                  └─────────────────────┘       │ → 完成PDF + 検証結果 │
+                                                └──────────┬───────────┘
+                                                           │
+                                                ┌──────────▼───────────┐
+                                                │  CorrectionTracker    │
+                                                │  （非同期・オプション）│
+                                                └──────────────────────┘
 ```
 
-**要点**: RuleIndexer はオフラインで事前にルールドキュメントを処理し、`RuleSnippet` を DB に永続化する。FormContextBuilder は実行時に DB から関連スニペットを引くだけ（検索コスト ≈ 0）。引いたスニペットは `FormContext.rule_snippets` として FillPlanner（LLM）に渡す。LLM はこのスニペットを読んで fill/skip の判断根拠とする。
+**要点**:
+- **RuleAnalyzer** はオンラインで FormContextBuilder と**並行実行**される。ドキュメントの種類は不定（ボラタイル）であり、事前登録ステップは不要。
+- **初回**: LLM でルールドキュメントを解析し、`RuleSnippet[]` を生成 → **DB に永続化**する。
+- **2回目以降**: 同一ドキュメント（`doc_hash` 一致）の場合は DB から取得し、**LLM 呼び出しをスキップ**する。
+- 両サービスの出力を **merge** して `FormContext` を構築し、FillPlanner に渡す。
+- LLM 呼び出し: 初回は **2回**（RuleAnalyzer + FillPlanner、並行実行）、2回目以降は **1回**（FillPlanner のみ）。
 
 ---
 
@@ -202,10 +230,10 @@ VisionAutofill v2 は既に **1回** で完結している。
    - 現状：`VisionAutofillResponse` の `FilledField` が最も近いが、`canonical_key`, `fill|skip|ask_user` 判定, `formatter`, `rule_trace` が欠落
    - 必要：各フィールドの判断結果を `FieldFillAction` として構造化した中間表現
 
-3. **ルールドキュメントの取り込みパイプライン**
+3. **ルールドキュメントの読解パイプライン（RuleAnalyzer）**
    - 現状：`VisionAutofillRequest.rules` は `list[str]`（ユーザーが手入力した短文）、MappingService の `UserRule` はパターンマッチのみ
-   - 課題：実際の記入要領・法令ガイドライン等は数十〜数百ページの自然言語ドキュメントである。これを丸ごと LLM に渡すとトークン超過になるが、どのセクションがどのフィールドに関連するかの切り出し（チャンキング＋検索）の仕組みが存在しない
-   - 必要：ルールドキュメントを事前に取り込み、フィールド/フォームに関連する箇所だけを `FormContext` に載せるための検索・抽出パイプライン（後述: セクション 5.4）
+   - 課題：実際の記入要領・法令ガイドライン等は数十〜数百ページの自然言語ドキュメントであり、種類も不定（ボラタイル）。丸ごと LLM に渡すとトークン超過になるが、関連セクションの切り出しの仕組みが存在しない
+   - 必要：リクエスト毎にルールドキュメントを LLM で読解し、関連スニペットだけを `FormContext` に載せる並行実行サービス（後述: セクション 5.4 RuleAnalyzer）
 
 4. **出典/Provenance の統一追跡**
    - 現状：`Evidence` モデルは存在するが、FormContextBuilder から最終 PDF までの一貫した追跡チェーンがない
@@ -261,7 +289,7 @@ VisionAutofill v2 は既に **1回** で完結している。
 ### 4.4 Unknown（仕様不確定/判断保留）
 
 1. **OCR の位置づけ**: FormContextBuilder の内部処理か、別サービスか
-2. **ルールドキュメント**: 元ドキュメントの形式（PDF? Word? HTML?）、分量（ページ数）、更新頻度、1フォームあたり参照すべきドキュメント数が未確定
+2. **ルールドキュメント**: 元ドキュメントの形式（PDF? Word? HTML?）、分量（ページ数）、1リクエストあたりの添付ドキュメント数の上限が未確定。種類は不定（ボラタイル）であることは確定
 3. **フォーム間依存**: 複数フォーム間の値参照が必要なケース（例：確定申告書の値を住民税申告書に転記）の対応方針
 4. **バッチ処理**: 複数フォームを同時処理する場合の `FormContext` 共有範囲
 
@@ -302,13 +330,12 @@ FillPlanner は以下を **1回の呼び出し** で判定する：
   │     source_key, target_field_id,
   │     similarity_score, match_reason
   │   }]
-  ├── rule_snippets: [{                # ルールドキュメントから検索・抽出した断片
-  │     snippet_id,
+  ├── rule_snippets: [{                # RuleAnalyzer（並行実行）が LLM で抽出した断片
   │     source_doc: "記入要領2025.pdf",
   │     section: "第3章 所得控除",
   │     text: "...該当する自然言語テキスト...",
-  │     relevant_field_ids: [field_3, field_7],
-  │     relevance_score
+  │     field_ids: [field_3, field_7],
+  │     relevance_reason: "医療費控除の記入条件を定義"
   │   }]
   ├── user_rules: ["ユーザーが手入力した短文ルール"]
   └── provenance_context: {
@@ -348,8 +375,8 @@ FillPlanner は以下を **1回の呼び出し** で判定する：
 
 #### 5.3.3 ルールドキュメント断片の制御
 
-- FormContextBuilder がルールドキュメントインデックスから関連スニペットを検索し、`rule_snippets` として `FormContext` に載せる（詳細はセクション 5.4）
-- 1回の FillPlanner 呼び出しに載せるスニペット数を上限付きで制御（例: 最大 5 スニペット、合計 1,500 tokens 以内）
+- **RuleAnalyzer**（並行実行サービス）がルールドキュメントを LLM で読解し、関連 `RuleSnippet[]` を抽出（詳細はセクション 5.4）
+- 抽出された `rule_snippets` は FormContext に merge する際、上限付きで制御（例: 最大 5 スニペット、合計 1,500 tokens 以内）。relevance スコアで優先度付き truncation
 - ユーザーが手入力した短文ルール（`user_rules`）はそのまま全量を載せる（通常は数行のため影響小）
 
 #### 5.3.4 データソースの圧縮
@@ -370,360 +397,521 @@ FillPlanner は以下を **1回の呼び出し** で判定する：
 | User rules（手入力ルール） | ~100 tokens |
 | Mapping candidates | ~50 tokens/field × 20 ambiguous = 1,000 tokens |
 
-### 5.4 ルールドキュメントの取り込み設計：RuleIndexer
+### 5.4 ルールドキュメントの取り込み設計：RuleAnalyzer
 
 #### 前提と設計判断
 
-ルールドキュメント（記入要領、法令ガイドライン等）は数十〜数百ページの自然言語テキストである。ここで扱うルールは**LLM の判断が必要な記述**（「該当する場合に記入」「特別の事情がある場合」等）であり、決定論で処理できるものではない。
+ルールドキュメント（記入要領、法令ガイドライン、社内マニュアル等）は数十〜数百ページの自然言語テキストである。ここで扱うルールは**LLM の判断が必要な記述**（「該当する場合に記入」「特別の事情がある場合」等）であり、決定論で処理できるものではない。
 
-したがって、**関連するルールテキストは FillPlanner（LLM）に渡す必要がある**。問題は「どうやって関連箇所を特定し、トークン予算内に収めるか」であり、これを**オフラインの事前処理で解決する**のが RuleIndexer の役割。
+さらに、**ドキュメントの種類は不定（ボラタイル）**である。ユーザーがリクエスト毎に異なるルールドキュメントを添付する可能性があるため、事前に固定のインデックスを構築する方式は適合しない。
+
+ただし、**同じドキュメントが繰り返し使われるケースは多い**（例: 同じ記入要領で複数の申告書を処理する）。このため、初回の LLM 解析結果を**永続化**し、2回目以降は DB 参照で LLM をスキップする。
 
 #### 設計方針
 
 ```
-RuleIndexer の責務 = 「何を LLM に渡すべきか」を事前に決めて永続化する
+RuleAnalyzer の責務:
+  1. 初回: ルールドキュメントを LLM で読解 → RuleSnippet[] を生成・DB に永続化
+  2. 2回目以降: doc_hash で DB を検索 → HIT なら LLM スキップ、DB から取得
+  3. FormContextBuilder と並行実行し、両者の出力を merge して FormContext を構築
 
-実行時の FormContextBuilder は DB から引くだけ → 検索コスト ≈ 0、LLM 呼び出し = 0
+→ 事前登録ステップは不要。初回利用時に自然に蓄積される。
 ```
 
-#### RuleIndexer の処理フロー
+#### RuleAnalyzer の処理フロー
 
 ```
-入力: ルールドキュメント（PDF/HTML等）+ フォーム定義（フィールド一覧）
+入力: ルールドキュメント（PDF/HTML等）+ フィールド一覧（FormContextBuilder から共有 or 初期解析済み）
                 │
                 ▼
 ┌──────────────────────────────────────────────┐
-│  Step 1: ドキュメント → セクション分割        │
+│  Step 0: DB 検索（doc_hash + field_list_hash）│
+│  ├─ HIT  → Step 3 へ直行（LLM スキップ）     │
+│  └─ MISS → Step 1 へ進む                     │
+└──────────────────────────────────────────────┘
+                │ (MISS)
+                ▼
+┌──────────────────────────────────────────────┐
+│  Step 1: ドキュメント → チャンク分割（非LLM） │
 │  テキスト抽出 → 見出し/目次構造を解析         │
 │  → 段落〜小セクション単位のチャンクに分割     │
+│  ※ここは決定論。PyMuPDF / BeautifulSoup 等   │
 └──────────────────────────────────────────────┘
                 │
                 ▼
 ┌──────────────────────────────────────────────┐
-│  Step 2: チャンク ⇔ フィールド紐付            │
-│  各チャンクが、どのフィールドの記入判断に      │
-│  関連するかを特定する                         │
+│  Step 2: LLM によるチャンク⇔フィールド紐付   │
 │                                              │
-│  方式は段階的に進化させる（後述）              │
+│  プロンプト:                                  │
+│    「以下のフォームフィールド一覧と             │
+│     ルールテキストのチャンクを見て、           │
+│     各チャンクがどのフィールドの記入判断に     │
+│     関連するかを判定せよ。                     │
+│     関連しないチャンクは除外せよ。」           │
+│                                              │
+│  ※ドキュメントが長い場合はバッチ分割          │
+│  （チャンク群を N 個ずつ LLM に渡す）         │
 └──────────────────────────────────────────────┘
                 │
                 ▼
 ┌──────────────────────────────────────────────┐
-│  Step 3: RuleSnippet として DB に永続化        │
-│  { snippet_id, source_doc, section,           │
-│    text, field_ids[], form_type_id }          │
+│  Step 2.5: DB に永続化                        │
+│  doc_hash + field_list_hash をキーに          │
+│  RuleSnippet[] を保存                         │
+│  → 同一ドキュメントの次回処理時に再利用       │
+└──────────────────────────────────────────────┘
+                │
+                ▼
+┌──────────────────────────────────────────────┐
+│  Step 3: RuleSnippet[] を返却                 │
+│  { source_doc, section, text,                │
+│    field_ids[], relevance_reason }            │
+│  → FormContext に merge                       │
 └──────────────────────────────────────────────┘
 ```
 
-#### 実行タイミング
+#### 実行タイミングとライフサイクル
 
 | タイミング | 内容 |
 |---|---|
-| **フォーム種別の初回登録時** | フォーム定義 + ルールドキュメントを入力して RuleIndexer を実行 |
-| **ルールドキュメント更新時** | 差分または全体を再インデックス |
-| **ユーザーのフォーム記入時（オンライン）** | RuleIndexer は動かない。FormContextBuilder が DB から `field_id` で関連スニペットを引くだけ |
+| **フォーム処理リクエスト受信時** | FormContextBuilder の起動と**同時に** RuleAnalyzer を起動 |
+| **RuleAnalyzer 内部（初回）** | `doc_hash` で DB 検索 → MISS → LLM 解析 → **DB に永続化** → `RuleSnippet[]` 返却 |
+| **RuleAnalyzer 内部（2回目以降）** | `doc_hash` で DB 検索 → **HIT → LLM スキップ** → DB から `RuleSnippet[]` 取得・返却 |
+| **FormContextBuilder 完了前** | RuleAnalyzer の完了を await。両者の結果を merge して FormContext を構築 |
+| **ルールDoc が添付されていない場合** | RuleAnalyzer はスキップ。`FormContext.rule_snippets = []` |
 
-#### Step 2（チャンク⇔フィールド紐付）の方式選択肢
+#### 並行実行の実装パターン
 
-紐付の精度がシステム全体の判断品質に直結するため、ここが最大の難所。
+```python
+import asyncio
+import hashlib
 
-**方式 A: キーワード + セクション構造ベース（非LLM）**
+class RuleAnalyzer:
+    async def analyze(
+        self, rule_docs: list[bytes], field_hints: list[str]
+    ) -> list[RuleSnippet]:
+        doc_hash = self._compute_hash(rule_docs)
+        field_hash = self._compute_hash(field_hints)
 
+        # Step 0: DB 検索 — 2回目以降はここで返る
+        cached = await self.snippet_repo.find_by_hash(doc_hash, field_hash)
+        if cached:
+            return cached
+
+        # Step 1: チャンク分割（非LLM）
+        chunks = self.chunker.split(rule_docs)
+
+        # Step 2: LLM によるフィールド紐付
+        snippets = await self.llm_linker.link(chunks, field_hints)
+
+        # Step 2.5: DB に永続化
+        await self.snippet_repo.save(doc_hash, field_hash, snippets)
+
+        return snippets
+
+async def build_form_context_with_rules(
+    pdf: bytes,
+    data_sources: list[DataSource],
+    rule_docs: list[bytes] | None,
+    field_hints: list[str],
+) -> FormContext:
+    context_task = asyncio.create_task(
+        form_context_builder.build(pdf, data_sources)
+    )
+
+    if rule_docs:
+        # RuleAnalyzer 内部で DB HIT なら LLM スキップ
+        rule_task = asyncio.create_task(
+            rule_analyzer.analyze(rule_docs, field_hints)
+        )
+        partial_context, rule_snippets = await asyncio.gather(
+            context_task, rule_task
+        )
+    else:
+        partial_context = await context_task
+        rule_snippets = []
+
+    partial_context.rule_snippets = rule_snippets
+    return partial_context
 ```
-チャンクの見出し/本文のキーワード ↔ フィールドラベルを照合
-例: 見出し「医療費控除」→ フィールド「医療費控除額」「医療費の明細」に紐付
-```
 
-- 実装コスト: 低
-- 精度: フィールド名とルールの見出しが近い場合は十分。乖離があると漏れる
-- LLM: 不要
+#### トークン予算とバッチ戦略
 
-**方式 B: Embedding 類似度（非LLM）**
+ルールドキュメントが長大な場合、1回の LLM 呼び出しに収まらない。以下の戦略で対応する。
 
-```
-チャンク Embedding ↔ フィールドラベル Embedding のコサイン類似度で紐付
-```
-
-- 実装コスト: 中（Embedding インフラが必要）
-- 精度: 表記揺れには強いが、意味的な関連（「扶養控除」と「16歳以上の親族」）は捉えにくい
-- LLM: 不要（Embedding API は使用）
-
-**方式 C: LLM による事前マッピング（オフライン LLM）**
-
-```
-フォームの全フィールド一覧 + ルールドキュメント全文
-  → LLM に「各チャンクがどのフィールドに関連するか」を判定させる
-  → 結果を DB に保存
-```
-
-- 実装コスト: 低（プロンプトを書くだけ）
-- 精度: 最も高い。LLM がルールの意味を理解して紐付できる
-- LLM: オフラインで 1回（or ドキュメントが長い場合はチャンク単位で数回）
-- リアルタイム処理への影響: なし（事前に済んでいるため）
+| 戦略 | 内容 |
+|---|---|
+| **チャンク単位のバッチ** | チャンクを N 個（例: 20個、各 ~300 tokens）ずつ LLM に渡す。並列に複数バッチを実行可能 |
+| **事前フィルタリング（非LLM）** | チャンクの見出し/キーワードでフィールドラベルと簡易照合し、明らかに無関係なチャンクを除外してから LLM に渡す |
+| **トークン上限制御** | 最終的に FormContext に含める `rule_snippets` の合計トークン数に上限を設定（例: 2000 tokens）。confidence/relevance スコアで優先度付き truncation |
 
 #### 何が難しいか
 
 | 課題 | 詳細 |
 |---|---|
-| **紐付の精度** | フィールド名が「控除額」のように曖昧な場合、どのルールセクションが対応するか特定しにくい |
-| **粒度の選択** | 章単位では粗すぎ、文単位では文脈が失われる。段落〜小セクション単位が妥当だが、ドキュメントの構造が不均一 |
-| **トークン予算** | 1フィールドに関連するルールが複数ある場合、全てを載せると肥大する |
-| **更新追従** | 法改正等でドキュメントが更新された場合、再インデックスが必要 |
+| **初回レイテンシ** | 初回は LLM 呼び出しのため FormContextBuilder より遅くなる可能性がある。2回目以降は DB 参照のみ（~数ms） |
+| **ドキュメントの多様性** | PDF の構造（見出しの有無、表形式、スキャン画像）が不均一。チャンク分割の品質がドキュメント依存 |
+| **紐付の精度** | フィールド名が「控除額」のように曖昧な場合、どのチャンクが対応するか LLM も誤る可能性がある |
+| **永続化の鮮度管理** | ドキュメントが微修正された場合、hash が変わり再解析が走る。大規模修正時のコスト増を許容するか、差分更新を実装するか |
+| **長大ドキュメント** | 数百ページのドキュメントはバッチ分割が必須。バッチ間の文脈断絶で紐付精度が落ちるリスク |
 
-#### 現時点での推奨
+#### コスト/レイテンシ最適化
 
-**方式 C（LLM による事前マッピング）を推奨する。**
+DB 永続化が最大の最適化であり、同一ドキュメントの再利用時は LLM コスト = 0 になる。追加の最適化:
 
-理由:
-- オフライン処理のため、LLM 呼び出しコストがリアルタイムの UX に影響しない
-- 紐付精度が最も高く、方式 A/B で発生する「漏れ」のリスクを回避できる
-- 実装コストが低い（プロンプト+DB保存のみで、Embedding インフラ不要）
-- フォーム種別数は限定的（数十種類程度）と想定されるため、事前処理の総コストは小さい
-
-方式 A はフォールバック/補助として併用可能（LLM 事前マッピングが未実行のフォームに対して）。
+| 最適化 | 効果 | トレードオフ |
+|---|---|---|
+| **DB 永続化（コア設計）** | 2回目以降は LLM コスト 0、レイテンシ ~数ms | DB ストレージコスト（軽微）。hash 管理が必要 |
+| **事前フィルタリング（非LLM）** | 初回の LLM に渡すチャンク数を 30-50% 削減 | フィルタリング精度が低いと必要なチャンクを落とす |
+| **軽量モデル使用** | 初回の RuleAnalyzer には GPT-4o-mini 等のコスト効率良いモデルを使用 | 精度が落ちる可能性。FillPlanner とモデルを分ける複雑性 |
+| **バッチ並列実行** | 初回レイテンシ削減（N バッチを並列に LLM 呼び出し） | API rate limit に注意。コストは変わらない |
 
 #### RuleSnippet のデータモデル
 
 ```python
 class RuleSnippet(BaseModel):
-    snippet_id: str
-    form_type_id: str         # フォーム種別（確定申告書A、住民税申告書等）
+    snippet_id: str           # UUID（DB 永続化用）
+    doc_hash: str             # ドキュメントのコンテンツハッシュ
+    field_list_hash: str      # 紐付対象フィールド一覧のハッシュ
     source_doc: str           # "記入要領2025.pdf"
     section: str              # "第3章 所得控除 > 3.2 医療費控除"
     text: str                 # セクションの自然言語テキスト（~300 tokens 以内）
     field_ids: list[str]      # このスニペットが関連するフィールド群
-    indexed_at: datetime      # インデックス作成日時（更新追従用）
-    indexer_method: str       # "llm_mapping" | "keyword" | "embedding"
+    relevance_reason: str     # LLM が判定した関連理由（"医療費控除の記入条件を定義"）
+    analyzed_at: datetime     # 解析日時
 ```
 
-#### DB テーブル（参考）
+#### DB 永続化テーブル
 
 ```sql
 CREATE TABLE rule_snippets (
-    snippet_id     UUID PRIMARY KEY,
-    form_type_id   TEXT NOT NULL,
-    source_doc     TEXT NOT NULL,
-    section        TEXT NOT NULL,
-    text           TEXT NOT NULL,
-    field_ids      TEXT[] NOT NULL,       -- 関連フィールドID配列
-    indexer_method TEXT NOT NULL DEFAULT 'llm_mapping',
-    indexed_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+    snippet_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    doc_hash        TEXT NOT NULL,            -- ドキュメントコンテンツの SHA-256
+    field_list_hash TEXT NOT NULL,            -- フィールド一覧の SHA-256
+    source_doc      TEXT NOT NULL,            -- ファイル名
+    section         TEXT NOT NULL,            -- セクション見出し
+    text            TEXT NOT NULL,            -- スニペット本文
+    field_ids       TEXT[] NOT NULL,          -- 関連フィールドID配列
+    relevance_reason TEXT NOT NULL,           -- LLM が判定した関連理由
+    analyzed_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_rule_snippets_form_type ON rule_snippets(form_type_id);
-CREATE INDEX idx_rule_snippets_field_ids ON rule_snippets USING GIN(field_ids);
+-- 2回目以降の高速検索用
+CREATE UNIQUE INDEX idx_rule_snippets_hash
+    ON rule_snippets(doc_hash, field_list_hash, section);
+CREATE INDEX idx_rule_snippets_doc_hash
+    ON rule_snippets(doc_hash);
 ```
 
-#### FormContextBuilder での利用
+#### 永続化の振る舞い
 
-```python
-# FormContextBuilder.build() 内
-snippets = rule_snippet_repo.find_by_form_type_and_fields(
-    form_type_id=form_type_id,
-    field_ids=[f.field_id for f in form_fields],
-    max_snippets=10,
-    max_total_tokens=1500,
-)
-form_context.rule_snippets = snippets
-# → FillPlanner に渡す FormContext に含まれ、LLM がルールを読んで判断する
-```
+| シナリオ | 動作 | LLM 呼び出し |
+|---|---|---|
+| **同一ドキュメント + 同一フィールド一覧** | DB から即座に返却 | 0回 |
+| **同一ドキュメント + フィールド一覧が異なる** | 再解析（フィールドとの紐付が変わるため） | 1回 |
+| **ドキュメントが微修正された（hash 変更）** | 再解析 + 新規永続化 | 1回 |
+| **ドキュメント未添付** | RuleAnalyzer スキップ | 0回 |
 
-#### LLM に渡す必要がある理由
+> **注**: `doc_hash` はドキュメントのバイナリコンテンツから SHA-256 で生成。ファイル名変更のみでは hash は変わらない。
 
-RuleIndexer で事前に紐付を永続化しても、**スニペットのテキスト自体は FillPlanner に渡す必要がある**。理由:
+#### LLM に渡す必要がある理由（FillPlanner 側）
 
-1. **fill/skip の判断にルール文面が必要**: 「該当する場合に記入」という記述に対し、ユーザーのデータが「該当する」かどうかは LLM が判断する
-2. **紐付だけでは判断できない**: 「field_42 には所得控除のルールが関連する」という情報だけでは、LLM は何を根拠に判断すべきかわからない
-3. **rule_trace の生成**: FillPlan の `FieldFillAction.rule_trace` に「どのルール文面を根拠としたか」を記録するには、LLM がルール文面を見ている必要がある
+RuleAnalyzer が抽出・永続化した `RuleSnippet[]` のテキスト自体は FillPlanner に渡す必要がある。理由:
 
-RuleIndexer の価値は「渡さなくて済むようにする」ではなく、**「数百ページの中から渡すべき数段落を事前に絞り込んでおく」**こと。
+1. **fill/skip の判断にルール文面が必要**: 「該当する場合に記入」という記述に対し、ユーザーのデータが「該当する」かどうかは FillPlanner の LLM が判断する
+2. **紐付だけでは判断できない**: 「field_42 には所得控除のルールが関連する」という情報だけでは、FillPlanner は何を根拠に判断すべきかわからない
+3. **rule_trace の生成**: `FieldFillAction.rule_trace` に「どのルール文面を根拠としたか」を記録するには、LLM がルール文面を見ている必要がある
+
+RuleAnalyzer の価値は「LLM にルールを渡さなくて済むようにする」ではなく、**「数百ページの中から FillPlanner に渡すべき数段落を絞り込み、永続化して再利用する」**こと。
 
 ---
 
-## 6. 移行計画（段階的リファクタリング）
+### 5.5 ルールドキュメントのセマンティック検索設計
 
-> 前提：各 Phase で「動く状態」を維持する。フィーチャーフラグを活用し、旧パスへのロールバックを常に可能にする。
+#### 課題
 
-### Phase 0: 計測の追加（1〜2週間）
+ルールドキュメントには**テキストだけでなく図表・フローチャート・スキャン画像**が含まれる場合がある。テキストベースのチャンク分割（5.4 Step 1）だけでは、画像内の情報を取りこぼす。フィールドとルールの紐付にはセマンティック（意味的）な検索が必要。
 
-**目的**: 現行システムの実態を定量把握する
+#### 既存資産
 
-#### 変更対象
+本リポジトリには以下のインフラが**既に存在**する:
 
-| ファイル | 変更内容 |
-|---|---|
-| `app/agents/llm_wrapper.py` | 既存の `CostTracker` にレイテンシ計測を追加 |
-| `app/infrastructure/observability/` | Prometheus メトリクスに LLM 呼び出し回数/モデル/エージェント別のヒストグラム追加 |
-| `app/orchestrator/orchestrator.py` | ステージ所要時間の計測 |
+| コンポーネント | ファイル | 状態 |
+|---|---|---|
+| `EmbeddingGateway` (Protocol) | `app/application/ports/embedding_gateway.py` | 定義済 |
+| `OpenAIEmbeddingGateway` | `app/infrastructure/gateways/embedding.py` | 実装済（`text-embedding-3-small`） |
+| `embed_image` / `embed_text` / `embed_document_page` | 同上 | インタフェース済（画像は未本格実装） |
+| `VectorDBGateway` (Protocol) | `app/application/ports/vector_db_gateway.py` | 定義済 |
+| `InMemoryVectorDB` | `app/infrastructure/gateways/vector_db.py` | テスト用実装済 |
+| Supabase (PostgreSQL) | `app/infrastructure/supabase/` | 本番稼働中 |
 
-#### 収集する指標
+→ **pgvector + 既存 Gateway の拡張**が最も低コストで導入可能。
 
-- LLM 呼び出し回数（エージェント別、フォーム別）
-- LLM レイテンシ（P50, P95, P99）
-- トークン数（input/output、エージェント別）
-- コスト（モデル × トークン）
-- エラー分類（timeout, rate_limit, parse_error, validation_error）
+#### 方式比較
 
-#### 受け入れ基準
+| # | 方式 | 概要 | 画像対応 | 精度 | インフラ追加 | コスト/リクエスト | 永続化との相性 |
+|---|---|---|---|---|---|---|---|
+| **A** | **テキスト Embedding + pgvector** | チャンクをテキスト埋め込み → pgvector で類似検索 | ✗ テキストのみ | 中 | **なし**（既存 Gateway + Supabase pgvector） | Embedding API のみ（安価） | ◎ ベクトルも DB に永続化 |
+| **B** | **Vision LLM でページ単位読解** | ページ画像を GPT-4o 等に直接渡して要約/紐付 | ◎ 画像も理解 | 高 | なし（既存 LLM クライアント） | 高い（Vision API 単価） | ○ 結果を永続化すればOK |
+| **C** | **マルチモーダル Embedding + pgvector** | ページ画像を CLIP/Cohere multimodal 等で埋め込み → pgvector で類似検索 | △ レイアウト理解は弱い | 中〜低 | Embedding モデル変更 | Embedding API のみ | ◎ ベクトルも DB に永続化 |
+| **D** | **ColPali / ColQwen（Late Interaction）** | ドキュメント画像を OCR なしで直接エンコード → retrieval | ◎ ドキュメント特化 | 高 | 専用モデルのホスティング or API | 推論コスト中 | ○ インデックスを永続化 |
+| **E** | **ハイブリッド: A + B（推奨）** | テキスト Embedding で粗い検索（Stage 1）→ Vision LLM で精査（Stage 2） | ◎ | 高 | **なし** | Stage 1 安価 + Stage 2 は絞り込み後のみ | ◎ 両段階とも永続化可能 |
 
-- Prometheus/Grafana でダッシュボード閲覧可能
-- 10回以上の実フォーム処理でベースライン数値を収集
+#### 各方式の詳細
 
-#### リスクと対策
-
-低リスク。`CostTracker` が既にあるため追加実装は軽微。
-
----
-
-### Phase 1: FormContextBuilder の導入（2〜3週間）
-
-**目的**: 既存の決定論ロジックを `FormContextBuilder` に集約し、`FormContext` を生成する
-
-#### 変更対象
-
-| ファイル | 変更内容 |
-|---|---|
-| `app/services/form_context/` (新規) | `FormContextBuilder` クラス、`FormContext` / `FormFieldSpec` モデル定義 |
-| `app/services/structure_labelling/service.py` | proximity fallback ロジックを FormContextBuilder に移動（共通ユーティリティ化） |
-| `app/services/mapping/service.py` | `_find_candidates`, `_apply_user_rules`, `_apply_template_history` を FormContextBuilder に委譲 |
-| `app/services/extract/service.py` | `_try_native_extraction`, `_try_ocr_extraction` を FormContextBuilder に委譲 |
-| `app/services/vision_autofill/service.py` | `_extract_from_sources`, `_rule_based_autofill` を FormContextBuilder に委譲 |
-| `app/agents/extract/value_extraction_agent.py` | 決定論正規化（日付/電話/郵便番号/全角半角）を FormContextBuilder のユーティリティに抽出 |
-
-#### 実装ステップ
-
-1. `FormContext` / `FormFieldSpec` Pydantic モデル定義
-2. `FormContextBuilder.build()` メソッド実装（既存ロジックの呼び出し集約）
-3. 既存パイプラインの Ingest → Structure → (FormContextBuilder 呼び出し) → 以降のフローに差し込み
-4. VisionAutofillService から FormContextBuilder を利用するように接続
-
-#### 受け入れ基準
-
-- 既存の全テストが Pass（回帰なし）
-- FormContextBuilder の出力を JSON 出力して手動で構造を確認可能
-- VisionAutofillService が FormContextBuilder 経由でデータを取得しても同等の結果
-
-#### リスクと対策
-
-中リスク。既存のサービス間インターフェースに触るが、既存フローは維持するためロールバック可能。FormContextBuilder はアダプターパターンで差し込み、旧パスも残す。
-
----
-
-### Phase 2: FillPlan の導入（2〜3週間）
-
-**目的**: `FillPlan` データ構造を定義し、FillPlanner のプロトタイプを VisionAutofillService ベースで構築する
-
-#### 変更対象
-
-| ファイル | 変更内容 |
-|---|---|
-| `app/services/fill_planner/` (新規) | `FillPlanner` クラス、`FillPlan` / `FieldFillAction` モデル定義 |
-| `app/services/fill_planner/prompt_builder.py` (新規) | `FormContext` → プロンプト変換ロジック |
-| `app/services/vision_autofill/service.py` | `_llm_autofill` を FillPlanner 呼び出しに置き換え |
-| `app/services/vision_autofill/prompts.py` | FillPlanner 用プロンプトに拡張 |
-
-#### 実装ステップ
-
-1. `FillPlan` / `FieldFillAction` Pydantic モデル定義
-2. `FillPlanner.plan()` 実装（FormContext → プロンプト構築 → LLM 1回 → FillPlan パース）
-3. VisionAutofillService の `_llm_autofill` を FillPlanner 経由に書き換え
-4. A/B テスト: 旧プロンプト vs 新 FillPlan プロンプトで精度比較
-
-#### 受け入れ基準
-
-- `FillPlan` 出力で fill/skip/ask_user が正しく判定される（テストマトリクス上で旧実装と同等以上）
-- `rule_trace` が少なくとも 1 つのルールケースで正しく追跡される
-- VisionAutofill のエンドポイントが FillPlan 経由で動作する
-
-#### リスクと対策
-
-中リスク。プロンプト変更は精度に直結するため、A/B テストとプロンプトチューニング期間が必要。旧 `_llm_autofill` は feature flag で残す。
-
----
-
-### Phase 3: 1回 LLM への統合（3〜4週間）
-
-**目的**: パイプライン v1 の多点 LLM 呼び出し（FieldLabelling, Mapping, Extract）を FillPlanner の 1回呼び出しに統合する
-
-#### 変更対象
-
-| ファイル | 変更内容 |
-|---|---|
-| `app/orchestrator/pipeline_executor.py` | ステージ構成を Build → Plan → Render に変更 |
-| `app/orchestrator/decision_engine.py` | ステージ遷移ロジックを簡素化 |
-| `app/services/fill_planner/planner.py` | FieldLabelling + Mapping + Extract の統合プロンプト |
-| `app/agents/structure_labelling/field_labelling_agent.py` | LLM 呼び出し部分を非推奨化（FormContextBuilder の候補生成に置換） |
-| `app/agents/mapping/mapping_agent.py` | LLM 呼び出し部分を非推奨化 |
-| `app/agents/extract/value_extraction_agent.py` | LLM 呼び出し部分を非推奨化 |
-| `app/services/fill/service.py` | `FillPlan` を入力として受け取る FormRenderer ラッパー追加 |
-
-#### 実装ステップ
-
-1. FillPlanner のプロンプトを拡張（label linking + mapping + value selection を統合）
-2. FormRenderer ラッパー実装（FillPlan → FillRequest 変換 + 検証 + RenderReport 生成）
-3. 新パイプライン（Build → Plan → Render）をフィーチャーフラグで並走
-4. 旧パイプラインとの精度比較（テストマトリクス全項目）
-5. 合格後に旧パイプラインを非推奨化
-
-#### 受け入れ基準
-
-- LLM 呼び出し回数がフォーム単位で原則 1回（ask_user 時を除く）
-- 精度: 旧パイプラインと同等（fill 率 ±5% 以内、confidence 平均 ±0.05 以内）
-- レイテンシ: 旧パイプラインの 50% 以下（LLM 待ち時間の大幅削減）
-- コスト: 旧パイプラインの 30% 以下
-
-#### リスクと対策
-
-**高リスク**。これが最大の変更点。
-
-- **ロールバック**: フィーチャーフラグで旧パイプラインに即時切り戻し可能にする
-- **精度劣化リスク**: テストマトリクスで段階的に検証。まず単純なフォーム（5 フィールド以下）から、徐々に複雑なフォーム（50+ フィールド）へ
-- **トークン上限リスク**: 100+ フィールドのフォームでは FormContext 圧縮でも上限超過の可能性。その場合はページ/セクション単位で分割し、2〜3回の呼び出しを許容するフォールバック設計を用意
-
----
-
-### Phase 4: CorrectionTracker の分離（2週間、オプション）
-
-**目的**: ユーザー修正差分を収集・分類し、FormContextBuilder / FillPlanner の改善に活用する基盤を構築する
-
-#### 変更対象
-
-| ファイル | 変更内容 |
-|---|---|
-| `app/services/correction_tracker/` (新規) | `CorrectionTracker` クラス、`CorrectionRecord` モデル |
-| `app/repositories/correction_repository.py` (新規) | 修正差分の永続化 |
-| `app/routes/edits.py` (既存) | 修正確定時に CorrectionTracker へ差分を送信 |
-| `infra/supabase/migrations/` (新規) | corrections テーブル |
-
-#### 実装ステップ
-
-1. `CorrectionRecord` モデル定義（field_id, before_value, after_value, correction_type, fill_plan_snapshot）
-2. 修正確定時のフック実装（非同期、リアルタイム必須ではない）
-3. 差分の分類ロジック（LLM 判断ミス / ルール不足 / データ不足 / ユーザー好み）
-4. 集計ダッシュボード（どのフィールドタイプで修正が多いか等）
-
-#### 受け入れ基準
-
-- ユーザー修正が corrections テーブルに保存される
-- 分類結果が閲覧可能
-- Phase 0 のメトリクスと合わせて改善ポイントが可視化される
-
-#### リスクと対策
-
-低リスク。既存フローへの影響は最小（フック追加のみ）。
-
----
-
-### 移行タイムライン概要
+**方式 A: テキスト Embedding + pgvector**
 
 ```
-Week 1-2:   Phase 0 - 計測追加
-Week 3-5:   Phase 1 - FormContextBuilder 導入
-Week 6-8:   Phase 2 - FillPlan / FillPlanner プロトタイプ
-Week 9-12:  Phase 3 - 1回 LLM 統合 + A/B テスト + 精度チューニング
-Week 13-14: Phase 4 - CorrectionTracker（オプション）
+チャンク(テキスト) → OpenAI text-embedding-3-small → vector(1536dim)
+                                                        ↓
+フィールドラベル → OpenAI text-embedding-3-small → vector(1536dim)
+                                                        ↓
+                            pgvector: cosine similarity → Top-K チャンク
 ```
+
+- **利点**: 既存の `EmbeddingGateway` + `VectorDBGateway` をそのまま使える。Supabase は pgvector をネイティブサポート
+- **欠点**: 画像内の情報（図表、フローチャート）を完全に無視する
+- **適用**: テキスト主体のルールドキュメントであれば十分
+
+**方式 B: Vision LLM ページ単位読解**
+
+```
+ページ画像 → GPT-4o (Vision) → 「このページのルール要約 + 関連フィールド判定」
+                                  ↓
+                            RuleSnippet[] → DB 永続化
+```
+
+- **利点**: 画像・図表・複雑なレイアウトも完全に理解。最も精度が高い
+- **欠点**: ページ数 × Vision API 単価。100ページのドキュメントだと初回コストが高い
+- **適用**: 画像が多いドキュメント、精度最優先の場合
+
+**方式 D: ColPali / ColQwen**
+
+```
+ドキュメントページ画像 → ColPali encoder → patch embeddings
+                                              ↓
+クエリ(フィールドラベル) → ColPali encoder → query embeddings
+                                              ↓
+                         Late Interaction score → Top-K ページ
+```
+
+- **利点**: OCR 不要でドキュメント画像から直接 retrieval。学術的に最高精度
+- **欠点**: モデルのホスティングが必要（HuggingFace / vLLM 等）。pgvector では使えない（Late Interaction のため専用インデックスが必要）
+- **適用**: ドキュメント検索が大量に発生し、専用インフラを持てる場合
+
+**方式 E: ハイブリッド（推奨）**
+
+```
+Stage 1: 粗い検索（安価・高速）
+  チャンク(テキスト+OCR) → text-embedding-3-small → pgvector
+  フィールドラベル → text-embedding-3-small → pgvector
+  → Top-K チャンク/ページを取得（例: 上位 20 件）
+
+Stage 2: 精査（高精度・Vision LLM）
+  Top-K ページ画像 → GPT-4o (Vision)
+  → 「このページはフィールド X,Y に関連するか？」
+  → RuleSnippet[] 生成 → DB 永続化
+```
+
+- **利点**:
+  - Stage 1 で大半のページを除外（100ページ → 20ページ）→ Vision API コストを 80% 削減
+  - Stage 2 で画像・図表も理解 → 精度を保証
+  - 既存インフラ（pgvector + OpenAI）だけで実現可能
+  - **永続化と完全に両立**: Stage 1 のベクトルも Stage 2 の結果も DB に保存
+- **欠点**: 2段階のため実装が少し複雑
+
+#### 推奨: 方式 E（ハイブリッド）
+
+**理由**:
+
+1. **既存インフラ活用**: `EmbeddingGateway`（OpenAI text-embedding-3-small）と `VectorDBGateway`（pgvector 対応予定）が既にある。新規インフラ不要
+2. **画像対応**: Stage 2 の Vision LLM でドキュメント内の図表・フローチャートも理解できる
+3. **コスト制御**: Stage 1 のテキスト Embedding で大幅にフィルタリングし、高コストの Vision LLM は絞り込み後のページにのみ適用
+4. **永続化との相性**: 初回のベクトル + RuleSnippet を DB に永続化。2回目以降は LLM/Embedding ともにスキップ
+5. **段階的導入**: Stage 1 だけで MVP を構築し、画像対応が必要になったら Stage 2 を追加できる
+
+#### pgvector の設計（Stage 1）
+
+```sql
+-- Supabase で pgvector を有効化
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- ルールチャンクの Embedding テーブル
+CREATE TABLE rule_chunk_embeddings (
+    chunk_id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    doc_hash        TEXT NOT NULL,
+    chunk_index     INT NOT NULL,
+    section         TEXT NOT NULL,
+    text            TEXT NOT NULL,
+    page_number     INT,
+    embedding       vector(1536) NOT NULL,   -- text-embedding-3-small
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- HNSW インデックス（検索高速化）
+CREATE INDEX idx_rule_chunk_embedding_hnsw
+    ON rule_chunk_embeddings
+    USING hnsw (embedding vector_cosine_ops)
+    WITH (m = 16, ef_construction = 64);
+
+CREATE INDEX idx_rule_chunk_doc_hash
+    ON rule_chunk_embeddings(doc_hash);
+```
+
+#### RuleAnalyzer 処理フロー（方式 E 適用後）
+
+```
+入力: ルールドキュメント + フィールド一覧
+                │
+                ▼
+┌──────────────────────────────────────────────────┐
+│  Step 0: DB 検索（doc_hash + field_list_hash）    │
+│  ├─ RuleSnippet HIT → 直行返却                   │
+│  └─ MISS → Step 1 へ                             │
+└──────────────────────────────────────────────────┘
+                │ (MISS)
+                ▼
+┌──────────────────────────────────────────────────┐
+│  Step 1: チャンク分割 + Embedding（非LLM部分）    │
+│  テキスト抽出 + OCR（画像ページ）                 │
+│  → チャンク分割                                   │
+│  → 各チャンクを text-embedding-3-small で埋め込み │
+│  → pgvector に保存（doc_hash でグループ化）       │
+└──────────────────────────────────────────────────┘
+                │
+                ▼
+┌──────────────────────────────────────────────────┐
+│  Stage 1: セマンティック検索（Embedding + pgvector）│
+│  フィールドラベルを Embed → pgvector で Top-K 取得 │
+│  → 候補チャンク/ページを 100→20 に絞り込み       │
+└──────────────────────────────────────────────────┘
+                │
+                ▼
+┌──────────────────────────────────────────────────┐
+│  Stage 2: Vision LLM で精査                       │
+│  Top-K ページの画像を GPT-4o に渡す               │
+│  → 「このページはどのフィールドに関連するか？」   │
+│  → RuleSnippet[] 生成                             │
+│  ※テキストのみのチャンクは Stage 1 の結果で十分な │
+│   場合、Stage 2 をスキップ可能（コスト最適化）    │
+└──────────────────────────────────────────────────┘
+                │
+                ▼
+┌──────────────────────────────────────────────────┐
+│  Step 2.5: DB に永続化                            │
+│  RuleSnippet[] + Embedding ベクトルを保存         │
+│  → 同一ドキュメントの次回処理時に全段階スキップ   │
+└──────────────────────────────────────────────────┘
+```
+
+#### 段階的導入の提案
+
+| フェーズ | 内容 | 画像対応 |
+|---|---|---|
+| **MVP** | テキスト Embedding + pgvector のみ（方式 A）。画像ページは OCR でテキスト化 | △（OCR 依存） |
+| **v1** | Stage 1（pgvector）+ Stage 2（Vision LLM）のハイブリッド（方式 E） | ◎ |
+| **v2（将来）** | ColPali/ColQwen での高速 retrieval を Stage 1 に導入（方式 D + B） | ◎（OCR不要） |
+
+> **ColPali/ColQwen について**: 現時点では専用インフラのホスティングコストとメンテナンス負荷が高い。ドキュメント検索のリクエスト量が増え、pgvector + Vision LLM のコスト/レイテンシが問題になった段階で検討する。Hugging Face Inference Endpoints 等の SaaS を使えば導入障壁は下がる。
+
+---
+
+## 6. 実装計画
+
+> 前提：Phase 1 → Phase 2 の順で進める。Phase 3 以降は Phase 2 の結果を見て随時判断する。
+
+### Phase 1: インターフェース定義（Protocol / データモデルのみ）
+
+**目的**: To-Be アーキテクチャの全サービス境界とデータ構造を Protocol + Pydantic モデルとして定義する。**実装は一切含まない**。
+
+#### 成果物
+
+| ファイル | 内容 |
+|---|---|
+| `app/domain/protocols/form_context_builder.py` (新規) | `FormContextBuilderProtocol` — `build()` のシグネチャのみ |
+| `app/domain/protocols/fill_planner.py` (新規) | `FillPlannerProtocol` — `plan(FormContext) → FillPlan` のシグネチャのみ |
+| `app/domain/protocols/form_renderer.py` (新規) | `FormRendererProtocol` — `render(FillPlan, pdf) → RenderReport` のシグネチャのみ |
+| `app/domain/protocols/rule_analyzer.py` (新規) | `RuleAnalyzerProtocol` — `analyze(docs, fields) → list[RuleSnippet]` のシグネチャのみ |
+| `app/domain/protocols/correction_tracker.py` (新規) | `CorrectionTrackerProtocol` — `record(CorrectionRecord)` のシグネチャのみ |
+| `app/domain/models/form_context.py` (新規) | `FormContext`, `FormFieldSpec` Pydantic モデル |
+| `app/domain/models/fill_plan.py` (新規) | `FillPlan`, `FieldFillAction` Pydantic モデル |
+| `app/domain/models/render_report.py` (新規) | `RenderReport` Pydantic モデル |
+| `app/domain/models/rule_snippet.py` (新規) | `RuleSnippet` Pydantic モデル |
+| `app/domain/models/correction_record.py` (新規) | `CorrectionRecord` Pydantic モデル |
+
+#### 受け入れ基準
+
+- 全 Protocol が `typing.Protocol` + `runtime_checkable` で定義されている
+- 全データモデルが Pydantic v2 BaseModel で定義され、型が明確
+- **既存コードへの変更はゼロ**（新規ファイル追加のみ）
+- サービス間の入出力の型が一意に決まっている
+
+#### 方針
+
+- 既存の `EmbeddingGateway`, `VectorDBGateway` の Protocol パターンに倣う
+- 実装クラスは Phase 2 で作成する。Phase 1 では「契約」だけを固める
+
+---
+
+### Phase 2: Web から利用可能な最小コア実装
+
+**目的**: Phase 1 の Protocol に対する最小実装を行い、Web UI からエンドツーエンドで動作する状態にする。
+
+#### スコープ
+
+**やること（最小コア）:**
+
+| コンポーネント | 実装範囲 |
+|---|---|
+| **FormContextBuilder** | 既存 VisionAutofillService の `_extract_from_sources` + `_rule_based_autofill` を wrap し、`FormContext` を出力する最小実装 |
+| **FillPlanner** | 既存 VisionAutofillService の `_llm_autofill` を wrap し、`FillPlan` を出力する最小実装（LLM 1回、既存プロンプトベース） |
+| **FormRenderer** | 既存の `FillService` を wrap し、`FillPlan` → PDF 描画 + `RenderReport` 出力 |
+| **RuleAnalyzer** | stub 実装（`rule_snippets = []` を返す）。実体は Phase 3 以降 |
+| **CorrectionTracker** | stub 実装。実体は Phase 3 以降 |
+| **API エンドポイント** | 新アーキテクチャ経由のエンドポイント 1本。既存エンドポイントは維持（フィーチャーフラグで切替） |
+| **Web UI** | 既存 UI から新エンドポイントを呼べるように接続 |
+
+**やらないこと（Phase 3 以降）:**
+
+- RuleAnalyzer の LLM 実装・永続化・セマンティック検索
+- CorrectionTracker の実装
+- 旧パイプライン（Orchestrator 8ステージ）の統合・廃止
+- 多点 LLM 呼び出しの 1回化（FieldLabelling, Mapping, Extract の統合）
+- A/B テスト基盤
+- Prometheus メトリクス追加
+
+#### 変更対象
+
+| ファイル | 変更内容 |
+|---|---|
+| `app/services/form_context/builder.py` (新規) | `FormContextBuilder` — 既存ロジックの薄い wrap |
+| `app/services/fill_planner/planner.py` (新規) | `FillPlanner` — 既存 VisionAutofill LLM の薄い wrap |
+| `app/services/form_renderer/renderer.py` (新規) | `FormRenderer` — 既存 FillService の薄い wrap |
+| `app/services/rule_analyzer/analyzer.py` (新規) | `RuleAnalyzer` — stub（空リスト返却） |
+| `app/services/correction_tracker/tracker.py` (新規) | `CorrectionTracker` — stub（no-op） |
+| `app/routes/` (新規 or 既存修正) | 新アーキテクチャ経由のエンドポイント追加 |
+| `apps/web/src/api/` | 新エンドポイントへの接続 |
+
+#### 受け入れ基準
+
+- Web UI から PDF + データソースをアップロードし、新アーキテクチャ経由で記入済み PDF が返る
+- 既存 VisionAutofill と同等の精度（内部的に同じロジックを呼んでいるため）
+- 既存エンドポイントは引き続き動作（回帰なし）
+- 全 Protocol に対して実装クラスが存在し、DI で差し替え可能
+
+---
+
+### Phase 3 以降: 随時判断
+
+Phase 2 の結果と運用状況を見て、以下から優先度を決定する。
+
+| 候補 | 概要 | 判断材料 |
+|---|---|---|
+| **RuleAnalyzer 実装** | LLM 読解 + 永続化 + セマンティック検索（5.4, 5.5） | ルールDoc 対応の需要度 |
+| **LLM 統合（多点→1回化）** | FieldLabelling + Mapping + Extract を FillPlanner に統合 | コスト/レイテンシの実測値 |
+| **CorrectionTracker 実装** | ユーザー修正差分の収集・分類 | 修正頻度の実測値 |
+| **計測基盤** | Prometheus メトリクス、A/B テスト基盤 | 運用フェーズの要求 |
+| **旧パイプライン廃止** | Orchestrator 8ステージの非推奨化 | 新アーキテクチャの安定度 |
 
 ---
 
@@ -739,25 +927,26 @@ Week 13-14: Phase 4 - CorrectionTracker（オプション）
 
 ### データ・ルール
 
-4. 「ルールドキュメント」（記入要領等）の具体的な形式は？（PDF? Word? HTML?）分量はどの程度か？（10ページ程度? 100ページ超?）1フォームあたり何ドキュメントを参照するか？
-5. ルールドキュメントはどの頻度で更新されるか？（年次改訂? 不定期?）
-6. 過去申告書データはどの形式で提供されるか？（PDF? CSV? JSON? DB?）
-7. フォーム間の値参照（例：確定申告書 → 住民税申告書への転記）は対応スコープに含まれるか？
-8. `DataSource` のタイプとして、現在どのようなものが使用されているか？（PDF, CSV, 手入力等）
+4. 「ルールドキュメント」（記入要領等）の具体的な形式は？（PDF? Word? HTML?）典型的な分量はどの程度か？（10ページ程度? 100ページ超?）1リクエストあたり何ドキュメントまで添付されうるか？
+5. ルールドキュメントに**図表・フローチャート・スキャン画像**はどの程度含まれるか？テキスト主体ならテキスト Embedding で十分、画像が多いなら Vision LLM（方式 E）が必要（セクション 5.5 参照）
+6. ルールドキュメントの添付がないリクエスト（ルールなしで記入判断する場合）はどの程度の割合か？RuleAnalyzer スキップの頻度見積もりに必要
+7. 過去申告書データはどの形式で提供されるか？（PDF? CSV? JSON? DB?）
+8. フォーム間の値参照（例：確定申告書 → 住民税申告書への転記）は対応スコープに含まれるか？
+9. `DataSource` のタイプとして、現在どのようなものが使用されているか？（PDF, CSV, 手入力等）
 
 ### LLM・精度
 
-9. 現在の LLM モデルは gpt-4o-mini か gpt-5-mini か？（`config.py` に `gpt-5-mini` の記載あり）
-10. VisionAutofill の 1回 LLM アプローチで、精度に不満がある具体的なケースはあるか？
-11. FieldLabelling（label⇔box リンク）の精度問題は発生しているか？
-12. FillPlanner の LLM 応答フォーマットとして、JSON Schema (Structured Output) を使う想定か、自由テキスト JSON か？
+10. 現在の LLM モデルは gpt-4o-mini か gpt-5-mini か？（`config.py` に `gpt-5-mini` の記載あり）
+11. VisionAutofill の 1回 LLM アプローチで、精度に不満がある具体的なケースはあるか？
+12. FieldLabelling（label⇔box リンク）の精度問題は発生しているか？
+13. FillPlanner の LLM 応答フォーマットとして、JSON Schema (Structured Output) を使う想定か、自由テキスト JSON か？
 
 ### 運用
 
-13. 現在の典型的なフォームのフィールド数はいくつか？（10以下 / 10-50 / 50-100 / 100+）
-14. 1 フォーム処理の許容レイテンシはどの程度か？（5秒以内 / 15秒以内 / 30秒以内）
-15. CorrectionTracker で蓄積した修正差分を、自動的に FormContextBuilder のルールに反映する自動化は必要か？それとも手動レビュー前提か？
-16. テスト環境で使用可能なサンプルフォーム（PDF + 正解データ）は何件あるか？
+14. 現在の典型的なフォームのフィールド数はいくつか？（10以下 / 10-50 / 50-100 / 100+）
+15. 1 フォーム処理の許容レイテンシはどの程度か？（5秒以内 / 15秒以内 / 30秒以内）
+16. CorrectionTracker で蓄積した修正差分を、自動的に FormContextBuilder のルールに反映する自動化は必要か？それとも手動レビュー前提か？
+17. テスト環境で使用可能なサンプルフォーム（PDF + 正解データ）は何件あるか？
 
 ---
 
@@ -775,13 +964,13 @@ Week 13-14: Phase 4 - CorrectionTracker（オプション）
 | render_report | **RenderReport** | データ | 描画結果+検証結果 |
 | Learning Adapter | **CorrectionTracker** | サービス | ユーザー修正を追跡・分類する |
 | （なし） | **CorrectionRecord** | データ | 1件の修正差分レコード |
-| （新規） | **RuleIndexer** | サービス | ルールDoc を事前処理し、フィールド⇔スニペット対応を永続化する |
-| （新規） | **RuleSnippet** | データ | ルールDoc から抽出した1断片（セクション+テキスト+関連フィールド） |
+| （新規） | **RuleAnalyzer** | サービス | ルールDoc を LLM で読解・永続化。2回目以降は DB 参照でスキップ（FormContextBuilder と並行実行） |
+| （新規） | **RuleSnippet** | データ（DB永続化） | ルールDoc から LLM が抽出・永続化した1断片（セクション+テキスト+関連フィールド+関連理由） |
 
-## 付録B: 推奨する着手順序
+## 付録B: 実装方針
 
-**Phase 1（FormContextBuilder 導入）が最もリスクが低く効果が高い**ため、最優先で着手することを推奨する。
+**Phase 1（インターフェース定義）→ Phase 2（最小コア実装）→ Phase 3 以降（随時判断）** の 3段階で進める。
 
-VisionAutofillService は既にフォーム単位 1回 LLM の原型を持っているため、これをベースに Phase 2 の FillPlanner を構築するのが自然な進化パスである。
-
-Phase 3 の「1回 LLM 統合」は最大のリスクだが、Phase 0〜2 で収集したメトリクスとテストマトリクスにより、データドリブンな判断が可能になる。
+- **Phase 1** は既存コードへの変更ゼロ（新規ファイル追加のみ）のため、リスクが最も低い
+- **Phase 2** は既存 VisionAutofillService を薄く wrap する戦略のため、内部ロジックの変更は最小限。Web UI からエンドツーエンドで動作することがゴール
+- **Phase 3 以降** は Phase 2 の運用結果を見て優先度を決定する。事前に全てを計画しない
