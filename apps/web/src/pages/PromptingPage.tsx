@@ -15,6 +15,7 @@ import { EditableDocumentPreview } from '../components/preview/EditableDocumentP
 import { DocumentBar } from '../components/single/DocumentBar';
 import { FieldListReadOnly } from '../components/single/FieldListReadOnly';
 import { ActivityLog, type Activity } from '../components/single/ActivityLog';
+import { PipelineLogPanel } from '../components/single/PipelineLogPanel';
 import {
   uploadDocument,
   getPagePreviewUrl,
@@ -24,6 +25,8 @@ import {
 import { createConversation, getConversation } from '../api/conversationClient';
 import { autofillWithVision, previewPrompt } from '../api/autofillClient';
 import type { VisionAutofillResponse, PromptPreviewResponse } from '../api/autofillClient';
+import { autofillPipeline } from '../api/autofillPipelineClient';
+import type { PipelineStepLog } from '../api/autofillPipelineClient';
 import { listPromptAttempts, getPromptAttempt } from '../api/promptAttemptClient';
 import type { PromptAttempt } from '../api/promptAttemptClient';
 import { useDataSources } from '../hooks/useDataSources';
@@ -42,7 +45,7 @@ interface DocumentWithPages {
   pageDimensions?: PageDimensions[];
 }
 
-type RightTab = 'prompt' | 'results' | 'history' | 'activity';
+type RightTab = 'prompt' | 'results' | 'pipeline' | 'history' | 'activity';
 
 // ============================================================================
 // URL Helpers
@@ -147,6 +150,9 @@ export function PromptingPage() {
   const [promptAttemptsTotal, setPromptAttemptsTotal] = useState(0);
   const [selectedAttempt, setSelectedAttempt] = useState<PromptAttempt | null>(null);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  // Pipeline step logs state
+  const [pipelineStepLogs, setPipelineStepLogs] = useState<PipelineStepLog[]>([]);
 
   // Activity state
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -383,6 +389,7 @@ export function PromptingPage() {
     setAutofillResult(null);
     setPreviewedPrompt(null);
     setConfidenceMap({});
+    setPipelineStepLogs([]);
     updateUrl(null, null);
   }, []);
 
@@ -476,18 +483,52 @@ export function PromptingPage() {
 
     setIsAutofilling(true);
     setActiveTab('results');
+    setPipelineStepLogs([]);
     addActivity('info', 'Running AI auto-fill...');
 
+    const requestFields = buildRequestFields();
+
+    // Run vision autofill + pipeline autofill in parallel
+    // Vision autofill: used for Results tab (records prompt attempts)
+    // Pipeline autofill: used for Pipeline tab (captures step logs)
+    const visionPromise = autofillWithVision(
+      activeDocument.document_id,
+      conversationId,
+      requestFields,
+      customRules.length > 0 ? customRules : undefined,
+      systemPrompt.trim() || undefined,
+    );
+
+    const pipelinePromise = autofillPipeline({
+      document_id: activeDocument.document_id,
+      conversation_id: conversationId,
+      fields: requestFields.map(f => ({
+        field_id: f.field_id,
+        label: f.label,
+        type: f.type,
+        x: f.bbox?.x ?? null,
+        y: f.bbox?.y ?? null,
+        width: f.bbox?.width ?? null,
+        height: f.bbox?.height ?? null,
+        page: f.bbox?.page ?? null,
+      })),
+      rules: customRules.length > 0 ? customRules : undefined,
+    }).catch(err => {
+      // Pipeline call is best-effort for logging; don't block main flow
+      addActivity('info', 'Pipeline logs unavailable', err instanceof Error ? err.message : String(err));
+      return null;
+    });
+
     try {
-      const result = await autofillWithVision(
-        activeDocument.document_id,
-        conversationId,
-        buildRequestFields(),
-        customRules.length > 0 ? customRules : undefined,
-        systemPrompt.trim() || undefined,
-      );
+      const [result, pipelineResult] = await Promise.all([visionPromise, pipelinePromise]);
 
       setAutofillResult(result);
+
+      // Capture pipeline step logs
+      if (pipelineResult?.step_logs) {
+        setPipelineStepLogs(pipelineResult.step_logs);
+        setActiveTab('pipeline');
+      }
 
       if (result.success && result.filled_fields.length > 0) {
         // Apply filled values to fields
@@ -615,21 +656,30 @@ export function PromptingPage() {
         <aside className="w-96 bg-white border-l border-gray-200 flex flex-col shrink-0">
           {/* Tab Bar */}
           <div className="flex border-b border-gray-200">
-            {(['prompt', 'results', 'history', 'activity'] as RightTab[]).map(tab => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`
-                  flex-1 px-3 py-2.5 text-sm font-medium transition-colors
-                  ${activeTab === tab
-                    ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50'
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                  }
-                `}
-              >
-                {tab === 'prompt' ? 'Prompt' : tab === 'results' ? 'Results' : tab === 'history' ? `History${promptAttemptsTotal > 0 ? ` (${promptAttemptsTotal})` : ''}` : 'Activity'}
-              </button>
-            ))}
+            {(['prompt', 'results', 'pipeline', 'history', 'activity'] as RightTab[]).map(tab => {
+              const tabLabels: Record<RightTab, string> = {
+                prompt: 'Prompt',
+                results: 'Results',
+                pipeline: 'Pipeline',
+                history: `History${promptAttemptsTotal > 0 ? ` (${promptAttemptsTotal})` : ''}`,
+                activity: 'Activity',
+              };
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`
+                    flex-1 px-2 py-2.5 text-xs font-medium transition-colors
+                    ${activeTab === tab
+                      ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50'
+                      : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                    }
+                  `}
+                >
+                  {tabLabels[tab]}
+                </button>
+              );
+            })}
           </div>
 
           {/* Tab Content */}
@@ -652,6 +702,10 @@ export function PromptingPage() {
                 result={autofillResult}
                 isRunning={isAutofilling}
               />
+            )}
+
+            {activeTab === 'pipeline' && (
+              <PipelineLogPanel stepLogs={pipelineStepLogs} />
             )}
 
             {activeTab === 'history' && (

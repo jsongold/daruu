@@ -53,6 +53,22 @@ export interface PipelineFilledField {
   source?: string | null;
 }
 
+/** A single pipeline step execution log */
+export interface PipelineStepLog {
+  /** Step identifier: context_build, rule_analyze, fill_plan, render */
+  step_name: string;
+  /** Step outcome: success, error, skipped */
+  status: string;
+  /** Time for this step in ms */
+  duration_ms: number;
+  /** Human-readable 1-line summary */
+  summary: string;
+  /** Step-specific structured data for drill-down */
+  details: Record<string, unknown>;
+  /** Error message if status=error */
+  error?: string | null;
+}
+
 /** Response from autofill pipeline */
 export interface AutofillPipelineResponse {
   /** Whether autofill succeeded */
@@ -71,6 +87,8 @@ export interface AutofillPipelineResponse {
   processing_time_ms: number;
   /** Error message if failed */
   error?: string | null;
+  /** Per-step pipeline execution logs */
+  step_logs?: PipelineStepLog[];
 }
 
 /** API response wrapper */
