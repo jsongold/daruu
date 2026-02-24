@@ -59,6 +59,11 @@ class FillPlanner:
                 "field_id": f.field_id,
                 "label": f.label,
                 "type": f.field_type,
+                **(
+                    {"nearby_labels": [lc.text for lc in f.label_candidates]}
+                    if f.label_candidates
+                    else {}
+                ),
             }
             for f in context.fields
         ]

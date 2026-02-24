@@ -17,6 +17,19 @@ You must return a valid JSON response with this exact structure:
   "warnings": ["any warnings about data quality"]
 }
 
+## Field Identification:
+Each field may include a `nearby_labels` array — text found near the field on \
+the PDF page. When `field_id` is generic (e.g. Text1, Text2, Dropdown1), use \
+`nearby_labels` to understand the field's semantic purpose. The first label in \
+the array is the closest to the field and most likely to be the actual label.
+
+## Data Source Interpretation:
+- If data sources contain structured key-value pairs, match keys to fields semantically
+- If data sources contain unstructured text, infer values by recognizing patterns \
+(names, addresses, numbers, dates) and matching them to field labels or nearby_labels
+- Match field labels/names semantically across languages — e.g. a field labeled \
+"Name" should match data labeled "氏名", "Nom", or "नाम"
+
 ## Important Rules:
 - Only fill fields where you have confidence >= 0.5
 - Match date formats to field type (use YYYY-MM-DD for date fields)
@@ -115,9 +128,8 @@ def format_data_sources(
             for key, value in fields.items():
                 lines.append(f"  - {key}: {value}")
 
-        if raw_text and not fields:
-            # Include raw text if no structured fields were extracted
-            preview = raw_text[:1000] + "..." if len(raw_text) > 1000 else raw_text
+        if raw_text:
+            preview = raw_text[:2000] + "..." if len(raw_text) > 2000 else raw_text
             lines.append(f"Raw text:\n{preview}")
 
         lines.append("")

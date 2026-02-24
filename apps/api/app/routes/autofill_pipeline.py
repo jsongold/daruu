@@ -149,6 +149,7 @@ def get_text_extraction_service(
 def get_pipeline_service(
     data_source_repo: DataSourceRepository = Depends(get_data_source_repo),
     extraction_service: TextExtractionService = Depends(get_text_extraction_service),
+    document_service: DocumentService = Depends(get_document_service),
 ) -> AutofillPipelineService:
     """Build and return the AutofillPipelineService with all dependencies."""
     from app.routes.vision_autofill import get_openai_client
@@ -156,6 +157,7 @@ def get_pipeline_service(
     context_builder = FormContextBuilder(
         data_source_repo=data_source_repo,
         extraction_service=extraction_service,
+        document_service=document_service,
     )
 
     llm_client = get_openai_client()
