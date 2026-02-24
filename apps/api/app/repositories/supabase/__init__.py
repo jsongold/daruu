@@ -19,16 +19,20 @@ Usage:
     data_source_repo = SupabaseDataSourceRepository()
 """
 
+from app.repositories.supabase.correction_repository import SupabaseCorrectionRepository
 from app.repositories.supabase.data_source_repository import SupabaseDataSourceRepository
 from app.repositories.supabase.document_repository import SupabaseDocumentRepository
 from app.repositories.supabase.file_repository import SupabaseFileRepository
 from app.repositories.supabase.job_repository import SupabaseJobRepository
 from app.repositories.supabase.prompt_attempt_repository import SupabasePromptAttemptRepository
+from app.repositories.supabase.rule_snippet_repository import SupabaseRuleSnippetRepository
 
 __all__ = [
+    "SupabaseCorrectionRepository",
     "SupabaseDataSourceRepository",
     "SupabaseDocumentRepository",
     "SupabaseFileRepository",
     "SupabaseJobRepository",
     "SupabasePromptAttemptRepository",
+    "SupabaseRuleSnippetRepository",
 ]

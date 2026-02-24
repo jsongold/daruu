@@ -35,6 +35,7 @@ def _is_test_mode() -> bool:
     return os.environ.get("DARU_REPOSITORY_MODE", "").lower() == "memory"
 from app.repositories import (
     ConversationRepository,
+    CorrectionRepository,
     DataSourceRepository,
     DocumentRepository,
     EditRepository,
@@ -43,6 +44,7 @@ from app.repositories import (
     JobRepository,
     MessageRepository,
     PromptAttemptRepository,
+    RuleSnippetRepository,
     TemplateRepository,
 )
 
@@ -78,6 +80,14 @@ _supabase_data_source_repo: "DataSourceRepository | None" = None
 
 # Prompt attempt repository (Supabase)
 _supabase_prompt_attempt_repo: "PromptAttemptRepository | None" = None
+
+# Correction repository (memory + supabase)
+_memory_correction_repo: "CorrectionRepository | None" = None
+_supabase_correction_repo: "CorrectionRepository | None" = None
+
+# Rule snippet repository (memory + supabase)
+_memory_rule_snippet_repo: "RuleSnippetRepository | None" = None
+_supabase_rule_snippet_repo: "RuleSnippetRepository | None" = None
 
 
 def _get_memory_document_repository() -> DocumentRepository:
@@ -403,6 +413,86 @@ def get_prompt_attempt_repository(
     return _get_supabase_prompt_attempt_repository()
 
 
+def _get_memory_correction_repository() -> CorrectionRepository:
+    """Get in-memory correction repository singleton (for tests only)."""
+    global _memory_correction_repo
+    if _memory_correction_repo is None:
+        from app.infrastructure.repositories.memory_correction_repository import (
+            MemoryCorrectionRepository,
+        )
+        _memory_correction_repo = MemoryCorrectionRepository()
+    return _memory_correction_repo
+
+
+def _get_supabase_correction_repository() -> CorrectionRepository:
+    """Get Supabase correction repository singleton."""
+    global _supabase_correction_repo
+    _ensure_supabase_configured()
+    if _supabase_correction_repo is None:
+        from app.repositories.supabase import SupabaseCorrectionRepository
+        _supabase_correction_repo = SupabaseCorrectionRepository()
+        logger.debug("Initialized Supabase correction repository")
+    return _supabase_correction_repo
+
+
+def get_correction_repository(
+    mode: RepositoryMode = "supabase",
+) -> CorrectionRepository:
+    """Get the correction repository.
+
+    Args:
+        mode: Repository mode:
+            - "supabase": Use Supabase (default, required for production)
+            - "memory": Use in-memory storage (for unit tests only)
+
+    Returns:
+        CorrectionRepository implementation.
+    """
+    if mode == "memory" or _is_test_mode():
+        return _get_memory_correction_repository()
+    return _get_supabase_correction_repository()
+
+
+def _get_memory_rule_snippet_repository() -> RuleSnippetRepository:
+    """Get in-memory rule snippet repository singleton (for tests only)."""
+    global _memory_rule_snippet_repo
+    if _memory_rule_snippet_repo is None:
+        from app.infrastructure.repositories.memory_rule_snippet_repository import (
+            MemoryRuleSnippetRepository,
+        )
+        _memory_rule_snippet_repo = MemoryRuleSnippetRepository()
+    return _memory_rule_snippet_repo
+
+
+def _get_supabase_rule_snippet_repository() -> RuleSnippetRepository:
+    """Get Supabase rule snippet repository singleton."""
+    global _supabase_rule_snippet_repo
+    _ensure_supabase_configured()
+    if _supabase_rule_snippet_repo is None:
+        from app.repositories.supabase import SupabaseRuleSnippetRepository
+        _supabase_rule_snippet_repo = SupabaseRuleSnippetRepository()
+        logger.debug("Initialized Supabase rule snippet repository")
+    return _supabase_rule_snippet_repo
+
+
+def get_rule_snippet_repository(
+    mode: RepositoryMode = "supabase",
+) -> RuleSnippetRepository:
+    """Get the rule snippet repository.
+
+    Args:
+        mode: Repository mode:
+            - "supabase": Use Supabase (default, required for production)
+            - "memory": Use in-memory storage (for unit tests only)
+
+    Returns:
+        RuleSnippetRepository implementation.
+    """
+    if mode == "memory" or _is_test_mode():
+        return _get_memory_rule_snippet_repository()
+    return _get_supabase_rule_snippet_repository()
+
+
 def clear_repository_singletons() -> None:
     """Clear all repository singleton instances.
 
@@ -412,6 +502,8 @@ def clear_repository_singletons() -> None:
     global _supabase_doc_repo, _supabase_job_repo, _supabase_file_repo
     global _memory_conv_repo, _memory_msg_repo, _memory_template_repo, _memory_edit_repo
     global _supabase_data_source_repo, _supabase_prompt_attempt_repo
+    global _memory_correction_repo, _supabase_correction_repo
+    global _memory_rule_snippet_repo, _supabase_rule_snippet_repo
 
     _memory_doc_repo = None
     _memory_job_repo = None
@@ -426,6 +518,10 @@ def clear_repository_singletons() -> None:
     _memory_edit_repo = None
     _supabase_data_source_repo = None
     _supabase_prompt_attempt_repo = None
+    _memory_correction_repo = None
+    _supabase_correction_repo = None
+    _memory_rule_snippet_repo = None
+    _supabase_rule_snippet_repo = None
 
 
 def get_active_mode() -> str:

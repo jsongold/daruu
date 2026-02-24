@@ -21,10 +21,14 @@ from app.routes.structure_labelling import router as structure_labelling_router
 from app.routes.templates import router as templates_router
 from app.routes.prompt_attempts import router as prompt_attempts_router
 from app.routes.autofill_pipeline import router as autofill_pipeline_router
+from app.routes.corrections import router as corrections_router
+from app.routes.rules import router as rules_router
 from app.routes.vision_autofill import router as vision_autofill_router
 
 __all__ = [
     "autofill_pipeline_router",
+    "corrections_router",
+    "rules_router",
     "adjust_router",
     "analyze_router",
     "auth_router",

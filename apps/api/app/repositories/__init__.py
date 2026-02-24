@@ -34,6 +34,7 @@ Directory structure:
 """
 
 from app.repositories.conversation_repository import ConversationRepository
+from app.repositories.correction_repository import CorrectionRepository
 from app.repositories.data_source_repository import DataSourceRepository
 from app.repositories.document_repository import DocumentRepository
 from app.repositories.edit_repository import EditRepository
@@ -42,10 +43,12 @@ from app.repositories.file_repository import FileRepository
 from app.repositories.job_repository import JobRepository
 from app.repositories.message_repository import MessageRepository
 from app.repositories.prompt_attempt_repository import PromptAttemptRepository
+from app.repositories.rule_snippet_repository import RuleSnippetRepository
 from app.repositories.template_repository import TemplateRepository
 
 __all__ = [
     "ConversationRepository",
+    "CorrectionRepository",
     "DataSourceRepository",
     "DocumentRepository",
     "EditRepository",
@@ -54,5 +57,6 @@ __all__ = [
     "JobRepository",
     "MessageRepository",
     "PromptAttemptRepository",
+    "RuleSnippetRepository",
     "TemplateRepository",
 ]

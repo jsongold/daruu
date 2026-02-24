@@ -34,11 +34,17 @@ from app.infrastructure.repositories.memory_repository import (
 from app.infrastructure.repositories.memory_conversation_repository import (
     MemoryConversationRepository,
 )
+from app.infrastructure.repositories.memory_correction_repository import (
+    MemoryCorrectionRepository,
+)
 from app.infrastructure.repositories.memory_edit_repository import (
     MemoryEditRepository,
 )
 from app.infrastructure.repositories.memory_message_repository import (
     MemoryMessageRepository,
+)
+from app.infrastructure.repositories.memory_rule_snippet_repository import (
+    MemoryRuleSnippetRepository,
 )
 from app.infrastructure.repositories.memory_template_repository import (
     MemoryTemplateRepository,
@@ -47,6 +53,7 @@ from app.infrastructure.repositories.factory import (
     clear_repository_singletons,
     get_active_mode,
     get_conversation_repository,
+    get_correction_repository,
     get_data_source_repository,
     get_document_repository,
     get_edit_repository,
@@ -55,6 +62,7 @@ from app.infrastructure.repositories.factory import (
     get_job_repository,
     get_message_repository,
     get_prompt_attempt_repository,
+    get_rule_snippet_repository,
     get_template_repository,
 )
 
@@ -65,11 +73,14 @@ __all__ = [
     "MemoryFileRepository",
     "MemoryEventPublisher",
     "MemoryConversationRepository",
+    "MemoryCorrectionRepository",
     "MemoryEditRepository",
     "MemoryMessageRepository",
+    "MemoryRuleSnippetRepository",
     "MemoryTemplateRepository",
     # Factory functions (preferred way to get repositories)
     "get_conversation_repository",
+    "get_correction_repository",
     "get_data_source_repository",
     "get_document_repository",
     "get_edit_repository",
@@ -78,6 +89,7 @@ __all__ = [
     "get_job_repository",
     "get_message_repository",
     "get_prompt_attempt_repository",
+    "get_rule_snippet_repository",
     "get_template_repository",
     # Utility functions
     "get_active_mode",

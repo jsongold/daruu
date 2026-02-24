@@ -18,6 +18,7 @@ from app.routes import (
     analyze_router,
     auth_router,
     autofill_pipeline_router,
+    corrections_router,
     conversations_router,
     data_sources_router,
     documents_router,
@@ -33,6 +34,7 @@ from app.routes import (
     prompt_attempts_router,
     review_router,
     review_service_router,
+    rules_router,
     structure_labelling_router,
     templates_router,
     vision_autofill_router,
@@ -209,6 +211,10 @@ All errors follow a consistent format with `success: false` and an `error` objec
                 "description": "To-Be autofill pipeline: FormContextBuilder -> FillPlanner -> FormRenderer",
             },
             {
+                "name": "rules",
+                "description": "Rule snippet management and semantic search (v1 API)",
+            },
+            {
                 "name": "prompt-attempts",
                 "description": "Prompt tuning history for vision autofill (v1 API)",
             },
@@ -276,6 +282,12 @@ All errors follow a consistent format with `success: false` and an `error` objec
 
     # Autofill Pipeline API (To-Be architecture)
     app.include_router(autofill_pipeline_router, prefix=settings.api_prefix)
+
+    # Corrections API (user correction tracking)
+    app.include_router(corrections_router, prefix=settings.api_prefix)
+
+    # Rules API (rule snippet management and search)
+    app.include_router(rules_router, prefix=settings.api_prefix)
 
     # Prompt Attempts API (prompt tuning feature)
     app.include_router(prompt_attempts_router, prefix=settings.api_prefix)

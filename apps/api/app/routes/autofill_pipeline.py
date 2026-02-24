@@ -11,9 +11,11 @@ from pydantic import BaseModel, Field
 
 from app.config import get_settings
 from app.infrastructure.repositories import (
+    get_correction_repository,
     get_data_source_repository,
     get_document_repository,
     get_file_repository,
+    get_rule_snippet_repository,
 )
 from app.models.common import ApiResponse
 from app.repositories import DataSourceRepository, DocumentRepository, FileRepository
@@ -26,8 +28,8 @@ from app.services.autofill_pipeline import AutofillPipelineService
 from app.services.form_context import FormContextBuilder
 from app.services.fill_planner import FillPlanner
 from app.services.form_renderer import FormRenderer
-from app.services.rule_analyzer import RuleAnalyzerStub
-from app.services.correction_tracker import CorrectionTrackerStub
+from app.services.rule_analyzer import RuleAnalyzer, RuleAnalyzerStub
+from app.services.correction_tracker import CorrectionTracker, CorrectionTrackerStub
 
 logger = logging.getLogger(__name__)
 
@@ -164,8 +166,27 @@ def get_pipeline_service(
     # In Phase 2 we use a lightweight wrapper; real DI comes later.
     form_renderer = _build_form_renderer()
 
-    rule_analyzer = RuleAnalyzerStub()
-    correction_tracker = CorrectionTrackerStub()
+    if llm_client is not None:
+        from app.infrastructure.gateways.embedding import (
+            MockEmbeddingGateway,
+            OpenAIEmbeddingGateway,
+        )
+
+        snippet_repo = get_rule_snippet_repository()
+        try:
+            embedding_gw = OpenAIEmbeddingGateway(client=llm_client)
+        except Exception:
+            embedding_gw = MockEmbeddingGateway()
+        rule_analyzer = RuleAnalyzer(
+            llm_client=llm_client,
+            snippet_repo=snippet_repo,
+            embedding_gateway=embedding_gw,
+        )
+    else:
+        rule_analyzer = RuleAnalyzerStub()
+
+    correction_repo = get_correction_repository()
+    correction_tracker = CorrectionTracker(repository=correction_repo)
 
     return AutofillPipelineService(
         context_builder=context_builder,
