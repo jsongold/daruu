@@ -29,6 +29,9 @@ export interface AutofillPipelineFieldInfo {
   page?: number | null;
 }
 
+/** Autofill mode */
+export type AutofillMode = 'quick' | 'detailed';
+
 /** Request for autofill pipeline */
 export interface AutofillPipelineRequest {
   /** Target document ID to fill */
@@ -39,6 +42,8 @@ export interface AutofillPipelineRequest {
   fields: AutofillPipelineFieldInfo[];
   /** Optional rules for field filling */
   rules?: string[];
+  /** Autofill mode: quick (one-shot) or detailed (interactive Q&A) */
+  mode?: AutofillMode;
 }
 
 /** A field that was successfully filled */
@@ -168,6 +173,81 @@ export async function autofillPipeline(
     throw new ApiError(
       response.error || 'Autofill pipeline failed',
       'AUTOFILL_PIPELINE_ERROR',
+      400
+    );
+  }
+
+  return response.data;
+}
+
+// ============================================================================
+// Detailed Mode: Turn Endpoint Types
+// ============================================================================
+
+/** A question option */
+export interface QuestionOption {
+  id: string;
+  label: string;
+}
+
+/** A single conversation turn */
+export interface ConversationTurn {
+  role: 'assistant' | 'user';
+  type: 'question' | 'answer' | 'fill_plan';
+  question?: string | null;
+  question_type?: 'single_choice' | 'multiple_choice' | 'free_text' | 'confirm' | null;
+  options?: QuestionOption[];
+  placeholder?: string | null;
+  context?: string | null;
+  selected_option_ids?: string[];
+  free_text?: string | null;
+}
+
+/** Request for a single turn in detailed autofill mode */
+export interface AutofillTurnRequest {
+  document_id: string;
+  conversation_id: string;
+  fields: AutofillPipelineFieldInfo[];
+  rules?: string[];
+  conversation: ConversationTurn[];
+  just_fill?: boolean;
+}
+
+/** Response from a single turn in detailed autofill mode */
+export interface AutofillTurnResponse {
+  type: 'question' | 'fill_plan';
+  question?: string | null;
+  question_type?: string | null;
+  options?: QuestionOption[];
+  context?: string | null;
+  filled_fields?: PipelineFilledField[];
+  unfilled_fields?: string[];
+  skipped_fields?: string[];
+  filled_document_ref?: string | null;
+  processing_time_ms?: number;
+  step_logs?: PipelineStepLog[];
+}
+
+/**
+ * Execute a single turn in detailed autofill mode.
+ *
+ * Returns either a question (needs user answer) or a fill plan (done).
+ */
+export async function autofillTurn(
+  req: AutofillTurnRequest
+): Promise<AutofillTurnResponse> {
+  const response = await request<ApiResponse<AutofillTurnResponse>>(
+    `${API_PREFIX}/autofill/turn`,
+    {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }
+  );
+
+  if (!response.success || !response.data) {
+    throw new ApiError(
+      response.error || 'Autofill turn failed',
+      'AUTOFILL_TURN_ERROR',
       400
     );
   }

@@ -26,7 +26,7 @@ import { createConversation, getConversation } from '../api/conversationClient';
 import { autofillWithVision, previewPrompt } from '../api/autofillClient';
 import type { VisionAutofillResponse, PromptPreviewResponse } from '../api/autofillClient';
 import { autofillPipeline } from '../api/autofillPipelineClient';
-import type { PipelineStepLog } from '../api/autofillPipelineClient';
+import type { AutofillMode, PipelineStepLog } from '../api/autofillPipelineClient';
 import { listPromptAttempts, getPromptAttempt } from '../api/promptAttemptClient';
 import type { PromptAttempt } from '../api/promptAttemptClient';
 import { useDataSources } from '../hooks/useDataSources';
@@ -150,6 +150,9 @@ export function PromptingPage() {
   const [promptAttemptsTotal, setPromptAttemptsTotal] = useState(0);
   const [selectedAttempt, setSelectedAttempt] = useState<PromptAttempt | null>(null);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  // Autofill mode state
+  const [autofillMode, setAutofillMode] = useState<AutofillMode>('quick');
 
   // Pipeline step logs state
   const [pipelineStepLogs, setPipelineStepLogs] = useState<PipelineStepLog[]>([]);
@@ -513,6 +516,7 @@ export function PromptingPage() {
         page: f.bbox?.page ?? null,
       })),
       rules: customRules.length > 0 ? customRules : undefined,
+      mode: autofillMode,
     }).catch(err => {
       // Pipeline call is best-effort for logging; don't block main flow
       addActivity('info', 'Pipeline logs unavailable', err instanceof Error ? err.message : String(err));
@@ -607,13 +611,37 @@ export function PromptingPage() {
             </button>
           )}
           {activeDocument && conversationId && dataSources.length > 0 && (
-            <button
-              onClick={handleRunAutofill}
-              disabled={isAutofilling}
-              className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors disabled:bg-green-400 disabled:cursor-not-allowed"
-            >
-              {isAutofilling ? 'Running...' : 'Run Autofill'}
-            </button>
+            <div className="flex items-center gap-2">
+              <div className="flex bg-gray-100 rounded-lg p-0.5 text-xs">
+                <button
+                  onClick={() => setAutofillMode('quick')}
+                  className={`px-2.5 py-1 rounded-md transition-colors ${
+                    autofillMode === 'quick'
+                      ? 'bg-white text-gray-900 shadow-sm font-medium'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  Quick
+                </button>
+                <button
+                  onClick={() => setAutofillMode('detailed')}
+                  className={`px-2.5 py-1 rounded-md transition-colors ${
+                    autofillMode === 'detailed'
+                      ? 'bg-white text-gray-900 shadow-sm font-medium'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  Detailed
+                </button>
+              </div>
+              <button
+                onClick={handleRunAutofill}
+                disabled={isAutofilling}
+                className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors disabled:bg-green-400 disabled:cursor-not-allowed"
+              >
+                {isAutofilling ? 'Running...' : 'Run Autofill'}
+              </button>
+            </div>
           )}
         </div>
       </header>
