@@ -53,5 +53,11 @@ class FillPlan(BaseModel):
     raw_llm_response: str | None = Field(
         None, description="Raw LLM response (for debugging)"
     )
+    system_prompt: str | None = Field(
+        None, description="System prompt sent to LLM"
+    )
+    user_prompt: str | None = Field(
+        None, description="User prompt sent to LLM"
+    )
 
     model_config = {"frozen": True}
