@@ -25,8 +25,15 @@ import {
 import { createConversation, getConversation } from '../api/conversationClient';
 import { autofillWithVision, previewPrompt } from '../api/autofillClient';
 import type { VisionAutofillResponse, PromptPreviewResponse } from '../api/autofillClient';
-import { autofillPipeline } from '../api/autofillPipelineClient';
-import type { AutofillMode, PipelineStepLog } from '../api/autofillPipelineClient';
+import { autofillPipeline, autofillTurn } from '../api/autofillPipelineClient';
+import type {
+  AutofillMode,
+  AutofillTurnResponse,
+  ConversationTurn,
+  PipelineStepLog,
+  QuestionOption,
+} from '../api/autofillPipelineClient';
+import { QuestionModal } from '../components/single/QuestionModal';
 import { listPromptAttempts, getPromptAttempt } from '../api/promptAttemptClient';
 import type { PromptAttempt } from '../api/promptAttemptClient';
 import { useDataSources } from '../hooks/useDataSources';
@@ -156,6 +163,11 @@ export function PromptingPage() {
 
   // Pipeline step logs state
   const [pipelineStepLogs, setPipelineStepLogs] = useState<PipelineStepLog[]>([]);
+
+  // Detailed mode Q&A state
+  const [detailedConversation, setDetailedConversation] = useState<ConversationTurn[]>([]);
+  const [currentQuestion, setCurrentQuestion] = useState<AutofillTurnResponse | null>(null);
+  const [isDetailedTurnLoading, setIsDetailedTurnLoading] = useState(false);
 
   // Activity state
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -393,6 +405,8 @@ export function PromptingPage() {
     setPreviewedPrompt(null);
     setConfidenceMap({});
     setPipelineStepLogs([]);
+    setDetailedConversation([]);
+    setCurrentQuestion(null);
     updateUrl(null, null);
   }, []);
 
@@ -487,11 +501,20 @@ export function PromptingPage() {
     setIsAutofilling(true);
     setActiveTab('results');
     setPipelineStepLogs([]);
-    addActivity('info', 'Running AI auto-fill...');
+    setDetailedConversation([]);
+    setCurrentQuestion(null);
+    addActivity('info', `Running AI auto-fill (${autofillMode} mode)...`);
+
+    // Detailed mode: start Q&A flow
+    if (autofillMode === 'detailed') {
+      setActiveTab('pipeline');
+      executeDetailedTurn([]);
+      return;
+    }
 
     const requestFields = buildRequestFields();
 
-    // Run vision autofill + pipeline autofill in parallel
+    // Quick mode: Run vision autofill + pipeline autofill in parallel
     // Vision autofill: used for Results tab (records prompt attempts)
     // Pipeline autofill: used for Pipeline tab (captures step logs)
     const visionPromise = autofillWithVision(
@@ -574,7 +597,115 @@ export function PromptingPage() {
         loadHistory(conversationId);
       }
     }
-  }, [activeDocument, conversationId, dataSources.length, fields, customRules, systemPrompt, buildRequestFields, addActivity, loadHistory]);
+  }, [activeDocument, conversationId, dataSources.length, fields, customRules, systemPrompt, autofillMode, buildRequestFields, addActivity, loadHistory]);
+
+  // ---- Detailed mode turn helpers ----
+
+  const buildPipelineFields = useCallback(() => {
+    return buildRequestFields().map(f => ({
+      field_id: f.field_id,
+      label: f.label,
+      type: f.type,
+      x: f.bbox?.x ?? null,
+      y: f.bbox?.y ?? null,
+      width: f.bbox?.width ?? null,
+      height: f.bbox?.height ?? null,
+      page: f.bbox?.page ?? null,
+    }));
+  }, [buildRequestFields]);
+
+  const executeDetailedTurn = useCallback(async (
+    conversation: ConversationTurn[],
+    justFill: boolean = false,
+  ) => {
+    if (!activeDocument || !conversationId) return;
+
+    setIsDetailedTurnLoading(true);
+
+    try {
+      const turnResponse = await autofillTurn({
+        document_id: activeDocument.document_id,
+        conversation_id: conversationId,
+        fields: buildPipelineFields(),
+        rules: customRules.length > 0 ? customRules : undefined,
+        conversation,
+        just_fill: justFill,
+      });
+
+      if (turnResponse.step_logs) {
+        setPipelineStepLogs(prev => [...prev, ...turnResponse.step_logs!]);
+      }
+
+      if (turnResponse.type === 'question') {
+        setCurrentQuestion(turnResponse);
+      } else {
+        // Fill plan response — apply results
+        setCurrentQuestion(null);
+        setDetailedConversation([]);
+
+        if (turnResponse.filled_fields && turnResponse.filled_fields.length > 0) {
+          const newConfidenceMap: Record<string, number> = {};
+          setFields(prev => prev.map(field => {
+            const filled = turnResponse.filled_fields!.find(f => f.field_id === field.field_id);
+            if (filled) {
+              newConfidenceMap[field.field_id] = filled.confidence;
+              return { ...field, value: filled.value };
+            }
+            return field;
+          }));
+          setConfidenceMap(newConfidenceMap);
+          addActivity('info', `Auto-filled ${turnResponse.filled_fields.length} fields (detailed mode)`);
+        } else {
+          addActivity('error', 'Detailed auto-fill found no matches');
+        }
+
+        setIsAutofilling(false);
+        if (conversationId) {
+          loadHistory(conversationId);
+        }
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Detailed turn failed';
+      addActivity('error', 'Detailed auto-fill failed', message);
+      setCurrentQuestion(null);
+      setIsAutofilling(false);
+    } finally {
+      setIsDetailedTurnLoading(false);
+    }
+  }, [activeDocument, conversationId, buildPipelineFields, customRules, addActivity, loadHistory]);
+
+  const handleQuestionSubmit = useCallback((answer: { selectedOptionIds: string[]; freeText?: string }) => {
+    if (!currentQuestion) return;
+
+    // Add the question + answer to conversation
+    const questionTurn: ConversationTurn = {
+      role: 'assistant',
+      type: 'question',
+      question: currentQuestion.question,
+      question_type: currentQuestion.question_type as ConversationTurn['question_type'],
+      options: currentQuestion.options,
+      context: currentQuestion.context,
+    };
+
+    const answerTurn: ConversationTurn = {
+      role: 'user',
+      type: 'answer',
+      selected_option_ids: answer.selectedOptionIds,
+      free_text: answer.freeText,
+    };
+
+    const updatedConversation = [...detailedConversation, questionTurn, answerTurn];
+    setDetailedConversation(updatedConversation);
+    setCurrentQuestion(null);
+
+    // Execute next turn with updated conversation
+    executeDetailedTurn(updatedConversation);
+  }, [currentQuestion, detailedConversation, executeDetailedTurn]);
+
+  const handleJustFill = useCallback(() => {
+    setCurrentQuestion(null);
+    executeDetailedTurn(detailedConversation, true);
+  }, [detailedConversation, executeDetailedTurn]);
 
   // ---- Rule management ----
 
@@ -780,6 +911,19 @@ export function PromptingPage() {
         onDataSourceRemove={handleDataSourceRemove}
         isDataSourceUploading={isDataSourceUploading}
       />
+
+      {/* Detailed Mode: Question Modal */}
+      {currentQuestion && currentQuestion.type === 'question' && (
+        <QuestionModal
+          question={currentQuestion.question || ''}
+          questionType={(currentQuestion.question_type || 'free_text') as 'single_choice' | 'multiple_choice' | 'free_text' | 'confirm'}
+          options={currentQuestion.options || []}
+          context={currentQuestion.context}
+          onSubmit={handleQuestionSubmit}
+          onJustFill={handleJustFill}
+          isSubmitting={isDetailedTurnLoading}
+        />
+      )}
     </div>
   );
 }
