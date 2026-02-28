@@ -20,6 +20,7 @@ const STEP_LABELS: Record<string, string> = {
   context_build: 'Context Build',
   rule_analyze: 'Rule Analysis',
   fill_plan: 'Fill Planning (LLM)',
+  fill_plan_turn: 'Fill Plan Turn (LLM)',
   render: 'Render',
 };
 
@@ -151,6 +152,7 @@ function StepDetails({ stepName, details }: { stepName: string; details: Record<
     case 'rule_analyze':
       return <RuleAnalyzeDetails details={details} />;
     case 'fill_plan':
+    case 'fill_plan_turn':
       return <FillPlanDetails details={details} />;
     case 'render':
       return <RenderDetails details={details} />;

@@ -28,10 +28,9 @@ import type { VisionAutofillResponse, PromptPreviewResponse } from '../api/autof
 import { autofillPipeline, autofillTurn } from '../api/autofillPipelineClient';
 import type {
   AutofillMode,
-  AutofillTurnResponse,
   ConversationTurn,
+  QuestionItem,
   PipelineStepLog,
-  QuestionOption,
 } from '../api/autofillPipelineClient';
 import { QuestionModal } from '../components/single/QuestionModal';
 import { listPromptAttempts, getPromptAttempt } from '../api/promptAttemptClient';
@@ -166,8 +165,12 @@ export function PromptingPage() {
 
   // Detailed mode Q&A state
   const [detailedConversation, setDetailedConversation] = useState<ConversationTurn[]>([]);
-  const [currentQuestion, setCurrentQuestion] = useState<AutofillTurnResponse | null>(null);
+  const [currentQuestions, setCurrentQuestions] = useState<QuestionItem[] | null>(null);
   const [isDetailedTurnLoading, setIsDetailedTurnLoading] = useState(false);
+
+  // Page selection state
+  const [selectedPages, setSelectedPages] = useState<number[]>([]);
+  const [pageSelectionPhase, setPageSelectionPhase] = useState(false);
 
   // Activity state
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -195,6 +198,12 @@ export function PromptingPage() {
       timestamp: new Date(),
     };
     setActivities(prev => [activity, ...prev]);
+  }, []);
+
+  const togglePage = useCallback((page: number) => {
+    setSelectedPages(prev =>
+      prev.includes(page) ? prev.filter(p => p !== page) : [...prev, page].sort((a, b) => a - b)
+    );
   }, []);
 
   const loadHistory = useCallback(async (convId: string) => {
@@ -302,6 +311,7 @@ export function PromptingPage() {
 
         setDocuments([docWithPages]);
         setActiveDocumentId(docId);
+        setSelectedPages(Array.from({ length: pageCount }, (_, i) => i + 1));
         addActivity('info', `Loaded ${filename}`, `${pageCount} pages`);
 
         const convId = await ensureConversation(filename);
@@ -356,6 +366,7 @@ export function PromptingPage() {
 
       setDocuments(prev => [...prev, docWithPages]);
       setActiveDocumentId(doc.document_id);
+      setSelectedPages(Array.from({ length: pageCount }, (_, i) => i + 1));
       addActivity('upload', `Uploaded ${filename}`, `${pageCount} pages`);
 
       const convId = await ensureConversation(filename);
@@ -374,6 +385,9 @@ export function PromptingPage() {
     const doc = documents.find(d => d.document_id === documentId);
     setActiveDocumentId(documentId);
     setSelectedFieldId(null);
+    setSelectedPages(
+      doc ? Array.from({ length: doc.page_count }, (_, i) => i + 1) : []
+    );
     updateUrl(documentId, conversationId);
     loadFields(documentId, doc?.pageDimensions);
   }, [documents, conversationId, loadFields]);
@@ -406,7 +420,9 @@ export function PromptingPage() {
     setConfidenceMap({});
     setPipelineStepLogs([]);
     setDetailedConversation([]);
-    setCurrentQuestion(null);
+    setCurrentQuestions(null);
+    setSelectedPages([]);
+    setPageSelectionPhase(false);
     updateUrl(null, null);
   }, []);
 
@@ -449,14 +465,17 @@ export function PromptingPage() {
 
   // ---- Prompt actions ----
 
-  const buildRequestFields = useCallback(() => {
-    return fields.map(f => ({
-      field_id: f.field_id,
-      label: f.label,
-      type: f.type,
-      bbox: f.bbox,
-    }));
-  }, [fields]);
+  const buildRequestFields = useCallback((pages?: number[]) => {
+    const pagesToUse = pages ?? selectedPages;
+    return fields
+      .filter(f => pagesToUse.includes(f.bbox?.page ?? 1))
+      .map(f => ({
+        field_id: f.field_id,
+        label: f.label,
+        type: f.type,
+        bbox: f.bbox,
+      }));
+  }, [fields, selectedPages]);
 
   const handlePreviewPrompt = useCallback(async () => {
     if (!activeDocument || !conversationId) return;
@@ -488,35 +507,105 @@ export function PromptingPage() {
     }
   }, [activeDocument, conversationId, fields, customRules, systemPrompt, buildRequestFields, addActivity]);
 
-  const handleRunAutofill = useCallback(async () => {
-    if (!activeDocument || !conversationId) {
-      addActivity('error', 'Cannot auto-fill', 'No document or conversation');
-      return;
+  // ---- Detailed mode turn helpers ----
+
+  const buildPipelineFields = useCallback((pages?: number[]) => {
+    return buildRequestFields(pages).map(f => ({
+      field_id: f.field_id,
+      label: f.label,
+      type: f.type,
+      x: f.bbox?.x ?? null,
+      y: f.bbox?.y ?? null,
+      width: f.bbox?.width ?? null,
+      height: f.bbox?.height ?? null,
+      page: f.bbox?.page ?? null,
+    }));
+  }, [buildRequestFields]);
+
+  const executeDetailedTurn = useCallback(async (
+    conversation: ConversationTurn[],
+    justFill: boolean = false,
+    pages?: number[],
+  ) => {
+    if (!activeDocument || !conversationId) return;
+
+    setIsDetailedTurnLoading(true);
+
+    try {
+      const turnResponse = await autofillTurn({
+        document_id: activeDocument.document_id,
+        conversation_id: conversationId,
+        fields: buildPipelineFields(pages),
+        rules: customRules.length > 0 ? customRules : undefined,
+        conversation,
+        just_fill: justFill,
+      });
+
+      if (turnResponse.step_logs) {
+        setPipelineStepLogs(prev => [...prev, ...turnResponse.step_logs!]);
+      }
+
+      if (turnResponse.type === 'questions' && turnResponse.questions && turnResponse.questions.length > 0) {
+        setCurrentQuestions(turnResponse.questions);
+      } else {
+        // Fill plan response — apply results
+        setCurrentQuestions(null);
+        setDetailedConversation([]);
+
+        if (turnResponse.filled_fields && turnResponse.filled_fields.length > 0) {
+          const newConfidenceMap: Record<string, number> = {};
+          setFields(prev => prev.map(field => {
+            const filled = turnResponse.filled_fields!.find(f => f.field_id === field.field_id);
+            if (filled) {
+              newConfidenceMap[field.field_id] = filled.confidence;
+              return { ...field, value: filled.value };
+            }
+            return field;
+          }));
+          setConfidenceMap(newConfidenceMap);
+          addActivity('info', `Auto-filled ${turnResponse.filled_fields.length} fields (detailed mode)`);
+        } else {
+          addActivity('error', 'Detailed auto-fill found no matches');
+        }
+
+        setIsAutofilling(false);
+        if (conversationId) {
+          loadHistory(conversationId);
+        }
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Detailed turn failed';
+      addActivity('error', 'Detailed auto-fill failed', message);
+      setCurrentQuestions(null);
+      setIsAutofilling(false);
+    } finally {
+      setIsDetailedTurnLoading(false);
     }
-    if (dataSources.length === 0) {
-      addActivity('error', 'Cannot auto-fill', 'Add data sources first');
-      return;
-    }
+  }, [activeDocument, conversationId, buildPipelineFields, customRules, addActivity, loadHistory]);
+
+  // ---- Autofill execution ----
+
+  const executeAutofill = useCallback(async (pages: number[]) => {
+    if (!activeDocument || !conversationId) return;
 
     setIsAutofilling(true);
     setActiveTab('results');
     setPipelineStepLogs([]);
     setDetailedConversation([]);
-    setCurrentQuestion(null);
-    addActivity('info', `Running AI auto-fill (${autofillMode} mode)...`);
+    setCurrentQuestions(null);
+    setPageSelectionPhase(false);
+    addActivity('info', `Running AI auto-fill (${autofillMode} mode) on ${pages.length} page(s)...`);
 
     // Detailed mode: start Q&A flow
     if (autofillMode === 'detailed') {
       setActiveTab('pipeline');
-      executeDetailedTurn([]);
+      executeDetailedTurn([], false, pages);
       return;
     }
 
-    const requestFields = buildRequestFields();
+    const requestFields = buildRequestFields(pages);
 
     // Quick mode: Run vision autofill + pipeline autofill in parallel
-    // Vision autofill: used for Results tab (records prompt attempts)
-    // Pipeline autofill: used for Pipeline tab (captures step logs)
     const visionPromise = autofillWithVision(
       activeDocument.document_id,
       conversationId,
@@ -541,7 +630,6 @@ export function PromptingPage() {
       rules: customRules.length > 0 ? customRules : undefined,
       mode: autofillMode,
     }).catch(err => {
-      // Pipeline call is best-effort for logging; don't block main flow
       addActivity('info', 'Pipeline logs unavailable', err instanceof Error ? err.message : String(err));
       return null;
     });
@@ -551,14 +639,12 @@ export function PromptingPage() {
 
       setAutofillResult(result);
 
-      // Capture pipeline step logs
       if (pipelineResult?.step_logs) {
         setPipelineStepLogs(pipelineResult.step_logs);
         setActiveTab('pipeline');
       }
 
       if (result.success && result.filled_fields.length > 0) {
-        // Apply filled values to fields
         const newConfidenceMap: Record<string, number> = {};
         setFields(prev => prev.map(field => {
           const filled = result.filled_fields.find(f => f.field_id === field.field_id);
@@ -597,113 +683,105 @@ export function PromptingPage() {
         loadHistory(conversationId);
       }
     }
-  }, [activeDocument, conversationId, dataSources.length, fields, customRules, systemPrompt, autofillMode, buildRequestFields, addActivity, loadHistory]);
+  }, [activeDocument, conversationId, customRules, systemPrompt, autofillMode, buildRequestFields, addActivity, loadHistory, executeDetailedTurn]);
 
-  // ---- Detailed mode turn helpers ----
+  const handleRunAutofill = useCallback(async () => {
+    if (!activeDocument || !conversationId) {
+      addActivity('error', 'Cannot auto-fill', 'No document or conversation');
+      return;
+    }
+    if (dataSources.length === 0) {
+      addActivity('error', 'Cannot auto-fill', 'Add data sources first');
+      return;
+    }
+    if (selectedPages.length === 0) {
+      addActivity('error', 'Cannot auto-fill', 'Select at least one page');
+      return;
+    }
 
-  const buildPipelineFields = useCallback(() => {
-    return buildRequestFields().map(f => ({
-      field_id: f.field_id,
-      label: f.label,
-      type: f.type,
-      x: f.bbox?.x ?? null,
-      y: f.bbox?.y ?? null,
-      width: f.bbox?.width ?? null,
-      height: f.bbox?.height ?? null,
-      page: f.bbox?.page ?? null,
-    }));
-  }, [buildRequestFields]);
+    // Multi-page: show page selection modal
+    if (activeDocument.page_count > 1) {
+      const fieldsByPage: Record<number, number> = {};
+      for (const f of fields) {
+        const p = f.bbox?.page ?? 1;
+        fieldsByPage[p] = (fieldsByPage[p] ?? 0) + 1;
+      }
 
-  const executeDetailedTurn = useCallback(async (
-    conversation: ConversationTurn[],
-    justFill: boolean = false,
-  ) => {
-    if (!activeDocument || !conversationId) return;
+      const pageOptions = Array.from({ length: activeDocument.page_count }, (_, i) => ({
+        id: `page_${i + 1}`,
+        label: `Page ${i + 1} (${fieldsByPage[i + 1] ?? 0} fields)`,
+      }));
 
-    setIsDetailedTurnLoading(true);
+      setCurrentQuestions([{
+        id: 'page_selection',
+        question: 'Which pages do you want to autofill?',
+        question_type: 'multiple_choice',
+        options: pageOptions,
+        context: `This document has ${activeDocument.page_count} pages with ${fields.length} total fields.`,
+      }]);
+      setPageSelectionPhase(true);
+      return;
+    }
 
-    try {
-      const turnResponse = await autofillTurn({
-        document_id: activeDocument.document_id,
-        conversation_id: conversationId,
-        fields: buildPipelineFields(),
-        rules: customRules.length > 0 ? customRules : undefined,
-        conversation,
-        just_fill: justFill,
+    // Single-page: run directly
+    executeAutofill(selectedPages);
+  }, [activeDocument, conversationId, dataSources.length, fields, selectedPages, executeAutofill, addActivity]);
+
+  const handlePageSelectionSubmit = useCallback((answers: Record<string, { selectedOptionIds: string[]; freeText?: string }>) => {
+    const answer = answers['page_selection'];
+    if (answer) {
+      const pages = answer.selectedOptionIds
+        .map(id => parseInt(id.replace('page_', ''), 10))
+        .sort((a, b) => a - b);
+      setSelectedPages(pages);
+      executeAutofill(pages);
+    }
+  }, [executeAutofill]);
+
+  const handlePageSelectionJustFill = useCallback(() => {
+    const allPages = Array.from({ length: activeDocument?.page_count ?? 1 }, (_, i) => i + 1);
+    setSelectedPages(allPages);
+    executeAutofill(allPages);
+  }, [activeDocument, executeAutofill]);
+
+  const handleQuestionSubmit = useCallback((answers: Record<string, { selectedOptionIds: string[]; freeText?: string }>) => {
+    if (!currentQuestions) return;
+
+    // Build conversation turns: one question + one answer per question
+    const newTurns: ConversationTurn[] = [];
+    for (const q of currentQuestions) {
+      const answer = answers[q.id];
+      if (!answer) continue;
+
+      newTurns.push({
+        role: 'assistant',
+        type: 'question',
+        question_id: q.id,
+        question: q.question,
+        question_type: q.question_type,
+        options: q.options,
+        context: q.context,
       });
 
-      if (turnResponse.step_logs) {
-        setPipelineStepLogs(prev => [...prev, ...turnResponse.step_logs!]);
-      }
-
-      if (turnResponse.type === 'question') {
-        setCurrentQuestion(turnResponse);
-      } else {
-        // Fill plan response — apply results
-        setCurrentQuestion(null);
-        setDetailedConversation([]);
-
-        if (turnResponse.filled_fields && turnResponse.filled_fields.length > 0) {
-          const newConfidenceMap: Record<string, number> = {};
-          setFields(prev => prev.map(field => {
-            const filled = turnResponse.filled_fields!.find(f => f.field_id === field.field_id);
-            if (filled) {
-              newConfidenceMap[field.field_id] = filled.confidence;
-              return { ...field, value: filled.value };
-            }
-            return field;
-          }));
-          setConfidenceMap(newConfidenceMap);
-          addActivity('info', `Auto-filled ${turnResponse.filled_fields.length} fields (detailed mode)`);
-        } else {
-          addActivity('error', 'Detailed auto-fill found no matches');
-        }
-
-        setIsAutofilling(false);
-        if (conversationId) {
-          loadHistory(conversationId);
-        }
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Detailed turn failed';
-      addActivity('error', 'Detailed auto-fill failed', message);
-      setCurrentQuestion(null);
-      setIsAutofilling(false);
-    } finally {
-      setIsDetailedTurnLoading(false);
+      newTurns.push({
+        role: 'user',
+        type: 'answer',
+        question_id: q.id,
+        selected_option_ids: answer.selectedOptionIds,
+        free_text: answer.freeText,
+      });
     }
-  }, [activeDocument, conversationId, buildPipelineFields, customRules, addActivity, loadHistory]);
 
-  const handleQuestionSubmit = useCallback((answer: { selectedOptionIds: string[]; freeText?: string }) => {
-    if (!currentQuestion) return;
-
-    // Add the question + answer to conversation
-    const questionTurn: ConversationTurn = {
-      role: 'assistant',
-      type: 'question',
-      question: currentQuestion.question,
-      question_type: currentQuestion.question_type as ConversationTurn['question_type'],
-      options: currentQuestion.options,
-      context: currentQuestion.context,
-    };
-
-    const answerTurn: ConversationTurn = {
-      role: 'user',
-      type: 'answer',
-      selected_option_ids: answer.selectedOptionIds,
-      free_text: answer.freeText,
-    };
-
-    const updatedConversation = [...detailedConversation, questionTurn, answerTurn];
+    const updatedConversation = [...detailedConversation, ...newTurns];
     setDetailedConversation(updatedConversation);
-    setCurrentQuestion(null);
+    setCurrentQuestions(null);
 
     // Execute next turn with updated conversation
     executeDetailedTurn(updatedConversation);
-  }, [currentQuestion, detailedConversation, executeDetailedTurn]);
+  }, [currentQuestions, detailedConversation, executeDetailedTurn]);
 
   const handleJustFill = useCallback(() => {
-    setCurrentQuestion(null);
+    setCurrentQuestions(null);
     executeDetailedTurn(detailedConversation, true);
   }, [detailedConversation, executeDetailedTurn]);
 
@@ -741,39 +819,6 @@ export function PromptingPage() {
               {isPreviewingPrompt ? 'Previewing...' : 'Preview Prompt'}
             </button>
           )}
-          {activeDocument && conversationId && dataSources.length > 0 && (
-            <div className="flex items-center gap-2">
-              <div className="flex bg-gray-100 rounded-lg p-0.5 text-xs">
-                <button
-                  onClick={() => setAutofillMode('quick')}
-                  className={`px-2.5 py-1 rounded-md transition-colors ${
-                    autofillMode === 'quick'
-                      ? 'bg-white text-gray-900 shadow-sm font-medium'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  Quick
-                </button>
-                <button
-                  onClick={() => setAutofillMode('detailed')}
-                  className={`px-2.5 py-1 rounded-md transition-colors ${
-                    autofillMode === 'detailed'
-                      ? 'bg-white text-gray-900 shadow-sm font-medium'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  Detailed
-                </button>
-              </div>
-              <button
-                onClick={handleRunAutofill}
-                disabled={isAutofilling}
-                className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors disabled:bg-green-400 disabled:cursor-not-allowed"
-              >
-                {isAutofilling ? 'Running...' : 'Run Autofill'}
-              </button>
-            </div>
-          )}
         </div>
       </header>
 
@@ -796,7 +841,7 @@ export function PromptingPage() {
         </aside>
 
         {/* Center - Preview */}
-        <main className="flex-1 min-w-0">
+        <main className="flex-1 min-w-0 h-full overflow-hidden">
           <EditableDocumentPreview
             pageUrls={activeDocument?.pageUrls || []}
             fields={fields}
@@ -912,16 +957,76 @@ export function PromptingPage() {
         isDataSourceUploading={isDataSourceUploading}
       />
 
-      {/* Detailed Mode: Question Modal */}
-      {currentQuestion && currentQuestion.type === 'question' && (
+      {/* Bottom Center: Autofill Controls */}
+      {activeDocument && conversationId && dataSources.length > 0 && !currentQuestions && (
+        <div className="fixed inset-x-0 bottom-0 z-40 flex justify-center pb-6 pointer-events-none">
+          <div className="pointer-events-auto flex items-center gap-3 px-4 py-2.5 bg-white rounded-xl shadow-2xl border border-gray-200">
+            <div className="flex bg-gray-100 rounded-lg p-0.5 text-xs">
+              <button
+                onClick={() => setAutofillMode('quick')}
+                className={`px-2.5 py-1 rounded-md transition-colors ${
+                  autofillMode === 'quick'
+                    ? 'bg-white text-gray-900 shadow-sm font-medium'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Quick
+              </button>
+              <button
+                onClick={() => setAutofillMode('detailed')}
+                className={`px-2.5 py-1 rounded-md transition-colors ${
+                  autofillMode === 'detailed'
+                    ? 'bg-white text-gray-900 shadow-sm font-medium'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Detailed
+              </button>
+            </div>
+            {activeDocument && activeDocument.page_count > 1 && (
+              <div className="flex items-center gap-1 px-2 border-l border-gray-200">
+                <span className="text-xs text-gray-400 mr-1">Pages:</span>
+                {Array.from({ length: activeDocument.page_count }, (_, i) => i + 1).map(page => (
+                  <button
+                    key={page}
+                    onClick={() => togglePage(page)}
+                    className={`w-7 h-7 text-xs rounded-md border transition-colors ${
+                      selectedPages.includes(page)
+                        ? 'bg-blue-100 border-blue-400 text-blue-700 font-medium'
+                        : 'bg-white border-gray-200 text-gray-400 hover:border-gray-300'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+              </div>
+            )}
+            <button
+              onClick={handleRunAutofill}
+              disabled={isAutofilling}
+              className="px-5 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors disabled:bg-green-400 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {isAutofilling && (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              )}
+              {isAutofilling ? 'Running...' : 'Run Autofill'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Question Modal (page selection or detailed Q&A) */}
+      {currentQuestions && currentQuestions.length > 0 && (
         <QuestionModal
-          question={currentQuestion.question || ''}
-          questionType={(currentQuestion.question_type || 'free_text') as 'single_choice' | 'multiple_choice' | 'free_text' | 'confirm'}
-          options={currentQuestion.options || []}
-          context={currentQuestion.context}
-          onSubmit={handleQuestionSubmit}
-          onJustFill={handleJustFill}
-          isSubmitting={isDetailedTurnLoading}
+          questions={currentQuestions}
+          onSubmit={pageSelectionPhase ? handlePageSelectionSubmit : handleQuestionSubmit}
+          onJustFill={pageSelectionPhase ? handlePageSelectionJustFill : handleJustFill}
+          isSubmitting={pageSelectionPhase ? false : isDetailedTurnLoading}
+          initialAnswers={pageSelectionPhase ? {
+            page_selection: {
+              selectedOptionIds: selectedPages.map(p => `page_${p}`),
+            },
+          } : undefined}
         />
       )}
     </div>

@@ -42,6 +42,8 @@ export interface AutofillPipelineRequest {
   fields: AutofillPipelineFieldInfo[];
   /** Optional rules for field filling */
   rules?: string[];
+  /** Rule document texts for RuleAnalyzer */
+  rule_docs?: string[];
   /** Autofill mode: quick (one-shot) or detailed (interactive Q&A) */
   mode?: AutofillMode;
 }
@@ -190,10 +192,20 @@ export interface QuestionOption {
   label: string;
 }
 
+/** A single question in a batch */
+export interface QuestionItem {
+  id: string;
+  question: string;
+  question_type: 'single_choice' | 'multiple_choice' | 'free_text' | 'confirm';
+  options?: QuestionOption[];
+  context?: string | null;
+}
+
 /** A single conversation turn */
 export interface ConversationTurn {
   role: 'assistant' | 'user';
   type: 'question' | 'answer' | 'fill_plan';
+  question_id?: string | null;
   question?: string | null;
   question_type?: 'single_choice' | 'multiple_choice' | 'free_text' | 'confirm' | null;
   options?: QuestionOption[];
@@ -209,17 +221,15 @@ export interface AutofillTurnRequest {
   conversation_id: string;
   fields: AutofillPipelineFieldInfo[];
   rules?: string[];
+  rule_docs?: string[];
   conversation: ConversationTurn[];
   just_fill?: boolean;
 }
 
 /** Response from a single turn in detailed autofill mode */
 export interface AutofillTurnResponse {
-  type: 'question' | 'fill_plan';
-  question?: string | null;
-  question_type?: string | null;
-  options?: QuestionOption[];
-  context?: string | null;
+  type: 'questions' | 'fill_plan';
+  questions?: QuestionItem[];
   filled_fields?: PipelineFilledField[];
   unfilled_fields?: string[];
   skipped_fields?: string[];
