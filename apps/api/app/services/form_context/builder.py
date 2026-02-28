@@ -2,29 +2,27 @@
 
 Extracts data from conversation data sources and builds a FormContext
 with field specs, data source entries, and fuzzy mapping candidates.
-Optionally enriches fields with nearby PDF text labels via proximity matching.
+Enriches fields with label candidates via injected FieldEnricher strategy.
 """
 
+import asyncio
 import logging
-import math
 from typing import Any
+
+from app.infrastructure.observability.stopwatch import StopWatch
 
 from app.domain.models.form_context import (
     DataSourceEntry,
     FormContext,
     FormFieldSpec,
-    LabelCandidate,
     MappingCandidate,
 )
 from app.models.data_source import DataSource
 from app.repositories import DataSourceRepository
-from app.services.document_service import DocumentService
+from app.services.form_context.enricher import FieldEnricher
 from app.services.text_extraction_service import TextExtractionService
 
 logger = logging.getLogger(__name__)
-
-_MAX_LABEL_DISTANCE = 150.0
-_MAX_LABEL_CANDIDATES = 3
 
 
 class FormContextBuilder:
@@ -38,11 +36,13 @@ class FormContextBuilder:
         self,
         data_source_repo: DataSourceRepository,
         extraction_service: TextExtractionService,
-        document_service: DocumentService | None = None,
+        enricher: FieldEnricher,
     ) -> None:
         self._data_source_repo = data_source_repo
         self._extraction_service = extraction_service
-        self._document_service = document_service
+        self._enricher = enricher
+        # Cache enriched fields per document_id to avoid repeated enrichment
+        self._enriched_fields_cache: dict[str, tuple[FormFieldSpec, ...]] = {}
 
     async def build(
         self,
@@ -62,12 +62,34 @@ class FormContextBuilder:
         Returns:
             FormContext with fields, data sources, and mapping candidates.
         """
-        data_sources = self._data_source_repo.list_by_conversation(conversation_id)
+        with StopWatch("FormContextBuilder.build", logger) as sw:
+            with sw.lap("list_sources"):
+                data_sources = self._data_source_repo.list_by_conversation(
+                    conversation_id
+                )
+            logger.info(
+                "FormContextBuilder: %d sources",
+                len(data_sources),
+            )
 
-        enriched_fields = self._enrich_fields_with_labels(document_id, field_hints)
+            with sw.lap("enrich_fields+extract_sources"):
+                enriched_fields, entries = await asyncio.gather(
+                    self._enrich_fields_async(document_id, field_hints),
+                    self._extract_from_sources(data_sources),
+                )
+            logger.info(
+                "FormContextBuilder: enrich+extract done in %dms",
+                sw.laps["enrich_fields+extract_sources"],
+            )
 
-        entries = await self._extract_from_sources(data_sources)
-        candidates = self._build_mapping_candidates(enriched_fields, entries)
+            with sw.lap("match_candidates"):
+                candidates = self._build_mapping_candidates(enriched_fields, entries)
+
+            sw.set(
+                document_id=document_id,
+                sources_count=len(data_sources),
+                fields_count=len(field_hints),
+            )
 
         return FormContext(
             document_id=document_id,
@@ -78,139 +100,86 @@ class FormContextBuilder:
             rules=user_rules,
         )
 
-    def _enrich_fields_with_labels(
+    async def _enrich_fields_async(
         self,
         document_id: str,
         fields: tuple[FormFieldSpec, ...],
     ) -> tuple[FormFieldSpec, ...]:
-        """Enrich fields with nearby PDF text labels using proximity matching.
+        """Enrich fields with label candidates.
 
-        For each field with bbox coordinates, finds nearby text blocks
-        from the target PDF and attaches them as label_candidates.
-        This is language-agnostic — pure geometry.
+        Caches results per document_id since the target document's field
+        labels don't change between pipeline runs or Q&A turns.
         """
-        if self._document_service is None:
-            return fields
+        cached = self._enriched_fields_cache.get(document_id)
+        if cached is not None:
+            logger.info("Field enrichment: CACHED for document %s (%d fields)", document_id, len(cached))
+            return cached
 
-        try:
-            text_blocks = self._document_service.extract_text_blocks(document_id)
-        except Exception as e:
-            logger.warning(f"Failed to extract text blocks for label enrichment: {e}")
-            return fields
+        logger.info("Field enrichment: enriching %d fields for document %s", len(fields), document_id)
+        result = await self._enricher.enrich(document_id, fields)
 
-        if not text_blocks:
-            return fields
-
-        enriched: list[FormFieldSpec] = []
-        for field in fields:
-            if field.x is None or field.y is None:
-                enriched.append(field)
-                continue
-
-            candidates = self._find_nearby_text(field, text_blocks)
-            if candidates:
-                enriched.append(field.model_copy(update={"label_candidates": tuple(candidates)}))
-            else:
-                enriched.append(field)
-
-        return tuple(enriched)
-
-    @staticmethod
-    def _find_nearby_text(
-        field: FormFieldSpec,
-        text_blocks: list[dict[str, Any]],
-    ) -> list[LabelCandidate]:
-        """Find text blocks near a field using center-to-center Euclidean distance.
-
-        Args:
-            field: Field with bbox coordinates.
-            text_blocks: Text blocks from DocumentService.extract_text_blocks().
-                Each has: text, page, bbox=[x, y, width, height].
-
-        Returns:
-            Top-N nearest LabelCandidates within max distance, sorted by distance.
-        """
-        field_cx = field.x + (field.width or 0) / 2
-        field_cy = field.y + (field.height or 0) / 2
-        field_page = field.page
-
-        scored: list[tuple[float, str, int | None]] = []
-        for block in text_blocks:
-            text = block.get("text", "")
-            if not text or not text.strip():
-                continue
-
-            block_page = block.get("page")
-            if field_page is not None and block_page is not None and field_page != block_page:
-                continue
-
-            bbox = block.get("bbox")
-            if not bbox or len(bbox) < 4:
-                continue
-
-            block_cx = bbox[0] + bbox[2] / 2
-            block_cy = bbox[1] + bbox[3] / 2
-
-            dist = math.sqrt((field_cx - block_cx) ** 2 + (field_cy - block_cy) ** 2)
-            if dist <= _MAX_LABEL_DISTANCE:
-                scored.append((dist, text.strip(), block_page))
-
-        scored.sort(key=lambda x: x[0])
-        seen_texts: set[str] = set()
-        candidates: list[LabelCandidate] = []
-        for dist, text, page in scored:
-            if text in seen_texts:
-                continue
-            seen_texts.add(text)
-            confidence = max(0.0, 1.0 - dist / _MAX_LABEL_DISTANCE)
-            candidates.append(LabelCandidate(
-                text=text,
-                confidence=round(confidence, 3),
-                page=page,
-            ))
-            if len(candidates) >= _MAX_LABEL_CANDIDATES:
-                break
-
-        return candidates
+        self._enriched_fields_cache[document_id] = result
+        return result
 
     async def _extract_from_sources(
         self,
         data_sources: list[DataSource],
     ) -> list[DataSourceEntry]:
-        """Extract data from all data sources.
+        """Extract data from all data sources in parallel.
 
         Mirrors VisionAutofillService._extract_from_sources() logic.
+        Sources with cached extracted_data are resolved immediately;
+        sources requiring extraction are parallelized via asyncio.gather().
         """
-        entries: list[DataSourceEntry] = []
+        loop = asyncio.get_running_loop()
 
-        for source in data_sources:
-            if source.extracted_data:
-                entries.append(DataSourceEntry(
+        async def _extract_single(source: DataSource) -> DataSourceEntry:
+            if source.extracted_data is not None:
+                # Eager extraction stored fields + _raw_text at upload time
+                cached = dict(source.extracted_data)
+                raw_text = cached.pop("_raw_text", None)
+                logger.info(
+                    "Source '%s' (%s): FAST PATH — cached %d fields, raw_text=%s",
+                    source.name,
+                    source.type.value,
+                    len(cached),
+                    "yes" if raw_text else "no",
+                )
+                return DataSourceEntry(
                     source_name=source.name,
                     source_type=source.type.value,
-                    extracted_fields={
-                        k: str(v) for k, v in source.extracted_data.items()
-                        if isinstance(v, str)
-                    },
-                    raw_text=source.text_content or source.content_preview,
-                ))
-            else:
-                result = self._extraction_service.extract_from_data_source(source)
-                entries.append(DataSourceEntry(
-                    source_name=source.name,
-                    source_type=source.type.value,
-                    extracted_fields={
-                        k: str(v) for k, v in result.extracted_fields.items()
-                        if isinstance(v, str)
-                    },
-                    raw_text=result.raw_text,
-                    confidence=result.confidence,
-                ))
-                if result.extracted_fields:
-                    self._data_source_repo.update_extracted_data(
-                        source.id, result.extracted_fields
-                    )
+                    extracted_fields=cached,
+                    raw_text=raw_text or source.text_content or source.content_preview,
+                )
 
+            logger.info(
+                "Source '%s' (%s): SLOW PATH — extracting now (extracted_data is None)",
+                source.name,
+                source.type.value,
+            )
+            result = await loop.run_in_executor(
+                None,
+                self._extraction_service.extract_from_data_source,
+                source,
+            )
+            if result.extracted_fields:
+                await loop.run_in_executor(
+                    None,
+                    self._data_source_repo.update_extracted_data,
+                    source.id,
+                    result.extracted_fields,
+                )
+            return DataSourceEntry(
+                source_name=source.name,
+                source_type=source.type.value,
+                extracted_fields=dict(result.extracted_fields),
+                raw_text=result.raw_text,
+                confidence=result.confidence,
+            )
+
+        entries = list(await asyncio.gather(
+            *(_extract_single(s) for s in data_sources)
+        ))
         return entries
 
     def _build_mapping_candidates(
@@ -226,6 +195,8 @@ class FormContextBuilder:
 
         for entry in entries:
             for key, value in entry.extracted_fields.items():
+                if not isinstance(value, str):
+                    continue
                 normalized_key = self._normalize_key(key)
                 existing = combined.get(normalized_key)
                 if not existing or entry.confidence > existing[2]:
@@ -268,11 +239,34 @@ class FormContextBuilder:
         normalized_label: str,
         normalized_id: str,
     ) -> float:
-        """Compute a match score between a data key and field identifiers."""
+        """Compute a match score between a data key and field identifiers.
+
+        Uses RapidFuzz for fuzzy matching when available, falling back
+        to substring containment checks.
+        """
         if normalized_key == normalized_label or normalized_key == normalized_id:
-            return 0.9
-        if normalized_key in normalized_label or normalized_label in normalized_key:
-            return 0.6
-        if normalized_key in normalized_id or normalized_id in normalized_key:
-            return 0.5
-        return 0.0
+            return 0.95
+
+        try:
+            from rapidfuzz import fuzz
+
+            label_score = fuzz.token_sort_ratio(normalized_key, normalized_label) / 100.0
+            id_score = fuzz.token_sort_ratio(normalized_key, normalized_id) / 100.0
+            best = max(label_score, id_score)
+
+            if best >= 0.85:
+                return round(best, 3)
+            if best >= 0.6:
+                return round(best * 0.9, 3)
+            if normalized_key in normalized_label or normalized_label in normalized_key:
+                return max(0.6, round(best, 3))
+            if normalized_key in normalized_id or normalized_id in normalized_key:
+                return max(0.5, round(best, 3))
+            return 0.0
+
+        except ImportError:
+            if normalized_key in normalized_label or normalized_label in normalized_key:
+                return 0.6
+            if normalized_key in normalized_id or normalized_id in normalized_key:
+                return 0.5
+            return 0.0

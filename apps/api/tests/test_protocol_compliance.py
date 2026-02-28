@@ -41,6 +41,13 @@ class _FakeExtractionService:
     pass
 
 
+class _FakeEnricher:
+    """Minimal fake for FieldEnricher protocol."""
+
+    async def enrich(self, document_id, fields):
+        return fields
+
+
 class _FakeFillService:
     """Minimal fake for FillService."""
 
@@ -59,6 +66,7 @@ class TestFormContextBuilderCompliance:
         builder = FormContextBuilder(
             data_source_repo=_FakeDataSourceRepo(),
             extraction_service=_FakeExtractionService(),
+            enricher=_FakeEnricher(),
         )
         assert isinstance(builder, FormContextBuilderProtocol)
 

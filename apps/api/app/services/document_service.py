@@ -31,6 +31,8 @@ class DocumentService:
     ) -> None:
         self._document_repository = document_repository or get_document_repository()
         self._file_repository = file_repository or get_file_repository()
+        self._text_blocks_cache: dict[str, dict[int, list[dict]]] = {}
+        self._acroform_cache: dict[str, AcroFormFieldsResponse | None] = {}
 
     async def upload_document(
         self,
@@ -125,6 +127,8 @@ class DocumentService:
         transforming PDF coordinates (bottom-left origin) to screen
         coordinates (top-left origin) for overlay rendering.
 
+        Results are cached per document_id to avoid redundant PDF parsing.
+
         Args:
             document_id: The ID of the document to extract fields from.
 
@@ -132,6 +136,15 @@ class DocumentService:
             AcroFormFieldsResponse with field info and page dimensions,
             or None if document not found.
         """
+        if document_id in self._acroform_cache:
+            return self._acroform_cache[document_id]
+
+        result = self._extract_acroform_fields(document_id)
+        self._acroform_cache[document_id] = result
+        return result
+
+    def _extract_acroform_fields(self, document_id: str) -> AcroFormFieldsResponse | None:
+        """Internal AcroForm extraction (uncached)."""
         logger.debug(
             "Starting AcroForm extraction",
             document_id=document_id,
@@ -284,18 +297,62 @@ class DocumentService:
                 preview_scale=2,
             )
 
-    def extract_text_blocks(self, document_id: str) -> list[dict]:
-        """Extract text blocks from a PDF document.
+    def extract_text_blocks(
+        self, document_id: str, pages: list[int] | None = None
+    ) -> list[dict]:
+        """Extract text blocks from a PDF document (multiple pages).
 
-        Extracts native text blocks (not OCR) from the PDF, which can be used
-        as label candidates for structure labelling.
+        Convenience wrapper that aggregates per-page results from
+        ``extract_text_blocks_for_page``.
 
         Args:
             document_id: The ID of the document to extract text from.
+            pages: Optional list of 1-indexed page numbers to extract from.
+                If None, extracts from all pages.
 
         Returns:
             List of text block dictionaries with id, text, page, bbox, font_name, font_size.
         """
+        self._ensure_text_blocks_extracted(document_id)
+
+        all_blocks: list[dict] = []
+        for page_number, page_blocks in sorted(
+            self._text_blocks_cache.get(document_id, {}).items()
+        ):
+            if pages is not None and page_number not in pages:
+                continue
+            all_blocks.extend(page_blocks)
+        return all_blocks
+
+    def extract_text_blocks_for_page(
+        self, document_id: str, page: int
+    ) -> list[dict]:
+        """Extract text blocks for a single page (cached).
+
+        Args:
+            document_id: The ID of the document to extract text from.
+            page: 1-indexed page number.
+
+        Returns:
+            List of text block dictionaries for the requested page.
+        """
+        self._ensure_text_blocks_extracted(document_id)
+        return list(
+            self._text_blocks_cache.get(document_id, {}).get(page, [])
+        )
+
+    def _ensure_text_blocks_extracted(self, document_id: str) -> None:
+        """Extract and cache all text blocks per page if not already cached."""
+        if document_id in self._text_blocks_cache:
+            return
+        self._text_blocks_cache[document_id] = self._extract_text_blocks(
+            document_id
+        )
+
+    def _extract_text_blocks(
+        self, document_id: str
+    ) -> dict[int, list[dict]]:
+        """Internal text block extraction — returns blocks grouped by page."""
         logger.debug(
             "Starting text block extraction",
             document_id=document_id,
@@ -307,9 +364,8 @@ class DocumentService:
                 "Document not found for text extraction",
                 document_id=document_id,
             )
-            return []
+            return {}
 
-        # Get the PDF content
         pdf_content = self._file_repository.get_content(document.ref)
         if pdf_content is None:
             logger.warning(
@@ -317,47 +373,42 @@ class DocumentService:
                 document_id=document_id,
                 document_ref=document.ref,
             )
-            return []
+            return {}
 
         try:
             import fitz  # PyMuPDF
 
             doc = fitz.open(stream=pdf_content, filetype="pdf")
-            text_blocks: list[dict] = []
+            pages_map: dict[int, list[dict]] = {}
             block_counter = 0
 
             for page_num in range(len(doc)):
-                page = doc[page_num]
                 page_number = page_num + 1  # 1-indexed
+                page = doc[page_num]
+                page_blocks: list[dict] = []
 
-                # Extract text blocks with position information
-                # "dict" format gives us blocks with bbox and font info
                 blocks = page.get_text("dict", flags=fitz.TEXT_PRESERVE_WHITESPACE)
 
                 for block in blocks.get("blocks", []):
-                    # Skip image blocks
                     if block.get("type") != 0:  # type 0 = text
                         continue
 
-                    # Each block contains lines, each line contains spans
                     for line in block.get("lines", []):
                         for span in line.get("spans", []):
                             text = span.get("text", "").strip()
                             if not text:
                                 continue
 
-                            # Get bounding box
                             bbox = span.get("bbox", [0, 0, 0, 0])
                             x, y = bbox[0], bbox[1]
                             width = bbox[2] - bbox[0]
                             height = bbox[3] - bbox[1]
 
-                            # Skip very small or likely decorative text
                             if width < 2 or height < 2:
                                 continue
 
                             block_counter += 1
-                            text_blocks.append({
+                            page_blocks.append({
                                 "id": f"tb_{page_number}_{block_counter}",
                                 "text": text,
                                 "page": page_number,
@@ -366,31 +417,33 @@ class DocumentService:
                                 "font_size": span.get("size", None),
                             })
 
-            page_count = len(doc)
+                pages_map[page_number] = page_blocks
+
             doc.close()
 
+            total = sum(len(v) for v in pages_map.values())
             logger.info(
                 "Text block extraction completed",
                 document_id=document_id,
-                total_blocks=len(text_blocks),
-                page_count=page_count,
+                total_blocks=total,
+                page_count=len(pages_map),
             )
 
-            return text_blocks
+            return pages_map
 
         except ImportError:
             logger.error(
                 "PyMuPDF not available for text extraction",
                 document_id=document_id,
             )
-            return []
+            return {}
         except Exception as e:
             logger.exception(
                 "Failed to extract text blocks",
                 document_id=document_id,
                 error=str(e),
             )
-            return []
+            return {}
 
     def _get_widget_type_name(self, field_type: int) -> str:
         """Convert PyMuPDF widget field type to string name.

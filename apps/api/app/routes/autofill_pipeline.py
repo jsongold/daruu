@@ -9,7 +9,6 @@ from typing import Any
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, Field
 
-from app.config import get_settings
 from app.infrastructure.repositories import (
     get_correction_repository,
     get_data_source_repository,
@@ -25,7 +24,7 @@ from app.services.text_extraction_service import TextExtractionService
 from app.domain.models.fill_plan import FillActionType
 from app.domain.models.form_context import FormFieldSpec
 from app.services.autofill_pipeline import AutofillPipelineService
-from app.services.form_context import FormContextBuilder
+from app.services.form_context import FormContextBuilder, ProximityFieldEnricher
 from app.services.fill_planner import FillPlanner
 from app.services.form_renderer import FormRenderer
 from app.services.rule_analyzer import RuleAnalyzer, RuleAnalyzerStub
@@ -67,6 +66,9 @@ class AutofillRequestDTO(BaseModel):
         ..., min_length=1, description="Fields to fill"
     )
     rules: list[str] | None = Field(None, description="Optional filling rules")
+    rule_docs: list[str] | None = Field(
+        None, description="Rule document texts for RuleAnalyzer"
+    )
     mode: str = Field(
         default="quick",
         description="Autofill mode: 'quick' (one-shot) or 'detailed' (interactive Q&A)",
@@ -153,57 +155,75 @@ def get_text_extraction_service(
     )
 
 
+_pipeline_service: AutofillPipelineService | None = None
+
+
 def get_pipeline_service(
     data_source_repo: DataSourceRepository = Depends(get_data_source_repo),
     extraction_service: TextExtractionService = Depends(get_text_extraction_service),
     document_service: DocumentService = Depends(get_document_service),
 ) -> AutofillPipelineService:
-    """Build and return the AutofillPipelineService with all dependencies."""
-    from app.routes.vision_autofill import get_openai_client
+    """Get the singleton AutofillPipelineService.
 
-    context_builder = FormContextBuilder(
-        data_source_repo=data_source_repo,
-        extraction_service=extraction_service,
-        document_service=document_service,
-    )
+    The service is created once and reused across requests so that
+    caches (turn context, enriched fields) survive between turns in
+    detailed Q&A mode.  Per-request dependencies (repos, services)
+    are injected fresh each time.
+    """
+    global _pipeline_service
 
-    llm_client = get_openai_client()
-    fill_planner = FillPlanner(llm_client=llm_client)
+    if _pipeline_service is None:
+        from app.services.llm import get_llm_client
 
-    # FormRenderer needs a FillService — for now we import a factory
-    # that creates a FillService with all adapters.
-    # In Phase 2 we use a lightweight wrapper; real DI comes later.
-    form_renderer = _build_form_renderer()
+        llm_client = get_llm_client()
 
-    if llm_client is not None:
-        from app.infrastructure.gateways.embedding import (
-            MockEmbeddingGateway,
-            OpenAIEmbeddingGateway,
+        enricher = ProximityFieldEnricher(document_service=document_service)
+
+        context_builder = FormContextBuilder(
+            data_source_repo=data_source_repo,
+            extraction_service=extraction_service,
+            enricher=enricher,
+        )
+        fill_planner = FillPlanner(llm_client=llm_client)
+
+        form_renderer = _build_form_renderer()
+
+        if llm_client is not None:
+            from app.infrastructure.gateways.embedding import (
+                MockEmbeddingGateway,
+                OpenAIEmbeddingGateway,
+            )
+
+            snippet_repo = get_rule_snippet_repository()
+            try:
+                embedding_gw = OpenAIEmbeddingGateway(client=llm_client)
+            except Exception:
+                embedding_gw = MockEmbeddingGateway()
+            rule_analyzer = RuleAnalyzer(
+                llm_client=llm_client,
+                snippet_repo=snippet_repo,
+                embedding_gateway=embedding_gw,
+            )
+        else:
+            rule_analyzer = RuleAnalyzerStub()
+
+        correction_repo = get_correction_repository()
+        correction_tracker = CorrectionTracker(repository=correction_repo)
+
+        _pipeline_service = AutofillPipelineService(
+            context_builder=context_builder,
+            fill_planner=fill_planner,
+            form_renderer=form_renderer,
+            rule_analyzer=rule_analyzer,
+            correction_tracker=correction_tracker,
         )
 
-        snippet_repo = get_rule_snippet_repository()
-        try:
-            embedding_gw = OpenAIEmbeddingGateway(client=llm_client)
-        except Exception:
-            embedding_gw = MockEmbeddingGateway()
-        rule_analyzer = RuleAnalyzer(
-            llm_client=llm_client,
-            snippet_repo=snippet_repo,
-            embedding_gateway=embedding_gw,
-        )
-    else:
-        rule_analyzer = RuleAnalyzerStub()
+    # Refresh per-request dependencies (fresh DB connections each request)
+    _pipeline_service._context_builder._data_source_repo = data_source_repo
+    _pipeline_service._context_builder._extraction_service = extraction_service
+    _pipeline_service._context_builder._enricher._document_service = document_service
 
-    correction_repo = get_correction_repository()
-    correction_tracker = CorrectionTracker(repository=correction_repo)
-
-    return AutofillPipelineService(
-        context_builder=context_builder,
-        fill_planner=fill_planner,
-        form_renderer=form_renderer,
-        rule_analyzer=rule_analyzer,
-        correction_tracker=correction_tracker,
-    )
+    return _pipeline_service
 
 
 def _build_form_renderer() -> FormRenderer:
@@ -290,6 +310,7 @@ async def autofill_pipeline(
     )
 
     user_rules = tuple(request.rules) if request.rules else ()
+    rule_docs = tuple(request.rule_docs) if request.rule_docs else ()
 
     # Resolve document reference
     doc = doc_service.get_document(request.document_id)
@@ -302,6 +323,7 @@ async def autofill_pipeline(
             fields=fields,
             target_document_ref=target_ref,
             user_rules=user_rules,
+            rule_docs=rule_docs,
         )
     except Exception as e:
         logger.exception(f"Autofill pipeline failed: {e}")
@@ -383,6 +405,7 @@ class ConversationTurnDTO(BaseModel):
 
     role: str = Field(..., description="'assistant' or 'user'")
     type: str = Field(..., description="'question', 'answer', or 'fill_plan'")
+    question_id: str | None = Field(None, description="Question ID for linking answers to questions")
     question: str | None = Field(None, description="Question text (assistant turns)")
     question_type: str | None = Field(
         None, description="single_choice | multiple_choice | free_text | confirm"
@@ -411,6 +434,9 @@ class AutofillTurnRequestDTO(BaseModel):
         ..., min_length=1, description="Fields to fill"
     )
     rules: list[str] | None = Field(None, description="Optional filling rules")
+    rule_docs: list[str] | None = Field(
+        None, description="Rule document texts for RuleAnalyzer"
+    )
     conversation: list[ConversationTurnDTO] = Field(
         default_factory=list, description="Previous Q&A conversation history"
     )
@@ -421,18 +447,29 @@ class AutofillTurnRequestDTO(BaseModel):
     model_config = {"frozen": True}
 
 
-class AutofillTurnResponseDTO(BaseModel):
-    """Response from a single turn in detailed autofill mode."""
+class QuestionDTO(BaseModel):
+    """A single question in a batch."""
 
-    type: str = Field(
-        ..., description="'question' (needs user answer) or 'fill_plan' (ready to render)"
-    )
-    question: str | None = Field(None, description="Question text")
-    question_type: str | None = Field(None, description="Question type")
+    id: str = Field(..., description="Question identifier (q0, q1, ...)")
+    question: str = Field(..., description="Question text")
+    question_type: str = Field(..., description="single_choice | multiple_choice | free_text | confirm")
     options: list[QuestionOptionDTO] = Field(
         default_factory=list, description="Options for choice questions"
     )
     context: str | None = Field(None, description="Why the system is asking")
+
+    model_config = {"frozen": True}
+
+
+class AutofillTurnResponseDTO(BaseModel):
+    """Response from a single turn in detailed autofill mode."""
+
+    type: str = Field(
+        ..., description="'questions' (needs user answers) or 'fill_plan' (ready to render)"
+    )
+    questions: list[QuestionDTO] = Field(
+        default_factory=list, description="Batch of questions (when type=questions)"
+    )
     filled_fields: list[FilledFieldDTO] = Field(
         default_factory=list, description="Filled fields (when type=fill_plan)"
     )
@@ -497,6 +534,7 @@ async def autofill_turn(
     )
 
     user_rules = tuple(request.rules) if request.rules else ()
+    rule_docs = tuple(request.rule_docs) if request.rule_docs else ()
 
     doc = doc_service.get_document(request.document_id)
     target_ref = doc.ref if doc else request.document_id
@@ -506,6 +544,7 @@ async def autofill_turn(
         {
             "role": turn.role,
             "type": turn.type,
+            "question_id": turn.question_id,
             "question": turn.question,
             "question_type": turn.question_type,
             "options": [{"id": o.id, "label": o.label} for o in turn.options],
@@ -522,6 +561,7 @@ async def autofill_turn(
             fields=fields,
             target_document_ref=target_ref,
             user_rules=user_rules,
+            rule_docs=rule_docs,
             conversation_history=conversation_history,
             just_fill=request.just_fill,
         )
@@ -533,16 +573,23 @@ async def autofill_turn(
         )
         return ApiResponse(success=False, data=error_dto, error=str(e))
 
-    if turn_result.type == "question" and turn_result.question:
+    if turn_result.type == "questions" and turn_result.questions:
+        question_dtos = [
+            QuestionDTO(
+                id=q.id,
+                question=q.text,
+                question_type=q.type.value,
+                options=[
+                    QuestionOptionDTO(id=o.id, label=o.label)
+                    for o in q.options
+                ],
+                context=q.context,
+            )
+            for q in turn_result.questions
+        ]
         response_dto = AutofillTurnResponseDTO(
-            type="question",
-            question=turn_result.question.text,
-            question_type=turn_result.question.type.value,
-            options=[
-                QuestionOptionDTO(id=o.id, label=o.label)
-                for o in turn_result.question.options
-            ],
-            context=turn_result.question.context,
+            type="questions",
+            questions=question_dtos,
             step_logs=[log.model_dump() for log in step_logs],
         )
         return ApiResponse(success=True, data=response_dto)

@@ -4,6 +4,14 @@ These prompts guide the LLM to extract information from data sources
 and match it to form fields.
 """
 
+from __future__ import annotations
+
+import json
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from app.domain.models.form_context import FormFieldSpec
+
 AUTOFILL_SYSTEM_PROMPT = """You are a form-filling assistant. Your task is to extract \
 information from provided data sources and match it to form fields.
 
@@ -22,6 +30,11 @@ Each field may include a `nearby_labels` array — text found near the field on 
 the PDF page. When `field_id` is generic (e.g. Text1, Text2, Dropdown1), use \
 `nearby_labels` to understand the field's semantic purpose. The first label in \
 the array is the closest to the field and most likely to be the actual label.
+
+## Compact Fields:
+The prompt may contain an "Other Fields" section with compact one-line entries.
+Only fill these if you find a clear, high-confidence match in the data sources.
+Include any filled compact fields in your filled_fields response using their field_id.
 
 ## Data Source Interpretation:
 - If data sources contain structured key-value pairs, match keys to fields semantically
@@ -75,18 +88,51 @@ Return your response as a valid JSON object with:
 
 
 DETAILED_MODE_SYSTEM_PROMPT = """You are a form-filling assistant. You can either:
-1. Ask the user a clarifying question (when data is ambiguous or missing)
-2. Return a fill plan (when you have enough information)
+1. Ask the user clarifying questions (when data is ambiguous or missing)
+2. Return a fill plan (when you are confident about ALL fields)
 
 For each turn, respond with EXACTLY ONE of:
 
-A) A question (JSON):
+A) Questions (JSON) — ask ALL questions you need at once:
 {
-  "type": "question",
-  "question": "clear question text in the form's language",
-  "question_type": "single_choice | multiple_choice | free_text | confirm",
-  "options": [{"id": "opt1", "label": "..."}],
-  "context": "why you are asking this"
+  "type": "questions",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "clear question text in the form's language",
+      "question_type": "single_choice | multiple_choice | free_text | confirm",
+      "options": [{"id": "opt1", "label": "..."}],
+      "context": "why you are asking this"
+    }
+  ]
+}
+
+Example with mixed question types (preferred — use the right type for each question):
+{
+  "type": "questions",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What is your gender?",
+      "question_type": "single_choice",
+      "options": [{"id": "male", "label": "Male"}, {"id": "female", "label": "Female"}, {"id": "other", "label": "Other"}],
+      "context": "Required for the applicant information section"
+    },
+    {
+      "id": "q2",
+      "question": "Your name appears to be John Smith. Is this correct?",
+      "question_type": "confirm",
+      "options": [],
+      "context": "Inferred from the uploaded document"
+    },
+    {
+      "id": "q3",
+      "question": "What is your current address?",
+      "question_type": "free_text",
+      "options": [],
+      "context": "No address found in the uploaded documents"
+    }
+  ]
 }
 
 B) A fill plan (JSON):
@@ -105,20 +151,50 @@ the PDF page. When `field_id` is generic (e.g. Text1, Text2, Dropdown1), use \
 `nearby_labels` to understand the field's semantic purpose. The first label in \
 the array is the closest to the field and most likely to be the actual label.
 
+## Compact Fields:
+The prompt may contain an "Other Fields" section with compact one-line entries.
+Only fill these if you find a clear, high-confidence match in the data sources.
+Include any filled compact fields in your filled_fields response using their field_id.
+
 ## Data Source Interpretation:
 - If data sources contain structured key-value pairs, match keys to fields semantically
 - If data sources contain unstructured text, infer values by recognizing patterns \
 (names, addresses, numbers, dates) and matching them to field labels or nearby_labels
 - Match field labels/names semantically across languages
 
-## Question Guidelines:
-- Ask only the most impactful questions (3-5 max across all turns)
-- Prioritize questions that resolve ambiguity for MANY fields at once
-- When the user answers, use their answer to inform your next decision
-- When you have enough info, return the fill plan — do not keep asking
-- Use the form's language for questions (match the language of nearby_labels)
-- For single_choice/multiple_choice, provide 2-4 clear options
-- For confirm, phrase as a yes/no question
+## Question Strategy (IMPORTANT):
+- Default to ASKING questions. Only return a fill plan when you are genuinely \
+confident (>= 0.8) about the values for most fields.
+- Ask ALL questions you need at once in a single batch. Do NOT ask one question \
+at a time — gather everything you need in one round.
+- Typical forms need 3-5 questions. Ask about different categories of information \
+(e.g., personal info, dates, addresses, selections) all at once.
+- Prioritize questions that resolve ambiguity for MANY fields at once.
+- When the user answers, integrate their answers and decide: do you still have \
+gaps or low confidence for remaining fields? If yes, ask another batch.
+- Only return a fill plan when:
+  (a) You are confident (>= 0.8) about most field values, OR
+  (b) Further questions would not meaningfully improve accuracy, OR
+  (c) You have already asked 5+ questions total
+- Use the form's language for questions (match the language of nearby_labels).
+- Give each question a unique id (q1, q2, q3, ...).
+
+## Question Type Selection (CRITICAL — DO NOT default to free_text):
+- single_choice: When the answer is ONE of a known set of options.
+  Examples: gender, marital status, document type, yes/no with labeled options.
+  ALWAYS provide 2-4 options with id and label.
+- multiple_choice: When the user may select MORE THAN ONE option.
+  Examples: applicable categories, languages spoken, services requested.
+  ALWAYS provide 2-6 options with id and label.
+- confirm: When verifying a specific value you already inferred from data sources.
+  Example: "Your date of birth appears to be 1990-01-15. Is this correct?"
+  Options default to Yes/No. If the user says No, they can type the correction.
+- free_text: ONLY when the answer is truly open-ended with no predictable options.
+  Examples: full name, address, phone number, reason/notes.
+
+Rule: If you can enumerate the possible answers, use single_choice or multiple_choice.
+      If you have a candidate value to verify, use confirm.
+      Use free_text only as a last resort.
 
 ## Fill Plan Rules (same as quick mode):
 - Only fill fields where you have confidence >= 0.5
@@ -143,13 +219,22 @@ DETAILED_MODE_USER_PROMPT_TEMPLATE = """## Target Form Fields
 
 {conversation_history}
 
+## Turn Info
+
+Questions asked so far: {questions_asked}
+
 ## Task
 
-Analyze the form fields and data sources. If you need clarification to fill \
-the form accurately, ask ONE question. If you have enough information, return \
-a fill plan.
+Analyze the form fields and data sources carefully. Consider what information \
+is still missing or ambiguous.
 
-Return your response as a valid JSON object — either a question or a fill plan.
+- If there are fields you cannot confidently fill (confidence < 0.8), ask ALL \
+clarifying questions you need at once in a single batch. Cover different \
+categories (personal info, dates, addresses, selections) together.
+- Only return a fill plan if you are confident about most field values, or if \
+you have already asked enough questions (5+).
+
+Return your response as a valid JSON object — either questions or a fill plan.
 """
 
 
@@ -158,6 +243,7 @@ def build_detailed_prompt(
     data_sources_text: str,
     conversation_history: str = "No previous conversation.",
     rules: list[str] | None = None,
+    questions_asked: int = 0,
 ) -> str:
     """Build the user prompt for detailed mode.
 
@@ -166,6 +252,7 @@ def build_detailed_prompt(
         data_sources_text: Formatted text of extracted data from sources.
         conversation_history: Formatted previous Q&A turns.
         rules: Optional list of custom rules.
+        questions_asked: Number of questions already asked in this session.
 
     Returns:
         Formatted prompt string.
@@ -179,6 +266,7 @@ def build_detailed_prompt(
         data_sources_text=data_sources_text,
         rules_text=rules_text,
         conversation_history=conversation_history,
+        questions_asked=questions_asked,
     )
 
 
@@ -208,13 +296,28 @@ def build_autofill_prompt(
     )
 
 
+def _format_field_value(value: Any) -> str:
+    """Format an extracted field value for the prompt.
+
+    Strings are returned as-is. Dicts and lists are serialized as compact JSON.
+    Other types are converted via str().
+    """
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False, default=str)
+    return str(value)
+
+
 def format_data_sources(
     extractions: list[dict],
+    max_raw_text_chars: int = 4000,
 ) -> str:
     """Format data source extractions for the prompt.
 
     Args:
         extractions: List of extraction results with source info.
+        max_raw_text_chars: Maximum characters for raw text truncation.
 
     Returns:
         Formatted text for the prompt.
@@ -222,7 +325,7 @@ def format_data_sources(
     if not extractions:
         return "No data sources available."
 
-    lines = []
+    lines: list[str] = []
     for i, extraction in enumerate(extractions, 1):
         source_name = extraction.get("source_name", f"Source {i}")
         source_type = extraction.get("source_type", "unknown")
@@ -234,12 +337,121 @@ def format_data_sources(
         if fields:
             lines.append("Extracted fields:")
             for key, value in fields.items():
-                lines.append(f"  - {key}: {value}")
+                lines.append(f"  - {key}: {_format_field_value(value)}")
 
         if raw_text:
-            preview = raw_text[:2000] + "..." if len(raw_text) > 2000 else raw_text
+            preview = (
+                raw_text[:max_raw_text_chars] + "..."
+                if len(raw_text) > max_raw_text_chars
+                else raw_text
+            )
             lines.append(f"Raw text:\n{preview}")
 
         lines.append("")
 
     return "\n".join(lines)
+
+
+# =============================================================================
+# Field Identification Prompts (LLM-based strategy)
+# =============================================================================
+
+FIELD_IDENTIFICATION_SYSTEM_PROMPT = """You are a PDF form field identification assistant. \
+Your task is to identify the semantic label for each form field based on its position \
+relative to nearby text blocks on the PDF page.
+
+You will receive:
+1. A list of form fields (compact JSON)
+2. A list of text blocks extracted from the PDF (compact JSON)
+
+Field keys: id=field_id, l=label (only present when different from id), t=type, p=page, b=[x,y,w,h]
+Text block keys: s=text, p=page, b=[x,y,w,h]
+
+For each field, determine which text block is most likely its label by analyzing:
+- Proximity: Labels are usually directly left of, above, or very close to their field
+- Semantic relevance: The text should describe what the field expects (e.g., "Name", "Date of Birth")
+- Page context: Only consider text on the same page as the field
+
+Return a JSON object with this exact structure:
+{
+  "field_labels": [
+    {
+      "field_id": "Text1",
+      "identified_label": "法人名",
+      "confidence": 0.9,
+      "reasoning": "Text '法人名' is 5pt left of the field on page 1"
+    }
+  ]
+}
+
+Rules:
+- confidence >= 0.8: Text is clearly the label (directly adjacent)
+- confidence 0.5-0.8: Likely the label (nearby, semantically relevant)
+- confidence < 0.5: Do not include — omit the field from the response
+- If no suitable label is found for a field, omit it from the response
+"""
+
+
+def build_field_identification_prompt(
+    fields: tuple[FormFieldSpec, ...],
+    text_blocks: list[dict[str, Any]],
+    raw_bbox_map: dict[str, dict[str, Any]],
+) -> str:
+    """Build the user prompt for LLM-based field identification.
+
+    Uses compact JSON with abbreviated keys to minimize token usage:
+    - Field: id, l (label, only when != id), t (type), p (page), b ([x,y,w,h])
+    - Block: s (text), p (page), b ([x,y,w,h])
+
+    Args:
+        fields: Form field specifications.
+        text_blocks: Text blocks from PDF extraction.
+        raw_bbox_map: Raw AcroForm bounding boxes keyed by field name.
+
+    Returns:
+        Formatted prompt string with compact JSON.
+    """
+    fields_data = []
+    for field in fields:
+        entry: dict[str, Any] = {"id": field.field_id}
+        if field.label != field.field_id:
+            entry["l"] = field.label
+        entry["t"] = field.field_type
+        entry["p"] = field.page
+        bbox = raw_bbox_map.get(field.field_id)
+        if bbox:
+            entry["b"] = [
+                int(bbox["x"]),
+                int(bbox["y"]),
+                int(bbox["width"]),
+                int(bbox["height"]),
+            ]
+        fields_data.append(entry)
+
+    blocks_data = []
+    for block in text_blocks:
+        text = block.get("text", "")
+        if not text or not text.strip():
+            continue
+        block_entry: dict[str, Any] = {"s": text.strip()}
+        block_entry["p"] = block.get("page")
+        raw_bbox = block.get("bbox")
+        if raw_bbox and len(raw_bbox) >= 4:
+            block_entry["b"] = [
+                int(raw_bbox[0]),
+                int(raw_bbox[1]),
+                int(raw_bbox[2]),
+                int(raw_bbox[3]),
+            ]
+        blocks_data.append(block_entry)
+
+    fields_json = json.dumps(fields_data, ensure_ascii=False, separators=(",", ":"))
+    blocks_json = json.dumps(blocks_data, ensure_ascii=False, separators=(",", ":"))
+
+    return (
+        "## Form Fields\n\n"
+        f"```json\n{fields_json}\n```\n\n"
+        "## PDF Text Blocks\n\n"
+        f"```json\n{blocks_json}\n```\n\n"
+        "Identify the label for each form field based on proximity and context."
+    )
