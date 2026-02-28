@@ -168,6 +168,7 @@ async def create_data_source(
     conversation_repo: ConversationRepository = Depends(get_conversation_repo),
     data_source_repo: DataSourceRepository = Depends(get_data_source_repo),
     document_service: DocumentService = Depends(get_document_service),
+    extraction_service: TextExtractionService = Depends(get_text_extraction_service),
 ) -> ApiResponse[DataSourceResponse]:
     """Upload a data source for AI form filling.
 
@@ -231,6 +232,22 @@ async def create_data_source(
             file_size_bytes=content_size,
             mime_type="text/plain",
         )
+
+        # Eager extraction: extract immediately so autofill skips re-extraction
+        try:
+            result = extraction_service.extract_from_data_source(data_source)
+            saved = dict(result.extracted_fields) if result.extracted_fields else {}
+            if result.raw_text:
+                saved["_raw_text"] = result.raw_text
+            data_source_repo.update_extracted_data(data_source.id, saved)
+            logger.info(
+                "Eager extraction OK for text source %s: %d fields, raw_text=%s",
+                data_source.id,
+                len(saved) - (1 if "_raw_text" in saved else 0),
+                "yes" if "_raw_text" in saved else "no",
+            )
+        except Exception:
+            logger.warning("Eager extraction failed for text source %s", data_source.id, exc_info=True)
 
         logger.info(
             f"Created text data source {data_source.id} for conversation {conversation_id}"
@@ -297,6 +314,28 @@ async def create_data_source(
                 mime_type=file.content_type or "text/plain",
             )
 
+            # Eager extraction for text/CSV file sources
+            try:
+                result = extraction_service.extract_from_data_source(data_source)
+                saved = dict(result.extracted_fields) if result.extracted_fields else {}
+                if result.raw_text:
+                    saved["_raw_text"] = result.raw_text
+                data_source_repo.update_extracted_data(data_source.id, saved)
+                logger.info(
+                    "Eager extraction OK for %s file source %s: %d fields, raw_text=%s",
+                    source_type.value,
+                    data_source.id,
+                    len(saved) - (1 if "_raw_text" in saved else 0),
+                    "yes" if "_raw_text" in saved else "no",
+                )
+            except Exception:
+                logger.warning(
+                    "Eager extraction failed for %s source %s",
+                    source_type.value,
+                    data_source.id,
+                    exc_info=True,
+                )
+
             logger.info(
                 f"Created {source_type.value} data source {data_source.id} "
                 f"for conversation {conversation_id}"
@@ -323,6 +362,28 @@ async def create_data_source(
             file_size_bytes=file_size,
             mime_type=file.content_type or document.meta.mime_type,
         )
+
+        # Eager extraction for PDF/image sources (document already uploaded)
+        try:
+            result = extraction_service.extract_from_data_source(data_source)
+            saved = dict(result.extracted_fields) if result.extracted_fields else {}
+            if result.raw_text:
+                saved["_raw_text"] = result.raw_text
+            data_source_repo.update_extracted_data(data_source.id, saved)
+            logger.info(
+                "Eager extraction OK for %s source %s: %d fields, raw_text=%d chars",
+                source_type.value,
+                data_source.id,
+                len(saved) - (1 if "_raw_text" in saved else 0),
+                len(saved.get("_raw_text", "")),
+            )
+        except Exception:
+            logger.warning(
+                "Eager extraction failed for %s source %s",
+                source_type.value,
+                data_source.id,
+                exc_info=True,
+            )
 
         logger.info(
             f"Created {source_type.value} data source {data_source.id} "

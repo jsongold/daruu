@@ -12,8 +12,9 @@ For Detailed mode, also supports multi-turn Q&A via autofill_turn().
 
 import asyncio
 import logging
-import time
 from typing import Any
+
+from app.infrastructure.observability.stopwatch import StopWatch
 
 from app.domain.models.fill_plan import FillActionType
 from app.domain.models.form_context import FormContext, FormFieldSpec
@@ -34,6 +35,9 @@ class AutofillPipelineService:
 
     Composes FormContextBuilder, RuleAnalyzer, FillPlanner,
     FormRenderer, and CorrectionTracker into a single pipeline.
+
+    For detailed mode, context is cached after the first turn so
+    subsequent turns only pay for the LLM planning call.
     """
 
     def __init__(
@@ -49,6 +53,8 @@ class AutofillPipelineService:
         self._form_renderer = form_renderer
         self._rule_analyzer = rule_analyzer
         self._correction_tracker = correction_tracker
+        # Cache context per (document_id, conversation_id) for turn reuse
+        self._turn_context_cache: dict[tuple[str, str], FormContext] = {}
 
     async def autofill(
         self,
@@ -72,29 +78,28 @@ class AutofillPipelineService:
         Returns:
             AutofillPipelineResult with context, plan, report, and step_logs.
         """
-        start_time = time.time()
+        sw = StopWatch()
         step_logs: list[PipelineStepLog] = []
 
         # Step 1: Parallel — build context + analyze rules
-        t0 = time.time()
-        context_task = self._context_builder.build(
-            document_id=document_id,
-            conversation_id=conversation_id,
-            field_hints=fields,
-            user_rules=user_rules,
-        )
-        rule_task = self._rule_analyzer.analyze(
-            rule_docs=rule_docs,
-            field_hints=fields,
-        )
-
-        context, rule_snippets = await asyncio.gather(context_task, rule_task)
-        context_duration = int((time.time() - t0) * 1000)
+        with sw.lap("context_build"):
+            context_task = self._context_builder.build(
+                document_id=document_id,
+                conversation_id=conversation_id,
+                field_hints=fields,
+                user_rules=user_rules,
+            )
+            rule_task = self._rule_analyzer.analyze(
+                rule_docs=rule_docs,
+                field_hints=fields,
+                skip_embedding=True,
+            )
+            context, rule_snippets = await asyncio.gather(context_task, rule_task)
 
         step_logs.append(PipelineStepLog(
             step_name="context_build",
             status="success",
-            duration_ms=context_duration,
+            duration_ms=sw.laps["context_build"],
             summary=f"{len(context.data_sources)} sources, {len(context.mapping_candidates)} candidates",
             details={
                 "data_sources_count": len(context.data_sources),
@@ -123,26 +128,25 @@ class AutofillPipelineService:
         ))
 
         # Step 2: Merge rule snippets into context rules
-        t1 = time.time()
-        if rule_snippets:
-            merged_rules = context.rules + tuple(
-                snippet.rule_text for snippet in rule_snippets
-            )
-            context = FormContext(
-                document_id=context.document_id,
-                conversation_id=context.conversation_id,
-                fields=context.fields,
-                data_sources=context.data_sources,
-                mapping_candidates=context.mapping_candidates,
-                rules=merged_rules,
-            )
-        rule_duration = int((time.time() - t1) * 1000)
+        with sw.lap("rule_analyze"):
+            if rule_snippets:
+                merged_rules = context.rules + tuple(
+                    snippet.rule_text for snippet in rule_snippets
+                )
+                context = FormContext(
+                    document_id=context.document_id,
+                    conversation_id=context.conversation_id,
+                    fields=context.fields,
+                    data_sources=context.data_sources,
+                    mapping_candidates=context.mapping_candidates,
+                    rules=merged_rules,
+                )
 
         all_rules = list(context.rules) if context.rules else []
         step_logs.append(PipelineStepLog(
             step_name="rule_analyze",
             status="success",
-            duration_ms=rule_duration,
+            duration_ms=sw.laps["rule_analyze"],
             summary=f"{len(all_rules)} rules",
             details={
                 "rules_count": len(all_rules),
@@ -151,9 +155,8 @@ class AutofillPipelineService:
         ))
 
         # Step 3: Plan
-        t2 = time.time()
-        plan = await self._fill_planner.plan(context)
-        plan_duration = int((time.time() - t2) * 1000)
+        with sw.lap("fill_plan"):
+            plan = await self._fill_planner.plan(context)
 
         fill_count = sum(1 for a in plan.actions if a.action == FillActionType.FILL)
         skip_count = sum(1 for a in plan.actions if a.action == FillActionType.SKIP)
@@ -164,7 +167,7 @@ class AutofillPipelineService:
         step_logs.append(PipelineStepLog(
             step_name="fill_plan",
             status="success",
-            duration_ms=plan_duration,
+            duration_ms=sw.laps["fill_plan"],
             summary=f"{fill_count} fill, {skip_count} skip, {ask_user_count} ask_user",
             details={
                 "model_used": plan.model_used,
@@ -188,17 +191,16 @@ class AutofillPipelineService:
         ))
 
         # Step 4: Render
-        t3 = time.time()
-        report = await self._form_renderer.render(
-            plan=plan,
-            target_document_ref=target_document_ref,
-        )
-        render_duration = int((time.time() - t3) * 1000)
+        with sw.lap("render"):
+            report = await self._form_renderer.render(
+                plan=plan,
+                target_document_ref=target_document_ref,
+            )
 
         step_logs.append(PipelineStepLog(
             step_name="render",
             status="success",
-            duration_ms=render_duration,
+            duration_ms=sw.laps["render"],
             summary=f"{report.filled_count} filled, {report.failed_count} failed",
             details={
                 "filled_count": report.filled_count,
@@ -215,13 +217,11 @@ class AutofillPipelineService:
             },
         ))
 
-        processing_time_ms = int((time.time() - start_time) * 1000)
-
         return AutofillPipelineResult(
             context=context,
             plan=plan,
             report=report,
-            processing_time_ms=processing_time_ms,
+            processing_time_ms=sw.total_ms,
             step_logs=tuple(step_logs),
         )
 
@@ -242,65 +242,84 @@ class AutofillPipelineService:
             Tuple of (TurnResult, step_logs, pipeline_result).
             pipeline_result is only set when TurnResult.type == "fill_plan".
         """
-        start_time = time.time()
+        sw = StopWatch()
         step_logs: list[PipelineStepLog] = []
 
-        # Step 1: Build context (same as quick mode)
-        t0 = time.time()
-        context_task = self._context_builder.build(
-            document_id=document_id,
-            conversation_id=conversation_id,
-            field_hints=fields,
-            user_rules=user_rules,
-        )
-        rule_task = self._rule_analyzer.analyze(
-            rule_docs=rule_docs,
-            field_hints=fields,
-        )
-        context, rule_snippets = await asyncio.gather(context_task, rule_task)
-        context_duration = int((time.time() - t0) * 1000)
+        # Reuse cached context for subsequent turns (context + rules don't
+        # change between Q&A turns for the same document/conversation).
+        cache_key = (document_id, conversation_id)
+        cached_context = self._turn_context_cache.get(cache_key)
 
-        step_logs.append(PipelineStepLog(
-            step_name="context_build",
-            status="success",
-            duration_ms=context_duration,
-            summary=f"{len(context.data_sources)} sources, {len(context.mapping_candidates)} candidates",
-            details={
-                "data_sources_count": len(context.data_sources),
-                "candidates_count": len(context.mapping_candidates),
-            },
-        ))
+        if cached_context is not None:
+            context = cached_context
+            step_logs.append(PipelineStepLog(
+                step_name="context_build",
+                status="success",
+                duration_ms=0,
+                summary="cached",
+                details={"cached": True},
+            ))
+        else:
+            # Step 1: Build context (same as quick mode)
+            with sw.lap("context_build"):
+                context_task = self._context_builder.build(
+                    document_id=document_id,
+                    conversation_id=conversation_id,
+                    field_hints=fields,
+                    user_rules=user_rules,
+                )
+                rule_task = self._rule_analyzer.analyze(
+                    rule_docs=rule_docs,
+                    field_hints=fields,
+                    skip_embedding=True,
+                )
+                context, rule_snippets = await asyncio.gather(context_task, rule_task)
 
-        # Step 2: Merge rules
-        if rule_snippets:
-            merged_rules = context.rules + tuple(
-                snippet.rule_text for snippet in rule_snippets
-            )
-            context = FormContext(
-                document_id=context.document_id,
-                conversation_id=context.conversation_id,
-                fields=context.fields,
-                data_sources=context.data_sources,
-                mapping_candidates=context.mapping_candidates,
-                rules=merged_rules,
-            )
+            step_logs.append(PipelineStepLog(
+                step_name="context_build",
+                status="success",
+                duration_ms=sw.laps["context_build"],
+                summary=f"{len(context.data_sources)} sources, {len(context.mapping_candidates)} candidates",
+                details={
+                    "data_sources_count": len(context.data_sources),
+                    "candidates_count": len(context.mapping_candidates),
+                },
+            ))
+
+            # Step 2: Merge rules
+            if rule_snippets:
+                merged_rules = context.rules + tuple(
+                    snippet.rule_text for snippet in rule_snippets
+                )
+                context = FormContext(
+                    document_id=context.document_id,
+                    conversation_id=context.conversation_id,
+                    fields=context.fields,
+                    data_sources=context.data_sources,
+                    mapping_candidates=context.mapping_candidates,
+                    rules=merged_rules,
+                )
+
+            self._turn_context_cache[cache_key] = context
 
         # Step 3: Plan turn (may return question or fill plan)
-        t2 = time.time()
-        turn_result = await self._fill_planner.plan_turn(
-            context,
-            conversation_history=conversation_history,
-            just_fill=just_fill,
-        )
-        turn_duration = int((time.time() - t2) * 1000)
+        with sw.lap("fill_plan_turn"):
+            turn_result = await self._fill_planner.plan_turn(
+                context,
+                conversation_history=conversation_history,
+                just_fill=just_fill,
+            )
 
         step_logs.append(PipelineStepLog(
             step_name="fill_plan_turn",
             status="success",
-            duration_ms=turn_duration,
+            duration_ms=sw.laps["fill_plan_turn"],
             summary=f"type={turn_result.type}",
             details={
                 "turn_type": turn_result.type,
+                "model_used": turn_result.model_used,
+                "system_prompt": turn_result.system_prompt,
+                "user_prompt": turn_result.user_prompt,
                 "raw_llm_response": turn_result.raw_llm_response,
             },
         ))
@@ -308,17 +327,16 @@ class AutofillPipelineService:
         # Step 4: If fill plan, render
         pipeline_result: AutofillPipelineResult | None = None
         if turn_result.type == "fill_plan" and turn_result.plan:
-            t3 = time.time()
-            report = await self._form_renderer.render(
-                plan=turn_result.plan,
-                target_document_ref=target_document_ref,
-            )
-            render_duration = int((time.time() - t3) * 1000)
+            with sw.lap("render"):
+                report = await self._form_renderer.render(
+                    plan=turn_result.plan,
+                    target_document_ref=target_document_ref,
+                )
 
             step_logs.append(PipelineStepLog(
                 step_name="render",
                 status="success",
-                duration_ms=render_duration,
+                duration_ms=sw.laps["render"],
                 summary=f"{report.filled_count} filled, {report.failed_count} failed",
                 details={
                     "filled_count": report.filled_count,
@@ -327,12 +345,11 @@ class AutofillPipelineService:
                 },
             ))
 
-            processing_time_ms = int((time.time() - start_time) * 1000)
             pipeline_result = AutofillPipelineResult(
                 context=context,
                 plan=turn_result.plan,
                 report=report,
-                processing_time_ms=processing_time_ms,
+                processing_time_ms=sw.total_ms,
                 step_logs=tuple(step_logs),
             )
 

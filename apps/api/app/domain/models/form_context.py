@@ -4,6 +4,8 @@ FormContext aggregates all information needed for FillPlanner:
 field specs, data source entries, and fuzzy-matched mapping candidates.
 """
 
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -38,7 +40,7 @@ class DataSourceEntry(BaseModel):
 
     source_name: str = Field(..., description="Data source name")
     source_type: str = Field(..., description="Data source type (pdf, csv, image, text)")
-    extracted_fields: dict[str, str] = Field(
+    extracted_fields: dict[str, Any] = Field(
         default_factory=dict,
         description="Key-value pairs extracted from the source",
     )

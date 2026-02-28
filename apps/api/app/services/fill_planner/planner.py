@@ -1,8 +1,8 @@
-"""FillPlanner — wraps existing LLM autofill logic.
+"""FillPlanner — plans field fill actions using LiteLLM + Instructor.
 
-Reuses AUTOFILL_SYSTEM_PROMPT and build_autofill_prompt from
-vision_autofill/prompts.py, plus the same OpenAI client pattern.
-Supports both Quick mode (one-shot fill) and Detailed mode (multi-turn Q&A).
+Uses Instructor for structured output with Pydantic validation and
+automatic retries. Falls back to mapping-candidate-based planning
+when no LLM client is available.
 """
 
 import json
@@ -18,7 +18,13 @@ from app.domain.models.fill_plan import (
     QuestionOption,
     QuestionType,
 )
-from app.domain.models.form_context import FormContext
+from app.domain.models.form_context import FormContext, FormFieldSpec
+from app.services.fill_planner.schemas import (
+    LLMDetailedFillResponse,
+    LLMDetailedQuestionsResponse,
+    LLMFilledField,
+    LLMFillResponse,
+)
 from app.services.vision_autofill.prompts import (
     AUTOFILL_SYSTEM_PROMPT,
     DETAILED_MODE_SYSTEM_PROMPT,
@@ -34,76 +40,41 @@ logger = logging.getLogger(__name__)
 class TurnResult:
     """Result of a single turn in detailed mode.
 
-    Either a question (type="question") or a fill plan (type="fill_plan").
+    Either questions (type="questions") or a fill plan (type="fill_plan").
     """
 
-    type: str  # "question" or "fill_plan"
-    question: FieldQuestion | None = None
+    type: str  # "questions" or "fill_plan"
+    questions: tuple[FieldQuestion, ...] = ()
     plan: FillPlan | None = None
     raw_llm_response: str | None = None
+    system_prompt: str | None = None
+    user_prompt: str | None = None
+    model_used: str | None = None
 
 
 class FillPlanner:
     """Plans field fill actions using LLM.
 
-    Wraps the LLM autofill logic from VisionAutofillService._llm_autofill().
-    Falls back to mapping candidates when LLM is unavailable.
+    Accepts any client that implements:
+    - complete(messages, response_format) for raw completions
+    - create(response_model, messages) for Instructor structured output
     """
 
     def __init__(self, llm_client: Any | None = None) -> None:
-        """Initialize the planner.
-
-        Args:
-            llm_client: Optional LLM client (same interface as OpenAIClient).
-                       If None, falls back to mapping-candidate-based planning.
-        """
         self._llm_client = llm_client
 
-    async def plan(
-        self,
-        context: FormContext,
-    ) -> FillPlan:
-        """Create a fill plan from the given form context.
+    def _has_instructor(self) -> bool:
+        """Check if the client supports Instructor's create() method."""
+        return hasattr(self._llm_client, "create")
 
-        Args:
-            context: FormContext containing fields, data sources,
-                     and mapping candidates.
-
-        Returns:
-            FillPlan with an action for each field.
-        """
+    async def plan(self, context: FormContext) -> FillPlan:
         if self._llm_client:
             return await self._llm_plan(context)
         return self._candidate_plan(context)
 
     async def _llm_plan(self, context: FormContext) -> FillPlan:
         """Use LLM to produce a fill plan."""
-        fields_dicts = [
-            {
-                "field_id": f.field_id,
-                "label": f.label,
-                "type": f.field_type,
-                **(
-                    {"nearby_labels": [lc.text for lc in f.label_candidates]}
-                    if f.label_candidates
-                    else {}
-                ),
-            }
-            for f in context.fields
-        ]
-        fields_json = json.dumps(fields_dicts, indent=2)
-
-        extractions = [
-            {
-                "source_name": ds.source_name,
-                "source_type": ds.source_type,
-                "extracted_fields": ds.extracted_fields,
-                "raw_text": ds.raw_text,
-            }
-            for ds in context.data_sources
-        ]
-        data_sources_text = format_data_sources(extractions)
-        user_rules = list(context.rules) if context.rules else None
+        fields_json, data_sources_text, user_rules = self._prepare_prompt_inputs(context)
 
         user_prompt = build_autofill_prompt(
             fields_json=fields_json,
@@ -111,38 +82,107 @@ class FillPlanner:
             rules=user_rules,
         )
 
+        messages = [
+            {"role": "system", "content": AUTOFILL_SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ]
+
         try:
-            response = await self._llm_client.complete(
-                messages=[
-                    {"role": "system", "content": AUTOFILL_SYSTEM_PROMPT},
-                    {"role": "user", "content": user_prompt},
-                ],
-                response_format={"type": "json_object"},
-            )
-
-            raw_response = response.content
-            result = json.loads(raw_response)
-            actions = self._parse_llm_result(context, result)
-
-            model_used = getattr(self._llm_client, "_model", None)
-
-            return FillPlan(
-                document_id=context.document_id,
-                actions=tuple(actions),
-                model_used=model_used,
-                raw_llm_response=raw_response,
-            )
+            if self._has_instructor():
+                result = await self._llm_client.create(
+                    response_model=LLMFillResponse,
+                    messages=messages,
+                    max_retries=2,
+                )
+                actions = self._convert_fill_response(context, result)
+                model_used = getattr(self._llm_client, "model", None) or getattr(
+                    self._llm_client, "_model", None
+                )
+                return FillPlan(
+                    document_id=context.document_id,
+                    actions=tuple(actions),
+                    model_used=model_used,
+                    system_prompt=AUTOFILL_SYSTEM_PROMPT,
+                    user_prompt=user_prompt,
+                )
+            else:
+                return await self._llm_plan_raw(context, messages, user_prompt)
 
         except Exception as e:
             logger.warning(f"LLM plan failed, falling back to candidates: {e}")
             return self._candidate_plan(context)
+
+    async def _llm_plan_raw(
+        self,
+        context: FormContext,
+        messages: list[dict[str, str]],
+        user_prompt: str,
+    ) -> FillPlan:
+        """Fallback: raw JSON completion without Instructor."""
+        response = await self._llm_client.complete(
+            messages=messages,
+            response_format={"type": "json_object"},
+        )
+
+        raw_response = response.content
+        result = json.loads(raw_response)
+        actions = self._parse_llm_result(context, result)
+        model_used = getattr(self._llm_client, "model", None) or getattr(
+            self._llm_client, "_model", None
+        )
+
+        return FillPlan(
+            document_id=context.document_id,
+            actions=tuple(actions),
+            model_used=model_used,
+            raw_llm_response=raw_response,
+            system_prompt=AUTOFILL_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+        )
+
+    def _convert_fill_response(
+        self,
+        context: FormContext,
+        result: LLMFillResponse,
+    ) -> list[FieldFillAction]:
+        """Convert Instructor-validated LLMFillResponse to FieldFillActions."""
+        filled_map: dict[str, LLMFilledField] = {
+            f.field_id: f for f in result.filled_fields
+        }
+        unfilled_set = set(result.unfilled_fields)
+        actions: list[FieldFillAction] = []
+
+        for field in context.fields:
+            if field.field_id in filled_map:
+                entry = filled_map[field.field_id]
+                actions.append(FieldFillAction(
+                    field_id=field.field_id,
+                    action=FillActionType.FILL,
+                    value=entry.value,
+                    confidence=entry.confidence,
+                    source=entry.source,
+                ))
+            elif field.field_id in unfilled_set:
+                actions.append(FieldFillAction(
+                    field_id=field.field_id,
+                    action=FillActionType.SKIP,
+                    reason="LLM could not determine a value",
+                ))
+            else:
+                actions.append(FieldFillAction(
+                    field_id=field.field_id,
+                    action=FillActionType.SKIP,
+                    reason="Field not referenced in LLM response",
+                ))
+
+        return actions
 
     def _parse_llm_result(
         self,
         context: FormContext,
         result: dict[str, Any],
     ) -> list[FieldFillAction]:
-        """Parse LLM JSON response into FieldFillActions."""
+        """Parse raw LLM JSON response into FieldFillActions (fallback path)."""
         filled_map: dict[str, dict[str, Any]] = {}
         for f in result.get("filled_fields", []):
             filled_map[f["field_id"]] = f
@@ -211,22 +251,14 @@ class FillPlanner:
             actions=tuple(actions),
         )
 
+    # ─── Detailed mode ───
+
     async def plan_turn(
         self,
         context: FormContext,
         conversation_history: list[dict[str, Any]] | None = None,
         just_fill: bool = False,
     ) -> TurnResult:
-        """Execute a single turn in detailed mode.
-
-        Args:
-            context: FormContext with fields, data sources, etc.
-            conversation_history: Previous Q&A turns (list of dicts).
-            just_fill: If True, skip questions and return fill plan.
-
-        Returns:
-            TurnResult with either a question or a fill plan.
-        """
         if not self._llm_client:
             plan = self._candidate_plan(context)
             return TurnResult(type="fill_plan", plan=plan)
@@ -243,6 +275,179 @@ class FillPlanner:
         conversation_history: list[dict[str, Any]],
     ) -> TurnResult:
         """Execute a detailed mode LLM turn."""
+        fields_json, data_sources_text, user_rules = self._prepare_prompt_inputs(context)
+
+        history_text = self._format_conversation_history(conversation_history)
+        questions_asked = sum(
+            1
+            for turn in conversation_history
+            if turn.get("role") == "assistant"
+            and turn.get("type") in ("question", "questions")
+        )
+
+        user_prompt = build_detailed_prompt(
+            fields_json=fields_json,
+            data_sources_text=data_sources_text,
+            conversation_history=history_text,
+            rules=user_rules,
+            questions_asked=questions_asked,
+        )
+
+        messages = [
+            {"role": "system", "content": DETAILED_MODE_SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ]
+
+        model_used = getattr(self._llm_client, "model", None) or getattr(
+            self._llm_client, "_model", None
+        )
+        prompt_fields = {
+            "system_prompt": DETAILED_MODE_SYSTEM_PROMPT,
+            "user_prompt": user_prompt,
+            "model_used": model_used,
+        }
+
+        try:
+            # Detailed mode returns either questions or a fill plan.
+            # We first try raw completion to inspect the "type" field,
+            # then parse with the appropriate schema.
+            response = await self._llm_client.complete(
+                messages=messages,
+                response_format={"type": "json_object"},
+            )
+
+            raw_response = response.content
+            result = json.loads(raw_response)
+
+            if result.get("type") == "questions":
+                parsed = LLMDetailedQuestionsResponse(**result)
+                questions = self._convert_questions(parsed)
+                return TurnResult(
+                    type="questions",
+                    questions=questions,
+                    raw_llm_response=raw_response,
+                    **prompt_fields,
+                )
+            elif result.get("type") == "question":
+                parsed_q = LLMDetailedQuestionsResponse(
+                    type="questions",
+                    questions=[result],
+                )
+                questions = self._convert_questions(parsed_q)
+                return TurnResult(
+                    type="questions",
+                    questions=questions,
+                    raw_llm_response=raw_response,
+                    **prompt_fields,
+                )
+            else:
+                parsed_fill = LLMDetailedFillResponse(**result)
+                fill_resp = LLMFillResponse(
+                    filled_fields=parsed_fill.filled_fields,
+                    unfilled_fields=parsed_fill.unfilled_fields,
+                    warnings=parsed_fill.warnings,
+                )
+                actions = self._convert_fill_response(context, fill_resp)
+                plan = FillPlan(
+                    document_id=context.document_id,
+                    actions=tuple(actions),
+                    model_used=model_used,
+                    raw_llm_response=raw_response,
+                )
+                return TurnResult(
+                    type="fill_plan",
+                    plan=plan,
+                    raw_llm_response=raw_response,
+                    **prompt_fields,
+                )
+
+        except Exception as e:
+            logger.warning(f"Detailed turn failed, falling back to fill plan: {e}")
+            plan = self._candidate_plan(context)
+            return TurnResult(type="fill_plan", plan=plan)
+
+    @staticmethod
+    def _convert_questions(
+        parsed: LLMDetailedQuestionsResponse,
+    ) -> tuple[FieldQuestion, ...]:
+        """Convert Instructor-validated questions to domain models."""
+        questions: list[FieldQuestion] = []
+        for i, q in enumerate(parsed.questions):
+            try:
+                q_type = QuestionType(q.question_type)
+            except ValueError:
+                q_type = QuestionType.FREE_TEXT
+
+            options = tuple(
+                QuestionOption(id=opt.id, label=opt.label)
+                for opt in q.options
+            )
+
+            questions.append(FieldQuestion(
+                id=q.id or f"q{i}",
+                text=q.question,
+                type=q_type,
+                options=options,
+                context=q.context,
+            ))
+
+        return tuple(questions)
+
+    # ─── Helpers ───
+
+    @staticmethod
+    def _select_relevant_fields(
+        context: FormContext,
+    ) -> tuple[list[FormFieldSpec], list[FormFieldSpec]]:
+        """Partition fields into relevant (full detail) vs rest (compact).
+
+        A field is relevant when its label or any nearby_label text
+        overlaps with a data source key (case-insensitive substring).
+        """
+        ds_keys: set[str] = set()
+        for ds in context.data_sources:
+            for key in ds.extracted_fields:
+                ds_keys.add(key.lower())
+
+        relevant: list[FormFieldSpec] = []
+        rest: list[FormFieldSpec] = []
+
+        for field in context.fields:
+            label_lower = field.label.lower()
+            matched = any(k in label_lower or label_lower in k for k in ds_keys)
+
+            if not matched and field.label_candidates:
+                for lc in field.label_candidates:
+                    lc_lower = lc.text.lower()
+                    if any(k in lc_lower or lc_lower in k for k in ds_keys):
+                        matched = True
+                        break
+
+            if not matched:
+                for mc in context.mapping_candidates:
+                    if mc.field_id == field.field_id and mc.score > 0.3:
+                        matched = True
+                        break
+
+            if matched:
+                relevant.append(field)
+            else:
+                rest.append(field)
+
+        return relevant, rest
+
+    @staticmethod
+    def _prepare_prompt_inputs(
+        context: FormContext,
+    ) -> tuple[str, str, list[str] | None]:
+        """Extract prompt inputs from FormContext.
+
+        Uses hybrid format: full detail for fields that match data source
+        keys, compact one-liners for the rest (~60% prompt reduction).
+        """
+        relevant, rest = FillPlanner._select_relevant_fields(context)
+
+        # Full detail for relevant fields (with nearby_labels)
         fields_dicts = [
             {
                 "field_id": f.field_id,
@@ -254,120 +459,75 @@ class FillPlanner:
                     else {}
                 ),
             }
-            for f in context.fields
+            for f in relevant
         ]
-        fields_json = json.dumps(fields_dicts, indent=2)
 
-        extractions = [
-            {
+        # Compact one-liner list for remaining fields
+        compact_lines: list[str] = []
+        for f in rest:
+            nearby = ""
+            if f.label_candidates:
+                nearby = " [" + ", ".join(lc.text for lc in f.label_candidates[:1]) + "]"
+            compact_lines.append(f"{f.field_id} ({f.field_type}){nearby}")
+
+        fields_json = json.dumps(fields_dicts, indent=2)
+        if compact_lines:
+            fields_json += (
+                "\n\n## Other Fields (fill only if data clearly matches)\n\n"
+                + "\n".join(compact_lines)
+            )
+
+        # Data sources (unchanged)
+        extractions = []
+        for ds in context.data_sources:
+            entry: dict[str, Any] = {
                 "source_name": ds.source_name,
                 "source_type": ds.source_type,
                 "extracted_fields": ds.extracted_fields,
-                "raw_text": ds.raw_text,
             }
-            for ds in context.data_sources
-        ]
+            if len(ds.extracted_fields) < 3 and ds.raw_text:
+                entry["raw_text"] = ds.raw_text
+            extractions.append(entry)
         data_sources_text = format_data_sources(extractions)
         user_rules = list(context.rules) if context.rules else None
 
-        history_text = self._format_conversation_history(conversation_history)
-
-        user_prompt = build_detailed_prompt(
-            fields_json=fields_json,
-            data_sources_text=data_sources_text,
-            conversation_history=history_text,
-            rules=user_rules,
-        )
-
-        try:
-            response = await self._llm_client.complete(
-                messages=[
-                    {"role": "system", "content": DETAILED_MODE_SYSTEM_PROMPT},
-                    {"role": "user", "content": user_prompt},
-                ],
-                response_format={"type": "json_object"},
-            )
-
-            raw_response = response.content
-            result = json.loads(raw_response)
-
-            if result.get("type") == "question":
-                question = self._parse_question(result)
-                return TurnResult(
-                    type="question",
-                    question=question,
-                    raw_llm_response=raw_response,
-                )
-            else:
-                actions = self._parse_llm_result(context, result)
-                model_used = getattr(self._llm_client, "_model", None)
-                plan = FillPlan(
-                    document_id=context.document_id,
-                    actions=tuple(actions),
-                    model_used=model_used,
-                    raw_llm_response=raw_response,
-                )
-                return TurnResult(
-                    type="fill_plan",
-                    plan=plan,
-                    raw_llm_response=raw_response,
-                )
-
-        except Exception as e:
-            logger.warning(f"Detailed turn failed, falling back to fill plan: {e}")
-            plan = self._candidate_plan(context)
-            return TurnResult(type="fill_plan", plan=plan)
-
-    @staticmethod
-    def _parse_question(result: dict[str, Any]) -> FieldQuestion:
-        """Parse a question response from the LLM."""
-        question_type_str = result.get("question_type", "free_text")
-        try:
-            question_type = QuestionType(question_type_str)
-        except ValueError:
-            question_type = QuestionType.FREE_TEXT
-
-        options = tuple(
-            QuestionOption(
-                id=opt.get("id", f"opt{i}"),
-                label=opt.get("label", ""),
-            )
-            for i, opt in enumerate(result.get("options", []))
-        )
-
-        return FieldQuestion(
-            text=result.get("question", ""),
-            type=question_type,
-            options=options,
-            context=result.get("context"),
-        )
+        return fields_json, data_sources_text, user_rules
 
     @staticmethod
     def _format_conversation_history(
         conversation: list[dict[str, Any]],
+        max_full_turns: int = 4,
     ) -> str:
-        """Format conversation history for the LLM prompt."""
         if not conversation:
             return "No previous conversation."
 
         lines: list[str] = []
+        if len(conversation) > max_full_turns:
+            early_count = len(conversation) - max_full_turns
+            lines.append(f"[{early_count} earlier Q&A turns omitted]")
+            conversation = conversation[-max_full_turns:]
+
         for turn in conversation:
             role = turn.get("role", "unknown")
             turn_type = turn.get("type", "unknown")
 
             if role == "assistant" and turn_type == "question":
+                q_id = turn.get("question_id", "")
                 q = turn.get("question", "")
-                lines.append(f"Assistant asked: {q}")
+                prefix = f"[{q_id}] " if q_id else ""
+                lines.append(f"Assistant asked: {prefix}{q}")
                 opts = turn.get("options", [])
                 if opts:
                     for opt in opts:
                         lines.append(f"  - {opt.get('label', opt.get('id', ''))}")
             elif role == "user" and turn_type == "answer":
+                q_id = turn.get("question_id", "")
+                prefix = f"[{q_id}] " if q_id else ""
                 selected = turn.get("selected_option_ids", [])
                 free = turn.get("free_text")
                 if selected:
-                    lines.append(f"User selected: {', '.join(selected)}")
+                    lines.append(f"User selected: {prefix}{', '.join(selected)}")
                 if free:
-                    lines.append(f"User answered: {free}")
+                    lines.append(f"User answered: {prefix}{free}")
 
         return "\n".join(lines) if lines else "No previous conversation."

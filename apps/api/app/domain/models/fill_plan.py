@@ -38,6 +38,7 @@ class QuestionOption(BaseModel):
 class FieldQuestion(BaseModel):
     """A question to ask the user about one or more fields."""
 
+    id: str = Field(default="q0", description="Unique question identifier")
     text: str = Field(..., description="Question text")
     type: QuestionType = Field(..., description="Question type")
     options: tuple[QuestionOption, ...] = Field(
