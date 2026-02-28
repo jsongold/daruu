@@ -1,21 +1,13 @@
-"""Tests for RuleAnalyzer — LLM-based rule extraction with DB persistence."""
+"""Tests for RuleAnalyzer — standalone rule-service version."""
 
 import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.domain.models.form_context import FormFieldSpec
-from app.domain.models.rule_snippet import RuleSnippet
-from app.domain.protocols.rule_analyzer import RuleAnalyzerProtocol
-from app.infrastructure.repositories.memory_rule_snippet_repository import (
-    MemoryRuleSnippetRepository,
-)
-from app.services.rule_analyzer.analyzer import (
-    RuleAnalyzer,
-    RuleAnalyzerStub,
-)
-from app.services.rule_analyzer.schemas import ChunkAnalysisResult, ExtractedRule
+from app.repositories.memory_impl import MemoryRuleSnippetRepository
+from app.schemas.rule_schemas import ChunkAnalysisResult, ExtractedRule, RuleSnippet
+from app.services.rule_analyzer import RuleAnalyzer
 
 
 # ============================================================================
@@ -31,16 +23,11 @@ def _make_llm_response(rules: list[dict]) -> MagicMock:
 
 
 def _make_llm_client(rules: list[dict] | None = None) -> AsyncMock:
-    """Create a mock LLM client that returns the given rules.
-
-    Sets up both ``complete()`` (raw path) and ``create()`` (Instructor path)
-    so that ``_has_instructor()`` picks the structured output route.
-    """
+    """Create a mock LLM client that returns the given rules."""
     if rules is None:
         rules = []
     client = AsyncMock()
     client.complete = AsyncMock(return_value=_make_llm_response(rules))
-    # Instructor path — _has_instructor() checks for `create` attribute
     chunk_result = ChunkAnalysisResult(
         rules=[ExtractedRule(**r) for r in rules]
     )
@@ -48,55 +35,15 @@ def _make_llm_client(rules: list[dict] | None = None) -> AsyncMock:
     return client
 
 
-def _make_field_hints(*field_ids: str) -> tuple[FormFieldSpec, ...]:
-    """Create FormFieldSpec tuples for testing."""
-    return tuple(
-        FormFieldSpec(field_id=fid, label=fid, field_type="text")
-        for fid in field_ids
-    )
-
-
 def _make_embedding_gateway() -> AsyncMock:
-    """Create a mock embedding gateway that returns deterministic vectors."""
+    """Create a mock embedding gateway."""
     gw = AsyncMock()
-    # Return a simple deterministic vector based on text hash
     gw.embed_text = AsyncMock(return_value=[0.1] * 8)
     return gw
 
 
 # ============================================================================
-# Protocol Compliance
-# ============================================================================
-
-
-class TestProtocolCompliance:
-    def test_stub_satisfies_protocol(self):
-        stub = RuleAnalyzerStub()
-        assert isinstance(stub, RuleAnalyzerProtocol)
-
-    def test_analyzer_satisfies_protocol(self):
-        analyzer = RuleAnalyzer(
-            llm_client=AsyncMock(),
-            snippet_repo=MemoryRuleSnippetRepository(),
-        )
-        assert isinstance(analyzer, RuleAnalyzerProtocol)
-
-
-# ============================================================================
-# RuleAnalyzerStub
-# ============================================================================
-
-
-class TestRuleAnalyzerStub:
-    @pytest.mark.asyncio
-    async def test_returns_empty_list(self):
-        stub = RuleAnalyzerStub()
-        result = await stub.analyze(rule_docs=("some doc",))
-        assert result == []
-
-
-# ============================================================================
-# RuleAnalyzer — Empty / Whitespace Docs
+# Empty / Whitespace Docs
 # ============================================================================
 
 
@@ -123,7 +70,7 @@ class TestRuleAnalyzerEmptyDocs:
 
 
 # ============================================================================
-# RuleAnalyzer — LLM Analysis + DB Persistence
+# LLM Analysis + DB Persistence (always embeds)
 # ============================================================================
 
 
@@ -176,7 +123,6 @@ class TestRuleAnalyzerAnalysis:
 
         result = await analyzer.analyze(rule_docs=("Doc one", "Doc two"))
 
-        # Each doc produces 1 chunk -> 2 LLM calls -> 2 rules
         assert len(result) == 2
         assert llm.create.call_count == 2
 
@@ -200,7 +146,7 @@ class TestRuleAnalyzerAnalysis:
 
 
 # ============================================================================
-# RuleAnalyzer — LLM Failure
+# LLM Failure
 # ============================================================================
 
 
@@ -214,13 +160,11 @@ class TestRuleAnalyzerLLMFailure:
         analyzer = RuleAnalyzer(llm_client=llm, snippet_repo=repo)
 
         result = await analyzer.analyze(rule_docs=("Some doc",))
-
-        # Chunk failed but overall returns empty (no crash)
         assert result == []
 
 
 # ============================================================================
-# RuleAnalyzer — Persist Failure
+# Persist Failure
 # ============================================================================
 
 
@@ -232,18 +176,14 @@ class TestRuleAnalyzerPersistFailure:
 
         rules = [{"rule_text": "A rule", "applicable_fields": [], "confidence": 1.0}]
         llm = _make_llm_client(rules)
-        # _has_instructor() checks hasattr(client, "create"), but repo.create
-        # is the one that should fail, not llm.create. The llm mock from
-        # _make_llm_client already has create set up properly.
         analyzer = RuleAnalyzer(llm_client=llm, snippet_repo=repo)
 
         result = await analyzer.analyze(rule_docs=("Doc",))
-        # Returns the snippet even if persist fails
         assert len(result) == 1
 
 
 # ============================================================================
-# RuleAnalyzer — search_rules
+# Search
 # ============================================================================
 
 
@@ -256,7 +196,6 @@ class TestRuleAnalyzerSearch:
             llm_client=AsyncMock(), snippet_repo=repo, embedding_gateway=emb
         )
 
-        # Pre-populate with a rule that has an embedding
         snippet = RuleSnippet(
             document_id="doc-1",
             rule_text="Use YYYY/MM/DD for dates",
@@ -277,5 +216,4 @@ class TestRuleAnalyzerSearch:
         )
 
         results = await analyzer.search_rules("date format")
-
         assert results == []

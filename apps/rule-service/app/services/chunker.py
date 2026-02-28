@@ -98,13 +98,11 @@ def _split_by_headings(
     lines = markdown.split("\n")
     sections: list[str] = []
     current_section: list[str] = []
-    current_heading = ""
 
     for line in lines:
         if line.startswith("#"):
             if current_section:
                 sections.append("\n".join(current_section))
-            current_heading = line
             current_section = [line]
         else:
             current_section.append(line)

@@ -111,14 +111,16 @@ class MockEmbeddingGateway:
 
 
 class OpenAIEmbeddingGateway:
-    """OpenAI-based implementation of EmbeddingGateway.
+    """LiteLLM-based implementation of EmbeddingGateway.
 
-    Uses OpenAI's text-embedding-3-small or similar models for production embeddings.
-    Requires an OpenAI API key.
+    Uses LiteLLM's unified embedding API, which supports OpenAI and
+    other providers through a single interface.
+
+    Falls back to direct OpenAI client when LiteLLM is unavailable.
 
     Example:
-        from openai import AsyncOpenAI
-        client = AsyncOpenAI(api_key="sk-...")
+        from app.services.llm import get_llm_client
+        client = get_llm_client()
         gateway = OpenAIEmbeddingGateway(client=client)
         embedding = await gateway.embed_text("Hello world")
     """
@@ -128,55 +130,49 @@ class OpenAIEmbeddingGateway:
         client: Any = None,
         model: str = "text-embedding-3-small",
     ) -> None:
-        """Initialize the OpenAI gateway.
-
-        Args:
-            client: OpenAI async client instance.
-            model: OpenAI embedding model to use.
-        """
         self._client = client
         self._model = model
 
     async def embed_image(self, image_bytes: bytes) -> list[float]:
         """Generate embedding from image bytes.
 
-        Note: OpenAI text embeddings don't directly support images.
-        This implementation converts image to base64 and describes it.
-        For true image embeddings, use a multimodal model.
-
-        Args:
-            image_bytes: Raw image data.
-
-        Returns:
-            Vector embedding.
+        Converts image to base64 text representation for text embedding models.
+        For true multimodal embeddings, use a Vision model pipeline instead.
         """
-        # For now, use a text representation of the image
-        # In production, you might use GPT-4V to describe the image first
         import base64
         image_b64 = base64.b64encode(image_bytes).decode("utf-8")
-        # Use a hash of the image as a placeholder
         return await self.embed_text(f"image:{image_b64[:100]}")
 
     async def embed_text(self, text: str) -> list[float]:
-        """Generate embedding from text using OpenAI.
-
-        Args:
-            text: Text to embed.
-
-        Returns:
-            Vector embedding.
-
-        Raises:
-            Exception: If API call fails.
-        """
+        """Generate embedding from text using LiteLLM or direct OpenAI client."""
         if self._client is None:
-            raise ValueError("OpenAI client not configured")
+            raise ValueError("LLM client not configured")
 
-        response = await self._client.embeddings.create(
-            model=self._model,
-            input=text,
-        )
-        return response.data[0].embedding
+        try:
+            import litellm
+
+            api_key = getattr(self._client, "_api_key", None)
+            kwargs: dict[str, Any] = {
+                "model": self._model,
+                "input": [text],
+            }
+            if api_key:
+                kwargs["api_key"] = api_key
+
+            response = await litellm.aembedding(**kwargs)
+            return response.data[0]["embedding"]
+
+        except ImportError:
+            # Fallback: try the client's own embeddings API (raw OpenAI)
+            if hasattr(self._client, "embeddings"):
+                response = await self._client.embeddings.create(
+                    model=self._model,
+                    input=text,
+                )
+                return response.data[0].embedding
+            raise RuntimeError(
+                "Neither litellm nor a direct embedding client is available"
+            )
 
     async def embed_document_page(
         self,
@@ -184,17 +180,7 @@ class OpenAIEmbeddingGateway:
         page_text: str | None = None,
         page_number: int = 1,
     ) -> list[float]:
-        """Generate embedding for a document page.
-
-        Args:
-            page_image: Optional page image bytes.
-            page_text: Optional extracted page text.
-            page_number: Page number (for context).
-
-        Returns:
-            Vector embedding.
-        """
-        # Prefer text if available, fall back to image
+        """Generate embedding for a document page."""
         if page_text:
             return await self.embed_text(page_text)
         elif page_image:

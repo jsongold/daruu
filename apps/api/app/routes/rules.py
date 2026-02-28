@@ -3,13 +3,13 @@
 GET    /api/v1/rules/{document_id}   - List rules for a document
 GET    /api/v1/rules/search?q=...    - Semantic search across rules
 DELETE /api/v1/rules/{document_id}   - Delete rules for a document
+POST   /api/v1/rules/analyze         - Proxy to standalone rule-service
 """
 
 import logging
-from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.domain.models.rule_snippet import RuleSnippet
 from app.infrastructure.gateways.embedding import MockEmbeddingGateway
@@ -36,9 +36,50 @@ class RuleSnippetDTO(BaseModel):
     applicable_fields: list[str]
     source_document: str | None
     confidence: float
-    created_at: datetime
+    created_at: str | None = None
 
     model_config = {"frozen": True}
+
+
+class FieldHintInput(BaseModel):
+    """A single field hint for rule analysis context."""
+
+    field_id: str = Field(..., min_length=1, description="Field identifier")
+    label: str = Field(..., min_length=1, description="Field label")
+    field_type: str = Field(default="text", description="Field type")
+
+    model_config = {"frozen": True}
+
+
+class AnalyzeRulesRequest(BaseModel):
+    """Request body for rule analysis (proxied to rule-service)."""
+
+    document_id: str = Field(
+        ..., min_length=1, max_length=255, description="Document ID for DB persistence"
+    )
+    rule_docs: list[str] = Field(
+        ...,
+        min_length=1,
+        max_length=20,
+        description="Rule document text strings (max 20 documents)",
+    )
+    field_hints: list[FieldHintInput] = Field(
+        default_factory=list,
+        description="Field hints with field_id, label, field_type",
+    )
+
+    model_config = {"frozen": True}
+
+    @field_validator("rule_docs")
+    @classmethod
+    def validate_rule_doc_size(cls, v: list[str]) -> list[str]:
+        max_chars = 500_000
+        for i, doc in enumerate(v):
+            if len(doc) > max_chars:
+                raise ValueError(
+                    f"rule_docs[{i}] exceeds maximum length of {max_chars} characters"
+                )
+        return v
 
 
 def _to_dto(snippet: RuleSnippet) -> RuleSnippetDTO:
@@ -49,7 +90,7 @@ def _to_dto(snippet: RuleSnippet) -> RuleSnippetDTO:
         applicable_fields=list(snippet.applicable_fields),
         source_document=snippet.source_document,
         confidence=snippet.confidence,
-        created_at=snippet.created_at,
+        created_at=snippet.created_at.isoformat() if snippet.created_at else None,
     )
 
 
@@ -71,9 +112,9 @@ def get_embedding_gateway():
     )
 
     try:
-        from app.routes.vision_autofill import get_openai_client
+        from app.services.llm import get_llm_client
 
-        client = get_openai_client()
+        client = get_llm_client()
         if client is not None:
             return OpenAIEmbeddingGateway(client=client)
     except Exception:
@@ -151,4 +192,47 @@ async def delete_rules(
         success=True,
         data={"deleted_count": deleted},
         meta={"document_id": document_id},
+    )
+
+
+# ============================================================================
+# Analyze — proxy to standalone rule-service
+# ============================================================================
+
+
+@router.post(
+    "/analyze",
+    response_model=ApiResponse[dict],
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Dispatch rule analysis to rule-service",
+)
+async def analyze_rules(
+    body: AnalyzeRulesRequest,
+) -> ApiResponse[dict]:
+    """Proxy rule analysis to the standalone rule-service.
+
+    The rule-service handles chunking, LLM extraction, embedding, and
+    DB persistence independently.
+    """
+    from app.infrastructure.gateways.rule_service_client import dispatch_analyze
+
+    field_hints = [{"field_id": h.field_id, "label": h.label} for h in body.field_hints]
+
+    result = await dispatch_analyze(
+        document_id=body.document_id,
+        rule_docs=body.rule_docs,
+        field_hints=field_hints if field_hints else None,
+    )
+
+    if result.get("success"):
+        return ApiResponse(
+            success=True,
+            data=result.get("data"),
+            meta={"document_id": body.document_id, "source": "rule-service"},
+        )
+
+    return ApiResponse(
+        success=False,
+        error=result.get("error", "Unknown error from rule-service"),
+        meta={"document_id": body.document_id},
     )

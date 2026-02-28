@@ -1,11 +1,7 @@
 """RuleAnalyzer — LLM-based rule extraction with persistent DB + vector search.
 
-Analyzes rule documents by chunking text and sending each chunk to an LLM
-for structured rule extraction using Instructor (Pydantic-validated output).
-Results are persisted to the rule_snippets table with vector embeddings
-for semantic search.
-
-Chunk analysis and embedding are parallelized with asyncio.gather().
+Standalone service version: always embeds and persists.
+The skip_embedding branch lives in the main API's RuleAnalyzer.
 """
 
 import asyncio
@@ -15,11 +11,9 @@ import logging
 import time
 from typing import Any
 
-from app.domain.models.form_context import FormFieldSpec
-from app.domain.models.rule_snippet import RuleSnippet
-from app.repositories.rule_snippet_repository import RuleSnippetRepository
-from app.services.rule_analyzer.chunker import chunk_document
-from app.services.rule_analyzer.schemas import ChunkAnalysisResult
+from app.repositories.protocol import RuleSnippetRepository
+from app.schemas.rule_schemas import ChunkAnalysisResult, RuleSnippet
+from app.services.chunker import chunk_document
 
 logger = logging.getLogger(__name__)
 
@@ -58,24 +52,8 @@ def _build_user_prompt(chunk: str, field_ids: list[str]) -> str:
     return "\n".join(parts)
 
 
-class RuleAnalyzerStub:
-    """Stub implementation of RuleAnalyzerProtocol.
-
-    Returns an empty list of rule snippets. Kept for backward compatibility
-    and as a fallback when LLM is unavailable.
-    """
-
-    async def analyze(
-        self,
-        rule_docs: tuple[str, ...],
-        field_hints: tuple[FormFieldSpec, ...] = (),
-        skip_embedding: bool = False,
-    ) -> list[RuleSnippet]:
-        return []
-
-
 class RuleAnalyzer:
-    """LLM-based rule analyzer with persistent DB storage and vector search.
+    """LLM-based rule analyzer that always embeds and persists.
 
     Chunks rule documents, sends each chunk to an LLM for structured
     rule extraction, embeds each rule, and persists to the database.
@@ -103,25 +81,15 @@ class RuleAnalyzer:
     async def analyze(
         self,
         rule_docs: tuple[str, ...],
-        field_hints: tuple[FormFieldSpec, ...] = (),
+        field_hints: tuple[tuple[str, str], ...] = (),
         document_id: str = "",
-        skip_embedding: bool = False,
     ) -> list[RuleSnippet]:
-        """Analyze rule documents and extract rule snippets.
-
-        Flow:
-        1. Empty docs -> return []
-        2. Check content-hash cache -> return cached on hit
-        3. Chunk each doc -> LLM analyze each chunk
-        4. (Unless skip_embedding) Embed each rule + persist to DB
-        5. Cache and return all snippets
+        """Analyze rule documents, extract rules, embed, and persist.
 
         Args:
             rule_docs: Tuple of rule document text strings.
-            field_hints: Form field specs for context.
-            document_id: Optional document ID for DB persistence.
-            skip_embedding: When True, skip embedding and DB persist
-                (used for real-time pipeline to avoid slow API calls).
+            field_hints: Tuple of (field_id, label) pairs for context.
+            document_id: Document ID for DB persistence.
         """
         if not rule_docs:
             return []
@@ -130,7 +98,6 @@ class RuleAnalyzer:
         if not non_empty_docs:
             return []
 
-        # Check content-hash cache
         cache_key = self._content_hash(non_empty_docs)
         cached = self._analysis_cache.get(cache_key)
         if cached is not None:
@@ -138,9 +105,8 @@ class RuleAnalyzer:
             return cached
 
         t_start = time.time()
-        field_ids = sorted(f.field_id for f in field_hints)
+        field_ids = sorted(fid for fid, _ in field_hints)
 
-        # Collect all (doc_idx, chunk) pairs, then analyze in parallel
         chunk_tasks: list[tuple[int, int, str]] = []
         for doc_idx, doc_text in enumerate(non_empty_docs):
             for chunk_idx, chunk in enumerate(chunk_document(doc_text)):
@@ -153,7 +119,7 @@ class RuleAnalyzer:
             f"{len(chunk_tasks)} chunk(s) for document_id={document_id}"
         )
 
-        # Parallel LLM calls for all chunks
+        # Parallel LLM calls
         t_llm_start = time.time()
 
         async def _safe_analyze(doc_idx: int, chunk_idx: int, chunk: str) -> list[RuleSnippet]:
@@ -169,18 +135,7 @@ class RuleAnalyzer:
         all_snippets: list[RuleSnippet] = [s for batch in chunk_results for s in batch]
         t_llm = int((time.time() - t_llm_start) * 1000)
 
-        if skip_embedding:
-            total_ms = int((time.time() - t_start) * 1000)
-            logger.info(
-                f"RuleAnalyzer.analyze profiling: total={total_ms}ms, "
-                f"chunk={t_chunk}ms, llm={t_llm}ms, "
-                f"skip_embedding=True, snippets={len(all_snippets)}, "
-                f"document_id={document_id}"
-            )
-            self._analysis_cache[cache_key] = all_snippets
-            return all_snippets
-
-        # Parallel embed + persist
+        # Always embed + persist
         t_persist_start = time.time()
 
         async def _safe_persist(snippet: RuleSnippet) -> RuleSnippet:
@@ -211,16 +166,7 @@ class RuleAnalyzer:
         limit: int = 10,
         threshold: float = 0.7,
     ) -> list[RuleSnippet]:
-        """Search rules by semantic similarity.
-
-        Args:
-            query: Natural language search query.
-            limit: Maximum number of results.
-            threshold: Minimum similarity score.
-
-        Returns:
-            List of matching rule snippets.
-        """
+        """Search rules by semantic similarity."""
         embedding = await self._embed_rule(query)
         if embedding is None:
             return []
@@ -239,11 +185,7 @@ class RuleAnalyzer:
         doc_index: int,
         document_id: str,
     ) -> list[RuleSnippet]:
-        """Analyze a single chunk with the LLM.
-
-        Uses Instructor for validated structured output when available,
-        falls back to raw JSON parsing.
-        """
+        """Analyze a single chunk with the LLM."""
         user_prompt = _build_user_prompt(chunk, field_ids)
         messages = [
             {"role": "system", "content": RULE_EXTRACTION_SYSTEM_PROMPT},
