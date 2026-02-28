@@ -31,7 +31,22 @@ langchain = [
     "langchain-core>=0.3.0",
 ]
 
-# Fuzzy string matching (optional, falls back to difflib)
+# LiteLLM — unified LLM client (100+ providers)
+litellm = [
+    "litellm>=1.30.0",
+]
+
+# Instructor — structured LLM output with Pydantic validation + retries
+instructor = [
+    "instructor>=1.0.0",
+]
+
+# Docling — layout-aware document parsing (PDF, DOCX, HTML)
+docling = [
+    "docling>=2.0.0",
+]
+
+# Fuzzy string matching
 fuzzy = [
     "rapidfuzz>=3.0.0",
 ]
@@ -64,6 +79,9 @@ mcp = [
 integrations = [
     "daru-pdf-api[supabase]",
     "daru-pdf-api[langchain]",
+    "daru-pdf-api[litellm]",
+    "daru-pdf-api[instructor]",
+    "daru-pdf-api[docling]",
     "daru-pdf-api[fuzzy]",
     "daru-pdf-api[observability]",
     "daru-pdf-api[redis]",

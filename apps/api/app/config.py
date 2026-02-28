@@ -21,14 +21,11 @@ from pydantic_settings import BaseSettings
 # Centralized Model Constants
 # =============================================================================
 
-DEFAULT_MODEL = "gpt-5-mini"
+DEFAULT_MODEL = "gpt-4.1-mini"
 
 DEFAULT_LLM_PRICING: dict[str, dict[str, float]] = {
     "gpt-5-mini": {"input_per_1m": 0.15, "output_per_1m": 0.60},
-    "gpt-4o": {"input_per_1m": 2.50, "output_per_1m": 10.00},
-    "gpt-4o-mini": {"input_per_1m": 0.15, "output_per_1m": 0.60},
-    "gpt-4-turbo": {"input_per_1m": 10.00, "output_per_1m": 30.00},
-    "gpt-3.5-turbo": {"input_per_1m": 0.50, "output_per_1m": 1.50},
+    "gpt-4.1-mini": {"input_per_1m": 0.15, "output_per_1m": 0.60}
 }
 
 
@@ -679,12 +676,18 @@ class Settings(BaseSettings):
     # "tobe" uses the new FormContextBuilder -> FillPlanner -> FormRenderer pipeline
     autofill_architecture: str = "legacy"
 
+    # Maximum characters for raw text in autofill prompts
+    autofill_max_raw_text_chars: int = 4000
+
     # Celery settings (can also use CELERY_ prefix directly)
     celery_broker_url: str = "redis://localhost:6379/0"
     celery_result_backend: str = "redis://localhost:6379/1"
     celery_task_soft_time_limit: int = 300
     celery_task_time_limit: int = 600
     celery_worker_concurrency: int = 4
+
+    # Rule Service URL (standalone rule extraction microservice)
+    rule_service_url: str = "http://rule-service:8002"
 
     # Domain configs (loaded from env or defaults)
     # These can be overridden via DARU_ORCHESTRATOR__MAX_ITERATIONS etc.

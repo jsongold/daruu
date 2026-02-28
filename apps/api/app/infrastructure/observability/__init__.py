@@ -49,6 +49,7 @@ from app.infrastructure.observability.logging import (
     configure_logging,
     with_job_context,
 )
+from app.infrastructure.observability.stopwatch import StopWatch
 
 __all__ = [
     # Tracing
@@ -67,4 +68,6 @@ __all__ = [
     "init_logging",
     "configure_logging",
     "with_job_context",
+    # Profiling
+    "StopWatch",
 ]

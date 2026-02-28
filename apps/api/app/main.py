@@ -1,5 +1,6 @@
 """FastAPI application entry point."""
 
+import time
 import traceback
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -10,6 +11,7 @@ from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import get_settings
 from app.models import ErrorDetail, ErrorResponse
@@ -230,6 +232,28 @@ All errors follow a consistent format with `success: false` and an `error` objec
             {"url": "https://api.daru-pdf.io", "description": "Production"},
         ],
     )
+
+    # Latency profiling middleware — logs request timing to api.log
+    # and adds Server-Timing header (visible in browser DevTools)
+    class LatencyProfileMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request: Request, call_next):
+            start = time.perf_counter()
+            response = await call_next(request)
+            elapsed_ms = (time.perf_counter() - start) * 1000
+            path = request.url.path
+            method = request.method
+            code = response.status_code
+
+            # Add Server-Timing header (shows in browser DevTools > Network > Timing)
+            response.headers["Server-Timing"] = f"total;dur={elapsed_ms:.1f}"
+
+            import logging
+            logging.getLogger("latency").info(
+                f"{method} {path} -> {code} | {elapsed_ms:.0f}ms"
+            )
+            return response
+
+    app.add_middleware(LatencyProfileMiddleware)
 
     # Configure CORS
     app.add_middleware(
