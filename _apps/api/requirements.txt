@@ -1,9 +1,0 @@
-fastapi
-uvicorn[standard]
-python-multipart
-reportlab
-pypdf
-PyMuPDF
-pytest
-httpx
-supabase
