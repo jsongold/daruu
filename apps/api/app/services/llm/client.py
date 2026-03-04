@@ -23,6 +23,9 @@ class LLMResponse:
     """Raw LLM response wrapper (backward-compatible with OpenAIClient)."""
 
     content: str
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
 
 
 class LiteLLMClient:
@@ -141,7 +144,13 @@ class LiteLLMClient:
 
             response = await litellm.acompletion(**kwargs)
             content = response.choices[0].message.content or ""
-            return LLMResponse(content=content)
+            usage = getattr(response, "usage", None)
+            return LLMResponse(
+                content=content,
+                prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+                completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+                total_tokens=getattr(usage, "total_tokens", 0) or 0,
+            )
 
         except ImportError:
             raise RuntimeError(

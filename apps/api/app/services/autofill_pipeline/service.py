@@ -164,6 +164,11 @@ class AutofillPipelineService:
             1 for a in plan.actions if a.action == FillActionType.ASK_USER
         )
 
+        plan_prompt_chars = (
+            (len(plan.system_prompt) if plan.system_prompt else 0)
+            + (len(plan.user_prompt) if plan.user_prompt else 0)
+        )
+        plan_response_chars = len(plan.raw_llm_response) if plan.raw_llm_response else 0
         step_logs.append(PipelineStepLog(
             step_name="fill_plan",
             status="success",
@@ -171,6 +176,9 @@ class AutofillPipelineService:
             summary=f"{fill_count} fill, {skip_count} skip, {ask_user_count} ask_user",
             details={
                 "model_used": plan.model_used,
+                "prompt_chars": plan_prompt_chars,
+                "prompt_tokens_est": plan_prompt_chars // 4,
+                "response_chars": plan_response_chars,
                 "system_prompt": plan.system_prompt,
                 "user_prompt": plan.user_prompt,
                 "raw_llm_response": plan.raw_llm_response,
@@ -310,6 +318,24 @@ class AutofillPipelineService:
                 just_fill=just_fill,
             )
 
+        # Reasoning pre-check step log (if it ran)
+        if turn_result.reasoning_decision is not None:
+            step_logs.append(PipelineStepLog(
+                step_name="reasoning_precheck",
+                status="success",
+                duration_ms=turn_result.reasoning_duration_ms,
+                summary=f"decision={turn_result.reasoning_decision}: {turn_result.reasoning}",
+                details={
+                    "decision": turn_result.reasoning_decision,
+                    "reasoning": turn_result.reasoning,
+                },
+            ))
+
+        prompt_chars = (
+            (len(turn_result.system_prompt) if turn_result.system_prompt else 0)
+            + (len(turn_result.user_prompt) if turn_result.user_prompt else 0)
+        )
+        response_chars = len(turn_result.raw_llm_response) if turn_result.raw_llm_response else 0
         step_logs.append(PipelineStepLog(
             step_name="fill_plan_turn",
             status="success",
@@ -318,6 +344,9 @@ class AutofillPipelineService:
             details={
                 "turn_type": turn_result.type,
                 "model_used": turn_result.model_used,
+                "prompt_chars": prompt_chars,
+                "prompt_tokens_est": prompt_chars // 4,
+                "response_chars": response_chars,
                 "system_prompt": turn_result.system_prompt,
                 "user_prompt": turn_result.user_prompt,
                 "raw_llm_response": turn_result.raw_llm_response,

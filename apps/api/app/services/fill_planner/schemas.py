@@ -66,3 +66,10 @@ class LLMDetailedFillResponse(BaseModel):
     filled_fields: list[LLMFilledField] = Field(default_factory=list)
     unfilled_fields: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+
+
+class LLMReasoningResponse(BaseModel):
+    """Pre-check: should we ask more questions or fill now?"""
+
+    decision: str = Field(..., pattern="^(ask|fill)$")
+    reasoning: str = Field(..., description="1-2 sentence explanation")

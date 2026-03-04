@@ -612,7 +612,7 @@ class Settings(BaseSettings):
 
     # API settings
     api_prefix: str = "/api/v1"
-    allowed_origins: list[str] = ["*"]
+    allowed_origins: str = "*"
 
     # File storage paths
     upload_dir: Path = Path("/tmp/daru-pdf-uploads")
