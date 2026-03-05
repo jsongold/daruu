@@ -24,7 +24,8 @@ from app.services.text_extraction_service import TextExtractionService
 from app.domain.models.fill_plan import FillActionType
 from app.domain.models.form_context import FormFieldSpec
 from app.services.autofill_pipeline import AutofillPipelineService
-from app.services.form_context import FormContextBuilder, ProximityFieldEnricher
+from app.services.form_context import FormContextBuilder, DirectionalFieldEnricher
+from app.services.form_context.structural_resolver import StructuralResolver
 from app.services.fill_planner import FillPlanner
 from app.services.form_renderer import FormRenderer
 from app.services.rule_analyzer import RuleAnalyzer, RuleAnalyzerStub
@@ -177,7 +178,7 @@ def get_pipeline_service(
 
         llm_client = get_llm_client()
 
-        enricher = ProximityFieldEnricher(document_service=document_service)
+        enricher = DirectionalFieldEnricher(document_service=document_service)
 
         context_builder = FormContextBuilder(
             data_source_repo=data_source_repo,
@@ -210,18 +211,23 @@ def get_pipeline_service(
         correction_repo = get_correction_repository()
         correction_tracker = CorrectionTracker(repository=correction_repo)
 
+        structural_resolver = StructuralResolver(document_service=document_service)
+
         _pipeline_service = AutofillPipelineService(
             context_builder=context_builder,
             fill_planner=fill_planner,
             form_renderer=form_renderer,
             rule_analyzer=rule_analyzer,
             correction_tracker=correction_tracker,
+            structural_resolver=structural_resolver,
         )
 
     # Refresh per-request dependencies (fresh DB connections each request)
     _pipeline_service._context_builder._data_source_repo = data_source_repo
     _pipeline_service._context_builder._extraction_service = extraction_service
     _pipeline_service._context_builder._enricher._document_service = document_service
+    if _pipeline_service._structural_resolver:
+        _pipeline_service._structural_resolver._document_service = document_service
 
     return _pipeline_service
 

@@ -3,7 +3,7 @@
 Strategy pattern: each implementation encapsulates its own enrichment
 logic — no ``if llm`` branching in the builder.
 
-- ProximityFieldEnricher: heuristic fallback (center-to-center distance)
+- DirectionalFieldEnricher: directional matching (left/above/right)
 - LLMFieldEnricher: LLM-based with compact JSON, proximity pre-filter,
   and page-by-page parallel calls
 """
@@ -14,17 +14,26 @@ import asyncio
 import json
 import logging
 import math
-from typing import Any, Protocol
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Protocol
 
 from app.domain.models.form_context import FormFieldSpec, LabelCandidate
 from app.models.common import BBox
 from app.services.document_service import DocumentService
 
+if TYPE_CHECKING:
+    from app.services.form_context.structural_resolver import StructuralResolverResult
+
 logger = logging.getLogger(__name__)
 
-_MAX_LABEL_DISTANCE = 150.0
-_MAX_LABEL_CANDIDATES = 3
 _LLM_PROXIMITY_RADIUS = 200.0
+
+# DirectionalFieldEnricher constants
+_DIR_MAX_DISTANCE = 50.0
+_DIR_Y_TOL = 15.0
+_DIR_ABOVE_X_TOL = 80.0
+_MIN_TEXT_LEN = 2
+_MAX_LABEL_CANDIDATES = 3
 
 
 class FieldEnricher(Protocol):
@@ -37,12 +46,110 @@ class FieldEnricher(Protocol):
     ) -> tuple[FormFieldSpec, ...]: ...
 
 
-class ProximityFieldEnricher:
-    """Enrich fields with nearby PDF text labels using proximity matching.
+@dataclass(frozen=True)
+class NearbyLabel:
+    """A text block found directionally near a form field."""
+
+    text: str
+    direction: str  # "left" | "above" | "right"
+    distance: float  # pt
+
+
+def compute_directional_labels(
+    raw_bbox: BBox,
+    text_blocks: list[dict[str, Any]],
+    *,
+    max_distance: float = _DIR_MAX_DISTANCE,
+    y_tolerance: float = _DIR_Y_TOL,
+    above_x_tolerance: float = _DIR_ABOVE_X_TOL,
+    min_text_length: int = _MIN_TEXT_LEN,
+) -> list[NearbyLabel]:
+    """Find text blocks directionally near a field (left/above/right).
+
+    Direction rules:
+    - Left: block right edge <= field left edge, Y-center diff < y_tolerance
+    - Above: block bottom edge <= field top edge, X-center diff < above_x_tolerance
+    - Right: block left edge >= field right edge, Y-center diff < y_tolerance
+
+    Args:
+        raw_bbox: Field bounding box in PDF points.
+        text_blocks: Text blocks with text, page, bbox=[x, y, width, height].
+        max_distance: Maximum edge-to-edge distance in points.
+        y_tolerance: Maximum Y-center difference for left/right matching.
+        above_x_tolerance: Maximum X-center difference for above matching.
+        min_text_length: Minimum text length to consider (filters noise).
+
+    Returns:
+        List of NearbyLabel sorted by distance (closest first).
+    """
+    field_left = raw_bbox.x
+    field_top = raw_bbox.y
+    field_right = raw_bbox.x + raw_bbox.width
+    field_cx = raw_bbox.x + raw_bbox.width / 2
+    field_cy = raw_bbox.y + raw_bbox.height / 2
+    field_page = raw_bbox.page
+
+    results: list[NearbyLabel] = []
+
+    for block in text_blocks:
+        text = block.get("text", "")
+        if not text or not text.strip():
+            continue
+        text = text.strip()
+        if len(text) < min_text_length:
+            continue
+
+        block_page = block.get("page")
+        if field_page is not None and block_page is not None and field_page != block_page:
+            continue
+
+        bbox = block.get("bbox")
+        if not bbox or len(bbox) < 4:
+            continue
+
+        block_x, block_y, block_w, block_h = bbox[0], bbox[1], bbox[2], bbox[3]
+        block_right = block_x + block_w
+        block_bottom = block_y + block_h
+        block_cx = block_x + block_w / 2
+        block_cy = block_y + block_h / 2
+
+        y_center_diff = abs(field_cy - block_cy)
+
+        # Left: block is to the left of field
+        if block_right <= field_left and y_center_diff < y_tolerance:
+            dist = field_left - block_right
+            if dist <= max_distance:
+                results.append(NearbyLabel(text=text, direction="left", distance=dist))
+                continue
+
+        # Above: block is above the field
+        if block_bottom <= field_top:
+            x_center_diff = abs(field_cx - block_cx)
+            if x_center_diff < above_x_tolerance:
+                dist = field_top - block_bottom
+                if dist <= max_distance:
+                    results.append(NearbyLabel(text=text, direction="above", distance=dist))
+                    continue
+
+        # Right: block is to the right of field
+        if block_x >= field_right and y_center_diff < y_tolerance:
+            dist = block_x - field_right
+            if dist <= max_distance:
+                results.append(NearbyLabel(text=text, direction="right", distance=dist))
+
+    results.sort(key=lambda r: r.distance)
+    return results
+
+
+class DirectionalFieldEnricher:
+    """Enrich fields with nearby PDF text labels using directional matching.
+
+    Uses directional rules (left/above/right) instead of non-directional
+    center-to-center distance, avoiding misidentification of text below
+    fields as labels.
 
     Uses raw AcroForm field coordinates from the backend (PDF points)
-    instead of the frontend's normalized 0-1 coordinates, so that
-    distances to text blocks are computed in the same coordinate space.
+    instead of the frontend's normalized 0-1 coordinates.
     """
 
     def __init__(self, document_service: DocumentService) -> None:
@@ -53,9 +160,9 @@ class ProximityFieldEnricher:
         document_id: str,
         fields: tuple[FormFieldSpec, ...],
     ) -> tuple[FormFieldSpec, ...]:
-        return self._enrich_fields_by_proximity(document_id, fields)
+        return self._enrich_fields_directionally(document_id, fields)
 
-    def _enrich_fields_by_proximity(
+    def _enrich_fields_directionally(
         self,
         document_id: str,
         fields: tuple[FormFieldSpec, ...],
@@ -90,8 +197,22 @@ class ProximityFieldEnricher:
                 enriched.append(field)
                 continue
 
-            candidates = self._find_nearby_text(raw_bbox, text_blocks)
-            if candidates:
+            nearby = compute_directional_labels(raw_bbox, text_blocks)
+            if nearby:
+                seen_texts: set[str] = set()
+                candidates: list[LabelCandidate] = []
+                for label in nearby:
+                    if label.text in seen_texts:
+                        continue
+                    seen_texts.add(label.text)
+                    confidence = max(0.0, 1.0 - label.distance / _DIR_MAX_DISTANCE)
+                    candidates.append(LabelCandidate(
+                        text=label.text,
+                        confidence=round(confidence, 3),
+                        page=raw_bbox.page,
+                    ))
+                    if len(candidates) >= _MAX_LABEL_CANDIDATES:
+                        break
                 enriched.append(
                     field.model_copy(update={"label_candidates": tuple(candidates)})
                 )
@@ -100,64 +221,24 @@ class ProximityFieldEnricher:
 
         return tuple(enriched)
 
-    @staticmethod
-    def _find_nearby_text(
-        raw_bbox: BBox,
-        text_blocks: list[dict[str, Any]],
-    ) -> list[LabelCandidate]:
-        """Find text blocks near a field using center-to-center Euclidean distance.
 
-        Args:
-            raw_bbox: Raw AcroForm BBox in PDF points (same coordinate space
-                as text_blocks from extract_text_blocks).
-            text_blocks: Text blocks from DocumentService.extract_text_blocks().
-                Each has: text, page, bbox=[x, y, width, height].
+def apply_resolved_labels(
+    fields: tuple[FormFieldSpec, ...],
+    resolver_result: StructuralResolverResult,
+) -> tuple[FormFieldSpec, ...]:
+    """Set semantic labels on fields from StructuralResolver results.
 
-        Returns:
-            Top-N nearest LabelCandidates within max distance, sorted by distance.
-        """
-        field_cx = raw_bbox.x + raw_bbox.width / 2
-        field_cy = raw_bbox.y + raw_bbox.height / 2
-        field_page = raw_bbox.page
-
-        scored: list[tuple[float, str, int | None]] = []
-        for block in text_blocks:
-            text = block.get("text", "")
-            if not text or not text.strip():
-                continue
-
-            block_page = block.get("page")
-            if field_page is not None and block_page is not None and field_page != block_page:
-                continue
-
-            bbox = block.get("bbox")
-            if not bbox or len(bbox) < 4:
-                continue
-
-            block_cx = bbox[0] + bbox[2] / 2
-            block_cy = bbox[1] + bbox[3] / 2
-
-            dist = math.sqrt((field_cx - block_cx) ** 2 + (field_cy - block_cy) ** 2)
-            if dist <= _MAX_LABEL_DISTANCE:
-                scored.append((dist, text.strip(), block_page))
-
-        scored.sort(key=lambda x: x[0])
-        seen_texts: set[str] = set()
-        candidates: list[LabelCandidate] = []
-        for dist, text, page in scored:
-            if text in seen_texts:
-                continue
-            seen_texts.add(text)
-            confidence = max(0.0, 1.0 - dist / _MAX_LABEL_DISTANCE)
-            candidates.append(LabelCandidate(
-                text=text,
-                confidence=round(confidence, 3),
-                page=page,
-            ))
-            if len(candidates) >= _MAX_LABEL_CANDIDATES:
-                break
-
-        return candidates
+    For resolved fields, updates the label to the semantic label.
+    For unresolved fields, returns as-is.
+    """
+    result: list[FormFieldSpec] = []
+    for field in fields:
+        semantic_label = resolver_result.field_labels.get(field.field_id)
+        if semantic_label:
+            result.append(field.model_copy(update={"label": semantic_label}))
+        else:
+            result.append(field)
+    return tuple(result)
 
 
 class LLMFieldEnricher:

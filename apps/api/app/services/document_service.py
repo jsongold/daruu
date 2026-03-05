@@ -120,6 +120,20 @@ class DocumentService:
             return None
         return self._file_repository.get_preview_content(document_id, page)
 
+    def get_pdf_bytes(self, document_id: str) -> bytes | None:
+        """Get raw PDF bytes for a document.
+
+        Args:
+            document_id: The ID of the document.
+
+        Returns:
+            Raw PDF bytes, or None if document/file not found.
+        """
+        document = self._document_repository.get(document_id)
+        if document is None:
+            return None
+        return self._file_repository.get_content(document.ref)
+
     def get_acroform_fields(self, document_id: str) -> AcroFormFieldsResponse | None:
         """Extract AcroForm fields with screen-coordinate bboxes.
 

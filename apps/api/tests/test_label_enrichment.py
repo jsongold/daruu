@@ -1,21 +1,23 @@
-"""Tests for label enrichment via ProximityFieldEnricher and compact JSON prompt.
+"""Tests for label enrichment via DirectionalFieldEnricher and compact JSON prompt.
 
-Tests the proximity matching logic (_find_nearby_text, _enrich_fields_by_proximity)
+Tests the directional matching logic (compute_directional_labels, DirectionalFieldEnricher)
 and the compact JSON serialization in build_field_identification_prompt.
 """
-
-import json
 
 import pytest
 
 from app.domain.models.form_context import FormFieldSpec, LabelCandidate
 from app.models.acroform import AcroFormFieldInfo, AcroFormFieldsResponse, PageDimensions
 from app.models.common import BBox
-from app.services.form_context.enricher import ProximityFieldEnricher
+from app.services.form_context.enricher import (
+    DirectionalFieldEnricher,
+    NearbyLabel,
+    compute_directional_labels,
+)
 
 
-class TestFindNearbyText:
-    """Tests for ProximityFieldEnricher._find_nearby_text static method."""
+class TestDirectionalLabels:
+    """Tests for compute_directional_labels standalone function."""
 
     def _make_bbox(
         self,
@@ -45,102 +47,142 @@ class TestFindNearbyText:
             "font_size": 10,
         }
 
-    def test_finds_nearby_label(self):
-        bbox = self._make_bbox(x=100, y=200)
+    def test_finds_left_label(self):
+        """Text to the left of the field is found."""
+        bbox = self._make_bbox(x=100, y=200, width=150, height=20)
+        # Block right edge (50+50=100) == field left (100), Y-centers close
         blocks = [
-            self._make_block("法人名", x=50, y=195),
+            self._make_block("法人名", x=40, y=198, width=50, height=12),
         ]
-        result = ProximityFieldEnricher._find_nearby_text(bbox, blocks)
+        result = compute_directional_labels(bbox, blocks)
         assert len(result) == 1
         assert result[0].text == "法人名"
-        assert result[0].confidence > 0.0
+        assert result[0].direction == "left"
 
-    def test_returns_empty_when_no_blocks_nearby(self):
-        bbox = self._make_bbox(x=100, y=200)
+    def test_finds_above_label(self):
+        """Text above the field is found."""
+        bbox = self._make_bbox(x=100, y=200, width=150, height=20)
+        # Block bottom (170+12=182) < field top (200), X-centers within tolerance
         blocks = [
-            self._make_block("Far Away", x=1000, y=1000),
+            self._make_block("Name", x=120, y=170, width=50, height=12),
         ]
-        result = ProximityFieldEnricher._find_nearby_text(bbox, blocks)
+        result = compute_directional_labels(bbox, blocks)
+        assert len(result) == 1
+        assert result[0].text == "Name"
+        assert result[0].direction == "above"
+
+    def test_finds_right_label(self):
+        """Text to the right of the field is found."""
+        bbox = self._make_bbox(x=100, y=200, width=150, height=20)
+        # Block left (260) >= field right (250), Y-centers close
+        blocks = [
+            self._make_block("万円", x=260, y=200, width=20, height=12),
+        ]
+        result = compute_directional_labels(bbox, blocks)
+        assert len(result) == 1
+        assert result[0].text == "万円"
+        assert result[0].direction == "right"
+
+    def test_rejects_below_text(self):
+        """Text below the field is NOT found (no 'below' direction)."""
+        bbox = self._make_bbox(x=100, y=200, width=150, height=20)
+        # Block is below: block_y=230 > field_bottom=220
+        blocks = [
+            self._make_block("Below Label", x=100, y=230, width=50, height=12),
+        ]
+        result = compute_directional_labels(bbox, blocks)
         assert len(result) == 0
 
-    def test_filters_by_page(self):
+    def test_distance_threshold(self):
+        """Blocks beyond max_distance are excluded."""
+        bbox = self._make_bbox(x=100, y=200, width=150, height=20)
+        # Left block far away: block right edge=30, field left=100 -> dist=70 > 50
+        blocks = [
+            self._make_block("Too Far", x=0, y=200, width=30, height=12),
+        ]
+        result = compute_directional_labels(bbox, blocks, max_distance=50.0)
+        assert len(result) == 0
+
+    def test_y_tolerance_for_left(self):
+        """Left blocks with Y-center diff exceeding tolerance are excluded."""
+        bbox = self._make_bbox(x=100, y=200, width=150, height=20)
+        # Y-center of field: 210, Y-center of block: 200+50=250 -> diff=40 > 15
+        blocks = [
+            self._make_block("Bad Y", x=40, y=244, width=50, height=12),
+        ]
+        result = compute_directional_labels(bbox, blocks, y_tolerance=15.0)
+        assert len(result) == 0
+
+    def test_single_char_exclusion(self):
+        """Single-character text blocks are excluded (min_text_length=2)."""
+        bbox = self._make_bbox(x=100, y=200, width=150, height=20)
+        blocks = [
+            self._make_block("X", x=40, y=198, width=10, height=12),  # single char
+            self._make_block("名前", x=40, y=198, width=30, height=12),  # 2 chars
+        ]
+        result = compute_directional_labels(bbox, blocks)
+        assert len(result) == 1
+        assert result[0].text == "名前"
+
+    def test_page_filtering(self):
+        """Blocks on different pages are excluded."""
         bbox = self._make_bbox(x=100, y=200, page=1)
         blocks = [
-            self._make_block("Same Page", x=105, y=190, page=1),
-            self._make_block("Different Page", x=105, y=190, page=2),
+            self._make_block("Same Page", x=40, y=198, width=50, height=12, page=1),
+            self._make_block("Diff Page", x=40, y=198, width=50, height=12, page=2),
         ]
-        result = ProximityFieldEnricher._find_nearby_text(bbox, blocks)
+        result = compute_directional_labels(bbox, blocks)
         assert len(result) == 1
         assert result[0].text == "Same Page"
 
-    def test_returns_top_3_sorted_by_distance(self):
-        bbox = self._make_bbox(x=100, y=200, width=100, height=20)
-        # BBox center is at (150, 210)
+    def test_deduplication_by_sorting(self):
+        """Results are sorted by distance — closest first."""
+        bbox = self._make_bbox(x=100, y=200, width=150, height=20)
         blocks = [
-            self._make_block("Far", x=200, y=290, width=50, height=12),    # center (225,296) ~ 113px
-            self._make_block("Close", x=130, y=205, width=50, height=12),  # center (155,211) ~ 5px
-            self._make_block("Medium", x=180, y=250, width=50, height=12), # center (205,256) ~ 71px
-            self._make_block("Closest", x=148, y=208, width=4, height=4),  # center (150,210) ~ 0px
+            self._make_block("Far Left", x=30, y=198, width=20, height=12),  # dist=50
+            self._make_block("Near Left", x=80, y=198, width=20, height=12),  # dist=0
         ]
-        result = ProximityFieldEnricher._find_nearby_text(bbox, blocks)
-        assert len(result) == 3
-        assert result[0].text == "Closest"
-        assert result[1].text == "Close"
-        assert result[2].text == "Medium"
-
-    def test_skips_empty_text_blocks(self):
-        bbox = self._make_bbox(x=100, y=200)
-        blocks = [
-            self._make_block("", x=105, y=195),
-            self._make_block("   ", x=105, y=195),
-            self._make_block("Valid", x=110, y=195),
-        ]
-        result = ProximityFieldEnricher._find_nearby_text(bbox, blocks)
-        assert len(result) == 1
-        assert result[0].text == "Valid"
-
-    def test_deduplicates_same_text(self):
-        bbox = self._make_bbox(x=100, y=200)
-        blocks = [
-            self._make_block("Name", x=50, y=195),
-            self._make_block("Name", x=55, y=195),
-        ]
-        result = ProximityFieldEnricher._find_nearby_text(bbox, blocks)
-        assert len(result) == 1
-        assert result[0].text == "Name"
-
-    def test_confidence_decreases_with_distance(self):
-        bbox = self._make_bbox(x=100, y=200, width=100, height=20)
-        blocks = [
-            self._make_block("Close", x=100, y=195, width=50, height=12),
-            self._make_block("Far", x=200, y=280, width=50, height=12),
-        ]
-        result = ProximityFieldEnricher._find_nearby_text(bbox, blocks)
+        result = compute_directional_labels(bbox, blocks)
         assert len(result) == 2
-        assert result[0].confidence > result[1].confidence
+        assert result[0].text == "Near Left"
+        assert result[1].text == "Far Left"
 
     def test_handles_block_without_bbox(self):
+        """Blocks without bbox or with short bbox are skipped."""
         bbox = self._make_bbox(x=100, y=200)
         blocks = [
             {"text": "No bbox", "page": 1},
             {"text": "Short bbox", "page": 1, "bbox": [100]},
-            self._make_block("Valid", x=105, y=195),
+            self._make_block("Valid", x=40, y=198, width=50, height=12),
         ]
-        result = ProximityFieldEnricher._find_nearby_text(bbox, blocks)
+        result = compute_directional_labels(bbox, blocks)
         assert len(result) == 1
         assert result[0].text == "Valid"
 
     def test_no_page_filter_when_block_has_no_page(self):
+        """Blocks without page info pass page filter."""
         bbox = self._make_bbox(x=100, y=200, page=1)
         blocks = [
-            self._make_block("NoPage", x=105, y=195, page=None),
+            self._make_block("NoPage", x=40, y=198, width=50, height=12, page=None),
         ]
-        result = ProximityFieldEnricher._find_nearby_text(bbox, blocks)
+        result = compute_directional_labels(bbox, blocks)
         assert len(result) == 1
+
+    def test_skips_empty_text_blocks(self):
+        """Empty and whitespace-only blocks are excluded."""
+        bbox = self._make_bbox(x=100, y=200)
+        blocks = [
+            self._make_block("", x=40, y=198),
+            self._make_block("   ", x=40, y=198),
+            self._make_block("Valid", x=40, y=198, width=50, height=12),
+        ]
+        result = compute_directional_labels(bbox, blocks)
+        assert len(result) == 1
+        assert result[0].text == "Valid"
 
 
 class TestEnrichFieldsWithLabels:
-    """Tests for ProximityFieldEnricher.enrich (async) and _enrich_fields_by_proximity."""
+    """Tests for DirectionalFieldEnricher.enrich (async) and _enrich_fields_directionally."""
 
     def test_skips_field_without_acroform_match(self):
         """Fields not found in AcroForm data are returned unchanged."""
@@ -156,19 +198,20 @@ class TestEnrichFieldsWithLabels:
                     preview_scale=2,
                 )
 
-        enricher = ProximityFieldEnricher(document_service=FakeDocService())
+        enricher = DirectionalFieldEnricher(document_service=FakeDocService())
         fields = (
             FormFieldSpec(field_id="f1", label="f1"),  # no AcroForm match
         )
-        result = enricher._enrich_fields_by_proximity("doc1", fields)
+        result = enricher._enrich_fields_directionally("doc1", fields)
         assert result[0].label_candidates == ()
 
-    def test_enriches_field_with_nearby_text_using_raw_bbox(self):
+    def test_enriches_field_with_left_label_using_raw_bbox(self):
         """Fields get enriched using raw AcroForm coordinates (PDF points)."""
         class FakeDocService:
             def extract_text_blocks(self, doc_id, pages=None):
                 return [
-                    {"text": "Name", "page": 1, "bbox": [95, 195, 40, 12]},
+                    # Block right edge (80+40=120) <= field left (150), Y-centers close
+                    {"text": "Name", "page": 1, "bbox": [80, 198, 40, 12]},
                 ]
 
             def get_acroform_fields(self, doc_id):
@@ -179,20 +222,20 @@ class TestEnrichFieldsWithLabels:
                         AcroFormFieldInfo(
                             field_name="f1",
                             field_type="text",
-                            bbox=BBox(x=100, y=200, width=150, height=20, page=1),
+                            bbox=BBox(x=150, y=200, width=150, height=20, page=1),
                         ),
                     ],
                     preview_scale=2,
                 )
 
-        enricher = ProximityFieldEnricher(document_service=FakeDocService())
+        enricher = DirectionalFieldEnricher(document_service=FakeDocService())
         fields = (
             FormFieldSpec(
                 field_id="f1", label="f1",
                 x=0.169, y=0.238, width=0.25, height=0.024, page=1,
             ),
         )
-        result = enricher._enrich_fields_by_proximity("doc1", fields)
+        result = enricher._enrich_fields_directionally("doc1", fields)
         assert len(result[0].label_candidates) == 1
         assert result[0].label_candidates[0].text == "Name"
 
@@ -201,11 +244,11 @@ class TestEnrichFieldsWithLabels:
             def extract_text_blocks(self, doc_id, pages=None):
                 raise RuntimeError("PDF parsing failed")
 
-        enricher = ProximityFieldEnricher(document_service=FakeDocService())
+        enricher = DirectionalFieldEnricher(document_service=FakeDocService())
         fields = (
             FormFieldSpec(field_id="f1", label="f1", x=100, y=200),
         )
-        result = enricher._enrich_fields_by_proximity("doc1", fields)
+        result = enricher._enrich_fields_directionally("doc1", fields)
         assert result is fields  # returns original on error
 
     def test_handles_get_acroform_fields_failure(self):
@@ -217,11 +260,11 @@ class TestEnrichFieldsWithLabels:
             def get_acroform_fields(self, doc_id):
                 raise RuntimeError("AcroForm extraction failed")
 
-        enricher = ProximityFieldEnricher(document_service=FakeDocService())
+        enricher = DirectionalFieldEnricher(document_service=FakeDocService())
         fields = (
             FormFieldSpec(field_id="f1", label="f1", x=100, y=200),
         )
-        result = enricher._enrich_fields_by_proximity("doc1", fields)
+        result = enricher._enrich_fields_directionally("doc1", fields)
         # No raw_bbox_map entries, so fields are returned without enrichment
         assert result[0].label_candidates == ()
 
@@ -234,26 +277,21 @@ class TestEnrichFieldsWithLabels:
             def get_acroform_fields(self, doc_id):
                 return None
 
-        enricher = ProximityFieldEnricher(document_service=FakeDocService())
+        enricher = DirectionalFieldEnricher(document_service=FakeDocService())
         fields = (
             FormFieldSpec(field_id="f1", label="f1", x=100, y=200),
         )
-        result = enricher._enrich_fields_by_proximity("doc1", fields)
+        result = enricher._enrich_fields_directionally("doc1", fields)
         assert result[0].label_candidates == ()
 
-    def test_coordinate_mismatch_no_longer_prevents_enrichment(self):
-        """Regression test: normalized 0-1 coords from frontend don't affect enrichment.
-
-        Previously, field.x/y (normalized 0-1 from frontend) were compared directly
-        against text block bboxes (raw PDF points ~100-600), causing all distances
-        to exceed the 150pt threshold. Now we use raw AcroForm bboxes instead.
-        """
+    def test_directional_enrichment_finds_above_label(self):
+        """Regression test: directional matching finds labels above fields."""
         class FakeDocService:
             def extract_text_blocks(self, doc_id, pages=None):
-                # Raw PDF points from PyMuPDF
                 return [
-                    {"text": "法人名（フリガナ）", "page": 1, "bbox": [102, 195, 148, 18]},
-                    {"text": "法人名", "page": 1, "bbox": [102, 225, 80, 18]},
+                    # Above: block bottom (180+12=192) < field top (200),
+                    # X-center diff within tolerance
+                    {"text": "法人名（フリガナ）", "page": 1, "bbox": [102, 180, 148, 12]},
                 ]
 
             def get_acroform_fields(self, doc_id):
@@ -270,17 +308,14 @@ class TestEnrichFieldsWithLabels:
                     preview_scale=2,
                 )
 
-        enricher = ProximityFieldEnricher(document_service=FakeDocService())
-        # Frontend sends normalized 0-1 coordinates — these should NOT be used
+        enricher = DirectionalFieldEnricher(document_service=FakeDocService())
         fields = (
             FormFieldSpec(
                 field_id="Text1", label="Text1",
                 x=0.169, y=0.238, width=0.337, height=0.024, page=1,
             ),
         )
-        result = enricher._enrich_fields_by_proximity("doc1", fields)
-        # With the fix, raw AcroForm bbox (100, 200) is used for matching,
-        # so the nearby text at (102, 195) IS found
+        result = enricher._enrich_fields_directionally("doc1", fields)
         assert len(result[0].label_candidates) > 0
         texts = [c.text for c in result[0].label_candidates]
         assert "法人名（フリガナ）" in texts
