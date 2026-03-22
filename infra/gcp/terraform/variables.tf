@@ -48,6 +48,12 @@ variable "orchestrator_image" {
   default     = ""
 }
 
+variable "rule_service_image" {
+  description = "Container image for the Rule Service"
+  type        = string
+  default     = ""
+}
+
 # -----------------------------------------------------------------------------
 # Cloud Run Configuration
 # -----------------------------------------------------------------------------
@@ -128,6 +134,40 @@ variable "orchestrator_max_instances" {
   description = "Maximum instances for Orchestrator service"
   type        = number
   default     = 5
+}
+
+variable "rule_service_cpu" {
+  description = "CPU allocation for Rule Service"
+  type        = string
+  default     = "1"
+}
+
+variable "rule_service_memory" {
+  description = "Memory allocation for Rule Service"
+  type        = string
+  default     = "2Gi"
+}
+
+variable "rule_service_min_instances" {
+  description = "Minimum instances for Rule Service"
+  type        = number
+  default     = 0
+}
+
+variable "rule_service_max_instances" {
+  description = "Maximum instances for Rule Service"
+  type        = number
+  default     = 3
+}
+
+# -----------------------------------------------------------------------------
+# GitHub Actions (Workload Identity Federation)
+# -----------------------------------------------------------------------------
+
+variable "github_repo" {
+  description = "GitHub repository in owner/repo format (e.g. myorg/daru-pdf)"
+  type        = string
+  default     = ""
 }
 
 # -----------------------------------------------------------------------------

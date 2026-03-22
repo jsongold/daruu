@@ -33,6 +33,8 @@ resource "google_project_service" "required_apis" {
     "secretmanager.googleapis.com",
     "cloudresourcemanager.googleapis.com",
     "compute.googleapis.com",
+    "iam.googleapis.com",
+    "iamcredentials.googleapis.com",
   ])
 
   project            = var.project_id
@@ -129,19 +131,19 @@ module "cloud_run_api" {
   vpc_connector_id = google_vpc_access_connector.connector.id
 
   env_vars = {
-    DARU_DEBUG                         = var.environment == "prod" ? "false" : "true"
-    DARU_API_PREFIX                    = "/api/v1"
-    DARU_DEFAULT_CONFIDENCE_THRESHOLD  = "0.7"
-    DARU_MAX_STEPS_PER_RUN             = "100"
-    GCP_PROJECT_ID                     = var.project_id
-    GCP_REGION                         = var.region
-    GCP_STORAGE_BUCKET_DOCUMENTS       = module.storage.bucket_names["documents"]
-    GCP_STORAGE_BUCKET_PREVIEWS        = module.storage.bucket_names["previews"]
-    GCP_STORAGE_BUCKET_CROPS           = module.storage.bucket_names["crops"]
-    GCP_STORAGE_BUCKET_OUTPUTS         = module.storage.bucket_names["outputs"]
-    GCP_REDIS_HOST                     = module.memorystore.host
-    GCP_REDIS_PORT                     = tostring(module.memorystore.port)
-    ORCHESTRATOR_URL                   = "https://${local.service_prefix}-orchestrator-${data.google_project.current.number}.${var.region}.run.app"
+    DARU_DEBUG                        = var.environment == "prod" ? "false" : "true"
+    DARU_API_PREFIX                   = "/api/v1"
+    DARU_DEFAULT_CONFIDENCE_THRESHOLD = "0.7"
+    DARU_MAX_STEPS_PER_RUN            = "100"
+    GCP_PROJECT_ID                    = var.project_id
+    GCP_REGION                        = var.region
+    GCP_STORAGE_BUCKET_DOCUMENTS      = module.storage.bucket_names["documents"]
+    GCP_STORAGE_BUCKET_PREVIEWS       = module.storage.bucket_names["previews"]
+    GCP_STORAGE_BUCKET_CROPS          = module.storage.bucket_names["crops"]
+    GCP_STORAGE_BUCKET_OUTPUTS        = module.storage.bucket_names["outputs"]
+    GCP_REDIS_HOST                    = module.memorystore.host
+    GCP_REDIS_PORT                    = tostring(module.memorystore.port)
+    ORCHESTRATOR_URL                  = "https://${local.service_prefix}-orchestrator-${data.google_project.current.number}.${var.region}.run.app"
   }
 
   secret_env_vars = {
@@ -208,12 +210,12 @@ module "cloud_run_orchestrator" {
   vpc_connector_id = google_vpc_access_connector.connector.id
 
   env_vars = {
-    DARU_DEBUG               = var.environment == "prod" ? "false" : "true"
-    GCP_PROJECT_ID           = var.project_id
-    GCP_REGION               = var.region
-    GCP_REDIS_HOST           = module.memorystore.host
-    GCP_REDIS_PORT           = tostring(module.memorystore.port)
-    API_URL                  = module.cloud_run_api.service_url
+    DARU_DEBUG     = var.environment == "prod" ? "false" : "true"
+    GCP_PROJECT_ID = var.project_id
+    GCP_REGION     = var.region
+    GCP_REDIS_HOST = module.memorystore.host
+    GCP_REDIS_PORT = tostring(module.memorystore.port)
+    API_URL        = module.cloud_run_api.service_url
   }
 
   secret_env_vars = {
@@ -229,6 +231,62 @@ module "cloud_run_orchestrator" {
     module.memorystore,
     module.cloud_run_api,
   ]
+}
+
+# Rule Service
+module "cloud_run_rule_service" {
+  source = "./modules/cloud-run"
+
+  project_id    = var.project_id
+  name          = "${local.service_prefix}-rule-service"
+  location      = var.region
+  image         = var.rule_service_image != "" ? var.rule_service_image : "${var.region}-docker.pkg.dev/${var.project_id}/daru-pdf/rule-service:latest"
+  cpu           = var.rule_service_cpu
+  memory        = var.rule_service_memory
+  min_instances = var.rule_service_min_instances
+  max_instances = var.rule_service_max_instances
+  labels        = local.common_labels
+
+  # Internal service - not publicly accessible
+  allow_unauthenticated = false
+
+  # VPC connector for Redis access
+  vpc_connector_id = google_vpc_access_connector.connector.id
+
+  env_vars = {
+    DARU_DEBUG     = var.environment == "prod" ? "false" : "true"
+    GCP_PROJECT_ID = var.project_id
+    GCP_REGION     = var.region
+    GCP_REDIS_HOST = module.memorystore.host
+    GCP_REDIS_PORT = tostring(module.memorystore.port)
+    API_URL        = module.cloud_run_api.service_url
+  }
+
+  secret_env_vars = {
+    DARU_SUPABASE_URL         = var.supabase_url
+    DARU_SUPABASE_SERVICE_KEY = var.supabase_service_key
+    DARU_OPENAI_API_KEY       = var.openai_api_key
+  }
+
+  depends_on = [
+    google_project_service.required_apis,
+    google_artifact_registry_repository.daru_pdf,
+    module.memorystore,
+    module.cloud_run_api,
+  ]
+}
+
+# -----------------------------------------------------------------------------
+# Workload Identity Federation (GitHub Actions)
+# -----------------------------------------------------------------------------
+
+module "workload_identity" {
+  source = "./modules/workload-identity"
+
+  project_id  = var.project_id
+  github_repo = var.github_repo
+
+  depends_on = [google_project_service.required_apis]
 }
 
 # -----------------------------------------------------------------------------
