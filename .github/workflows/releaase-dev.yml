@@ -1,0 +1,224 @@
+name: CD Dev
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: cd-dev-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGION: asia-northeast1
+  GAR_REPO: asia-northeast1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/daru-pdf
+
+jobs:
+  # -------------------------------------------------------------------
+  # Detect which apps changed
+  # -------------------------------------------------------------------
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      api: ${{ steps.filter.outputs.api }}
+      web: ${{ steps.filter.outputs.web }}
+      orchestrator: ${{ steps.filter.outputs.orchestrator }}
+      rule-service: ${{ steps.filter.outputs.rule-service }}
+      terraform: ${{ steps.filter.outputs.terraform }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            api:
+              - 'apps/api/**'
+              - 'apps/contracts/**'
+            web:
+              - 'apps/web/**'
+            orchestrator:
+              - 'apps/orchestrator/**'
+            rule-service:
+              - 'apps/rule-service/**'
+            terraform:
+              - 'infra/gcp/terraform/**'
+
+  # -------------------------------------------------------------------
+  # API: lint + type + test
+  # -------------------------------------------------------------------
+  check-api:
+    needs: changes
+    if: needs.changes.outputs.api == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: apps/api/pyproject.toml
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+        working-directory: apps/api
+      - name: Lint
+        run: python -m ruff check .
+        working-directory: apps/api
+      - name: Type check
+        run: python -m mypy .
+        working-directory: apps/api
+      - name: Test
+        run: python -m pytest
+        working-directory: apps/api
+
+  # -------------------------------------------------------------------
+  # Web: lint + type + build
+  # -------------------------------------------------------------------
+  check-web:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+        working-directory: apps/web
+      - name: Lint
+        run: npm run lint
+        working-directory: apps/web
+      - name: Type check
+        run: npm run typecheck
+        working-directory: apps/web
+      - name: Build
+        run: npm run build
+        working-directory: apps/web
+
+  # -------------------------------------------------------------------
+  # Terraform: fmt + validate + plan
+  # -------------------------------------------------------------------
+  terraform:
+    needs: changes
+    if: needs.changes.outputs.terraform == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.5"
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+      - name: Terraform fmt
+        run: terraform fmt -check -recursive
+        working-directory: infra/gcp/terraform
+      - name: Terraform init
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="prefix=terraform/dev"
+        working-directory: infra/gcp/terraform
+      - name: Terraform validate
+        run: terraform validate
+        working-directory: infra/gcp/terraform
+      - name: Terraform plan
+        run: terraform plan -var-file=envs/dev.tfvars -no-color
+        working-directory: infra/gcp/terraform
+
+  # -------------------------------------------------------------------
+  # Build and push Docker images (only on push to main)
+  # -------------------------------------------------------------------
+  build-push:
+    needs: [changes, check-api, check-web]
+    if: github.event_name == 'push' && !failure() && !cancelled()
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: api
+            context: apps/api
+            changed: ${{ needs.changes.outputs.api }}
+          - service: web
+            context: apps/web
+            changed: ${{ needs.changes.outputs.web }}
+          - service: orchestrator
+            context: apps/orchestrator
+            changed: ${{ needs.changes.outputs.orchestrator }}
+          - service: rule-service
+            context: apps/rule-service
+            changed: ${{ needs.changes.outputs.rule-service }}
+    steps:
+      - uses: actions/checkout@v4
+        if: matrix.changed == 'true'
+      - uses: google-github-actions/auth@v2
+        if: matrix.changed == 'true'
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+        if: matrix.changed == 'true'
+      - name: Configure Docker for Artifact Registry
+        if: matrix.changed == 'true'
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+      - uses: docker/setup-buildx-action@v3
+        if: matrix.changed == 'true'
+      - uses: docker/build-push-action@v6
+        if: matrix.changed == 'true'
+        with:
+          context: ${{ matrix.context }}
+          push: true
+          tags: |
+            ${{ env.GAR_REPO }}/${{ matrix.service }}:${{ github.sha }}
+            ${{ env.GAR_REPO }}/${{ matrix.service }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # -------------------------------------------------------------------
+  # Deploy to dev (only on push to main, after CI passes)
+  # -------------------------------------------------------------------
+  deploy:
+    needs: [changes, build-push]
+    if: github.event_name == 'push' && !failure() && !cancelled()
+    runs-on: ubuntu-latest
+    environment: dev
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.5"
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+      - name: Terraform init
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="prefix=terraform/dev"
+        working-directory: infra/gcp/terraform
+      - name: Terraform apply
+        run: |
+          terraform apply -auto-approve \
+            -var-file=envs/dev.tfvars \
+            -var="api_image=${{ env.GAR_REPO }}/api:${{ github.sha }}" \
+            -var="web_image=${{ env.GAR_REPO }}/web:${{ github.sha }}" \
+            -var="orchestrator_image=${{ env.GAR_REPO }}/orchestrator:${{ github.sha }}" \
+            -var="rule_service_image=${{ env.GAR_REPO }}/rule-service:${{ github.sha }}"
+        working-directory: infra/gcp/terraform
