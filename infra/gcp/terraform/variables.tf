@@ -214,35 +214,17 @@ variable "storage_delete_days" {
 }
 
 # -----------------------------------------------------------------------------
-# External Services
+# CORS Configuration
 # -----------------------------------------------------------------------------
 
-variable "supabase_url" {
-  description = "Supabase project URL"
-  type        = string
-  default     = ""
-  sensitive   = true
-}
+variable "cors_origins" {
+  description = "Allowed origins for CORS on storage buckets. NEVER use [\"*\"] in production."
+  type        = list(string)
 
-variable "supabase_service_key" {
-  description = "Supabase service role key"
-  type        = string
-  default     = ""
-  sensitive   = true
-}
-
-variable "supabase_anon_key" {
-  description = "Supabase anonymous key"
-  type        = string
-  default     = ""
-  sensitive   = true
-}
-
-variable "openai_api_key" {
-  description = "OpenAI API key"
-  type        = string
-  default     = ""
-  sensitive   = true
+  validation {
+    condition     = !contains(var.cors_origins, "*") || length(var.cors_origins) == 0
+    error_message = "CORS wildcard '*' is not allowed. Specify explicit origins."
+  }
 }
 
 # -----------------------------------------------------------------------------

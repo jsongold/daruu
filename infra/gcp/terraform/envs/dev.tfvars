@@ -30,3 +30,6 @@ redis_memory_size_gb = 1
 # Storage
 storage_lifecycle_days = 30
 storage_delete_days    = 90
+
+# CORS - restrict to dev domain (update with your actual dev URL)
+cors_origins = ["http://localhost:5173", "http://localhost:3000"]

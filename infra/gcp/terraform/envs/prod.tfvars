@@ -30,3 +30,6 @@ redis_memory_size_gb = 2
 # Storage
 storage_lifecycle_days = 60
 storage_delete_days    = 365
+
+# CORS - restrict to production domain (update with your actual prod URL)
+cors_origins = ["https://daru-pdf.example.com"]

@@ -21,15 +21,34 @@ env:
 
 jobs:
   # -------------------------------------------------------------------
+  # Validate ref is on main (prevent deploying unreviewed code)
+  # -------------------------------------------------------------------
+  validate-ref:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - name: Validate ref is ancestor of main
+        run: |
+          git fetch origin main
+          if ! git merge-base --is-ancestor ${{ env.DEPLOY_SHA }} origin/main; then
+            echo "ERROR: ref ${{ env.DEPLOY_SHA }} is not on the main branch"
+            exit 1
+          fi
+          echo "Ref validated: ${{ env.DEPLOY_SHA }} is on main"
+
+  # -------------------------------------------------------------------
   # CI checks (run all before deploying to prod)
   # -------------------------------------------------------------------
   check-api:
+    needs: validate-ref
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ env.DEPLOY_SHA }}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.11"
           cache: pip
@@ -48,12 +67,13 @@ jobs:
         working-directory: apps/api
 
   check-web:
+    needs: validate-ref
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ env.DEPLOY_SHA }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642195f882660b323c62e98 # v4.4.0
         with:
           node-version: "20"
           cache: npm
@@ -72,18 +92,19 @@ jobs:
         working-directory: apps/web
 
   terraform-plan:
+    needs: validate-ref
     runs-on: ubuntu-latest
     permissions:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ env.DEPLOY_SHA }}
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
         with:
           terraform_version: "1.5"
-      - uses: google-github-actions/auth@v2
+      - uses: google-github-actions/auth@ba79af03959ebeac9769e648f473a284504d9193 # v2.1.10
         with:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
           service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
@@ -126,18 +147,18 @@ jobs:
           - service: rule-service
             context: apps/rule-service
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ env.DEPLOY_SHA }}
-      - uses: google-github-actions/auth@v2
+      - uses: google-github-actions/auth@ba79af03959ebeac9769e648f473a284504d9193 # v2.1.10
         with:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
           service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
-      - uses: google-github-actions/setup-gcloud@v2
+      - uses: google-github-actions/setup-gcloud@77e7a554d41e2ee56fc945c52dfd3f33d12def9a # v2.1.4
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
+      - uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+      - uses: docker/build-push-action@263435318d21b8e681c14492fe198e19c816612b # v6.18.0
         with:
           context: ${{ matrix.context }}
           push: true
@@ -158,13 +179,13 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ env.DEPLOY_SHA }}
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
         with:
           terraform_version: "1.5"
-      - uses: google-github-actions/auth@v2
+      - uses: google-github-actions/auth@ba79af03959ebeac9769e648f473a284504d9193 # v2.1.10
         with:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
           service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}

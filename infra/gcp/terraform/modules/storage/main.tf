@@ -81,16 +81,5 @@ resource "google_storage_bucket" "buckets" {
   })
 }
 
-# IAM binding for Cloud Run service account
-resource "google_storage_bucket_iam_member" "cloud_run_access" {
-  for_each = toset(var.bucket_names)
-
-  bucket = google_storage_bucket.buckets[each.key].name
-  role   = "roles/storage.objectAdmin"
-  member = "serviceAccount:${data.google_project.current.number}-compute@developer.gserviceaccount.com"
-}
-
-# Data source for project information
-data "google_project" "current" {
-  project_id = var.project_id
-}
+# NOTE: Bucket IAM for Cloud Run service accounts is managed in main.tf
+# using per-service SAs for least privilege (not default compute SA).

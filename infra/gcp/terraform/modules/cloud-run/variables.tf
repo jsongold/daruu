@@ -62,11 +62,10 @@ variable "env_vars" {
   default     = {}
 }
 
-variable "secret_env_vars" {
-  description = "Secret environment variables (stored in Secret Manager)"
+variable "secret_env_var_refs" {
+  description = "Map of env var name to pre-existing Secret Manager secret ID. Secret values are managed out-of-band (not in Terraform) to keep plaintext out of state."
   type        = map(string)
   default     = {}
-  sensitive   = true
 }
 
 variable "labels" {

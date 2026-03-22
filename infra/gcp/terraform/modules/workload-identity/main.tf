@@ -3,6 +3,9 @@
 # Enables keyless authentication from GitHub Actions to GCP.
 # GitHub Actions obtains an OIDC token and exchanges it for
 # short-lived GCP credentials via the Workload Identity Pool.
+#
+# SECURITY: attribute_condition restricts to main branch only.
+# PR workflows should NOT get GCP credentials.
 
 resource "google_iam_workload_identity_pool" "github" {
   project                   = var.project_id
@@ -20,9 +23,11 @@ resource "google_iam_workload_identity_pool_provider" "github" {
     "google.subject"       = "assertion.sub"
     "attribute.actor"      = "assertion.actor"
     "attribute.repository" = "assertion.repository"
+    "attribute.ref"        = "assertion.ref"
   }
 
-  attribute_condition = "assertion.repository == \"${var.github_repo}\""
+  # Restrict to specific repo AND protected refs (main branch + tags)
+  attribute_condition = "assertion.repository == \"${var.github_repo}\" && (assertion.ref == \"refs/heads/main\" || assertion.ref.startsWith(\"refs/tags/\"))"
 
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"
@@ -37,19 +42,27 @@ resource "google_service_account" "github_actions" {
   description  = "Service account for CI/CD via GitHub Actions"
 }
 
-# IAM roles for the service account
+# IAM roles for the service account -- scoped to minimum required
 resource "google_project_iam_member" "roles" {
   for_each = toset([
     "roles/run.admin",
     "roles/artifactregistry.writer",
-    "roles/storage.admin",
-    "roles/secretmanager.accessor",
+    "roles/secretmanager.viewer",
     "roles/iam.serviceAccountUser",
   ])
 
   project = var.project_id
   role    = each.value
   member  = "serviceAccount:${google_service_account.github_actions.email}"
+}
+
+# State bucket access -- granted at bucket level, not project level
+# The bucket name is passed as a variable so we can scope precisely
+resource "google_storage_bucket_iam_member" "state_bucket_read" {
+  count  = var.state_bucket_name != "" ? 1 : 0
+  bucket = var.state_bucket_name
+  role   = "roles/storage.objectUser"
+  member = "serviceAccount:${google_service_account.github_actions.email}"
 }
 
 # Allow GitHub Actions to impersonate the service account
