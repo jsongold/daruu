@@ -81,7 +81,7 @@ File: src/api/client.ts:42
 Issue: API key exposed in source code
 Fix: Move to environment variable
 
-const apiKey = "sk-abc123";  // ❌ Bad
+const apiKey = "HARDCODED_SECRET_HERE";  // ❌ Bad
 const apiKey = process.env.API_KEY;  // ✓ Good
 ```
 
