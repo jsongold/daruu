@@ -96,6 +96,12 @@ from app.models.task import (
     TaskStatus,
     TaskStatusResponse,
 )
+from app.models.annotation import (
+    AnnotationBBox,
+    AnnotationPairCreate,
+    AnnotationPairModel,
+    AnnotationPairsResponse,
+)
 from app.models.template import (
     FieldType as TemplateFieldType,
     RuleType,
@@ -200,6 +206,11 @@ __all__ = [
     "RunAsyncResponse",
     "TaskStatus",
     "TaskStatusResponse",
+    # Annotation
+    "AnnotationBBox",
+    "AnnotationPairCreate",
+    "AnnotationPairModel",
+    "AnnotationPairsResponse",
     # Template (Phase 2 Template System)
     "TemplateFieldType",
     "RuleType",

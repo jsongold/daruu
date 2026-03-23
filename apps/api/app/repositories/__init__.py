@@ -44,9 +44,11 @@ from app.repositories.job_repository import JobRepository
 from app.repositories.message_repository import MessageRepository
 from app.repositories.prompt_attempt_repository import PromptAttemptRepository
 from app.repositories.rule_snippet_repository import RuleSnippetRepository
+from app.repositories.annotation_pair_repository import AnnotationPairRepository
 from app.repositories.template_repository import TemplateRepository
 
 __all__ = [
+    "AnnotationPairRepository",
     "ConversationRepository",
     "CorrectionRepository",
     "DataSourceRepository",

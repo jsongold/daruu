@@ -14,8 +14,16 @@ import type {
   ExportEntry,
 } from '../types/annotation';
 import type { AcroFormFieldInfo, PageDimensions } from '../types/api';
-import { getDocument, getAcroFormFields, getTextBlocks } from '../api/client';
-import type { TextBlock } from '../api/client';
+import {
+  getDocument,
+  getAcroFormFields,
+  getTextBlocks,
+  listAnnotationPairs,
+  createAnnotationPair,
+  deleteAnnotationPair,
+  clearAnnotationPairs,
+} from '../api/client';
+import type { TextBlock, AnnotationPairResponse, CreateAnnotationPairRequest } from '../api/client';
 import { runAiPairing } from '../utils/aiPairing';
 import { computeOverlayConfig } from './computeOverlayConfig';
 
@@ -72,6 +80,33 @@ function acroFormToFields(
       };
     })
     .filter((f): f is FieldOverlay => f !== null);
+}
+
+function responseToPair(r: AnnotationPairResponse): AnnotationPair {
+  return {
+    id: r.id,
+    label: { id: r.label_id, text: r.label_text, bbox: r.label_bbox, page: r.label_page },
+    field: { id: r.field_id, fieldName: r.field_name, bbox: r.field_bbox, page: r.field_page },
+    confidence: r.confidence,
+    status: r.status,
+    isManual: r.is_manual,
+  };
+}
+
+function pairToRequest(pair: AnnotationPair): CreateAnnotationPairRequest {
+  return {
+    label_id: pair.label.id,
+    label_text: pair.label.text,
+    label_bbox: pair.label.bbox,
+    label_page: pair.label.page,
+    field_id: pair.field.id,
+    field_name: pair.field.fieldName,
+    field_bbox: pair.field.bbox,
+    field_page: pair.field.page,
+    confidence: pair.confidence,
+    status: pair.status,
+    is_manual: pair.isManual,
+  };
 }
 
 const emptyState: AnnotationDocumentState = {
@@ -135,6 +170,15 @@ export function useAnnotationStore() {
         acroFormResponse.page_dimensions
       );
 
+      // Load existing pairs from DB
+      let existingPairs: AnnotationPair[] = [];
+      try {
+        const pairResponses = await listAnnotationPairs(documentId);
+        existingPairs = pairResponses.map(responseToPair);
+      } catch {
+        // No saved pairs yet
+      }
+
       setDoc({
         documentId,
         filename: docResponse.meta.filename,
@@ -142,7 +186,7 @@ export function useAnnotationStore() {
         currentPage: 1,
         labels,
         fields: fieldOverlays,
-        pairs: [],
+        pairs: existingPairs,
       });
       setMode({ type: 'idle' });
     } catch (err) {
@@ -177,8 +221,12 @@ export function useAnnotationStore() {
   const clickField = useCallback((fieldId: string) => {
     // In focus-pair mode: unpair and enter field-selection to re-pair
     if (mode.type === 'focus-pair') {
-      setDoc((d) => ({ ...d, pairs: d.pairs.filter((p) => p.id !== mode.pairId) }));
+      const pairId = mode.pairId;
+      setDoc((d) => ({ ...d, pairs: d.pairs.filter((p) => p.id !== pairId) }));
       setMode({ type: 'field-selection', labelId: mode.labelId });
+      deleteAnnotationPair(doc.documentId, pairId).catch((e) =>
+        console.error('[Annotation] Failed to delete pair:', e)
+      );
       return;
     }
 
@@ -198,6 +246,11 @@ export function useAnnotationStore() {
     };
     setDoc((d) => ({ ...d, pairs: [...d.pairs, newPair] }));
     setMode({ type: 'idle' });
+
+    // Persist in background
+    createAnnotationPair(doc.documentId, pairToRequest(newPair)).catch((e) =>
+      console.error('[Annotation] Failed to save pair:', e)
+    );
   }, [mode, doc.labels, doc.fields]);
 
   /** Click empty space -> back to idle */
@@ -225,7 +278,10 @@ export function useAnnotationStore() {
   const deletePair = useCallback((pairId: string) => {
     setDoc((d) => ({ ...d, pairs: d.pairs.filter((p) => p.id !== pairId) }));
     setMode({ type: 'idle' });
-  }, []);
+    deleteAnnotationPair(doc.documentId, pairId).catch((e) =>
+      console.error('[Annotation] Failed to delete pair:', e)
+    );
+  }, [doc.documentId]);
 
   const addLabel = useCallback((text: string, bbox: AnnotationBBox, page: number) => {
     const newLabel: LabelOverlay = {
@@ -240,17 +296,28 @@ export function useAnnotationStore() {
   const runAi = useCallback(async () => {
     setAiLoading(true);
     await new Promise((r) => setTimeout(r, 800));
+    let newPairs: AnnotationPair[] = [];
     setDoc((d) => {
-      const newPairs = runAiPairing(d.labels, d.fields, d.pairs);
+      newPairs = runAiPairing(d.labels, d.fields, d.pairs);
       return { ...d, pairs: [...d.pairs, ...newPairs] };
     });
     setAiLoading(false);
-  }, []);
+
+    // Batch save in background
+    if (newPairs.length > 0) {
+      Promise.all(
+        newPairs.map((p) => createAnnotationPair(doc.documentId, pairToRequest(p)))
+      ).catch((e) => console.error('[Annotation] Failed to save AI pairs:', e));
+    }
+  }, [doc.documentId]);
 
   const clearPairs = useCallback(() => {
     setDoc((d) => ({ ...d, pairs: [] }));
     setMode({ type: 'idle' });
-  }, []);
+    clearAnnotationPairs(doc.documentId).catch((e) =>
+      console.error('[Annotation] Failed to clear pairs:', e)
+    );
+  }, [doc.documentId]);
 
   const exportJson = useCallback(() => {
     const entries: ExportEntry[] = doc.pairs.map((p) => ({

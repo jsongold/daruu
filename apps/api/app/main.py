@@ -18,6 +18,7 @@ from app.models import ErrorDetail, ErrorResponse
 from app.routes import (
     adjust_router,
     analyze_router,
+    annotations_router,
     auth_router,
     autofill_pipeline_router,
     corrections_router,
@@ -315,6 +316,9 @@ All errors follow a consistent format with `success: false` and an `error` objec
 
     # Prompt Attempts API (prompt tuning feature)
     app.include_router(prompt_attempts_router, prefix=settings.api_prefix)
+
+    # Annotations API (label-bbox pairing)
+    app.include_router(annotations_router, prefix=settings.api_prefix)
 
     # Root endpoint
     @app.get("/")

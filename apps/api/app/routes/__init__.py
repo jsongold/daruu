@@ -23,9 +23,11 @@ from app.routes.prompt_attempts import router as prompt_attempts_router
 from app.routes.autofill_pipeline import router as autofill_pipeline_router
 from app.routes.corrections import router as corrections_router
 from app.routes.rules import router as rules_router
+from app.routes.annotations import router as annotations_router
 from app.routes.vision_autofill import router as vision_autofill_router
 
 __all__ = [
+    "annotations_router",
     "autofill_pipeline_router",
     "corrections_router",
     "rules_router",
