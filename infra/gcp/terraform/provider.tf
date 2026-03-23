@@ -15,12 +15,11 @@ terraform {
     }
   }
 
-  # Backend configuration for state storage
-  # Uncomment and configure for production use
-  # backend "gcs" {
-  #   bucket = "daru-pdf-terraform-state"
-  #   prefix = "terraform/state"
-  # }
+  # State stored in GCS. Bucket and prefix set via -backend-config flags:
+  #   terraform init \
+  #     -backend-config="bucket=<project-id>-terraform-state" \
+  #     -backend-config="prefix=terraform/staging"
+  backend "gcs" {}
 }
 
 provider "google" {

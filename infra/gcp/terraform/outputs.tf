@@ -19,6 +19,11 @@ output "orchestrator_service_url" {
   value       = module.cloud_run_orchestrator.service_url
 }
 
+output "rule_service_url" {
+  description = "URL of the Rule Service Cloud Run service"
+  value       = module.cloud_run_rule_service.service_url
+}
+
 # -----------------------------------------------------------------------------
 # Storage Bucket URLs
 # -----------------------------------------------------------------------------
@@ -73,4 +78,18 @@ output "vpc_connector_id" {
 output "artifact_registry_url" {
   description = "Artifact Registry URL for container images"
   value       = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.daru_pdf.name}"
+}
+
+# -----------------------------------------------------------------------------
+# Workload Identity Federation
+# -----------------------------------------------------------------------------
+
+output "wif_provider" {
+  description = "Workload Identity Federation provider name (for GitHub Actions)"
+  value       = module.workload_identity.provider_name
+}
+
+output "wif_service_account" {
+  description = "Service account email for GitHub Actions"
+  value       = module.workload_identity.service_account_email
 }

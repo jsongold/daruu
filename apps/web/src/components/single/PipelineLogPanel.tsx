@@ -19,6 +19,7 @@ interface PipelineLogPanelProps {
 const STEP_LABELS: Record<string, string> = {
   context_build: 'Context Build',
   rule_analyze: 'Rule Analysis',
+  reasoning_precheck: 'Reasoning Pre-Check',
   fill_plan: 'Fill Planning (LLM)',
   fill_plan_turn: 'Fill Plan Turn (LLM)',
   render: 'Render',

@@ -2,6 +2,10 @@
 #
 # Creates a Cloud Run service with configurable resources,
 # environment variables, and IAM policies.
+#
+# SECURITY: Secrets are referenced by ID from pre-existing Secret Manager
+# secrets. Secret values must be created out-of-band (via gcloud CLI or
+# a separate secrets pipeline) to keep plaintext out of Terraform state.
 
 resource "google_cloud_run_v2_service" "service" {
   name     = var.name
@@ -13,7 +17,7 @@ resource "google_cloud_run_v2_service" "service" {
   template {
     labels = var.labels
 
-    # Service account
+    # Service account (dedicated per-service for least privilege)
     service_account = var.service_account
 
     # VPC connector for private network access
@@ -83,14 +87,14 @@ resource "google_cloud_run_v2_service" "service" {
         }
       }
 
-      # Secret environment variables (from Secret Manager)
+      # Secret environment variables (referenced from pre-existing Secret Manager secrets)
       dynamic "env" {
-        for_each = var.secret_env_vars
+        for_each = var.secret_env_var_refs
         content {
           name = env.key
           value_source {
             secret_key_ref {
-              secret  = google_secret_manager_secret.secrets[env.key].secret_id
+              secret  = env.value
               version = "latest"
             }
           }
@@ -121,40 +125,6 @@ resource "google_cloud_run_v2_service" "service" {
 }
 
 # -----------------------------------------------------------------------------
-# Secret Manager Secrets
-# -----------------------------------------------------------------------------
-
-resource "google_secret_manager_secret" "secrets" {
-  for_each = var.secret_env_vars
-
-  secret_id = "${var.name}-${lower(replace(each.key, "_", "-"))}"
-  project   = var.project_id
-
-  labels = var.labels
-
-  replication {
-    auto {}
-  }
-}
-
-resource "google_secret_manager_secret_version" "secret_versions" {
-  for_each = var.secret_env_vars
-
-  secret      = google_secret_manager_secret.secrets[each.key].id
-  secret_data = each.value
-}
-
-# Grant Cloud Run service account access to secrets
-resource "google_secret_manager_secret_iam_member" "secret_access" {
-  for_each = var.secret_env_vars
-
-  project   = var.project_id
-  secret_id = google_secret_manager_secret.secrets[each.key].secret_id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${data.google_project.current.number}-compute@developer.gserviceaccount.com"
-}
-
-# -----------------------------------------------------------------------------
 # IAM Policy for Public Access
 # -----------------------------------------------------------------------------
 
@@ -166,12 +136,4 @@ resource "google_cloud_run_v2_service_iam_member" "public_access" {
   name     = google_cloud_run_v2_service.service.name
   role     = "roles/run.invoker"
   member   = "allUsers"
-}
-
-# -----------------------------------------------------------------------------
-# Data Sources
-# -----------------------------------------------------------------------------
-
-data "google_project" "current" {
-  project_id = var.project_id
 }

@@ -26,6 +26,8 @@ from app.domain.protocols.rule_analyzer import RuleAnalyzerProtocol
 from app.services.autofill_pipeline.models import AutofillPipelineResult
 from app.services.autofill_pipeline.step_log import PipelineStepLog
 from app.services.fill_planner.planner import TurnResult
+from app.services.form_context.enricher import apply_resolved_labels
+from app.services.form_context.structural_resolver import StructuralResolver
 
 logger = logging.getLogger(__name__)
 
@@ -47,12 +49,14 @@ class AutofillPipelineService:
         form_renderer: FormRendererProtocol,
         rule_analyzer: RuleAnalyzerProtocol,
         correction_tracker: CorrectionTrackerProtocol,
+        structural_resolver: StructuralResolver | None = None,
     ) -> None:
         self._context_builder = context_builder
         self._fill_planner = fill_planner
         self._form_renderer = form_renderer
         self._rule_analyzer = rule_analyzer
         self._correction_tracker = correction_tracker
+        self._structural_resolver = structural_resolver
         # Cache context per (document_id, conversation_id) for turn reuse
         self._turn_context_cache: dict[tuple[str, str], FormContext] = {}
 
@@ -80,6 +84,24 @@ class AutofillPipelineService:
         """
         sw = StopWatch()
         step_logs: list[PipelineStepLog] = []
+
+        # Step 0: StructuralResolver (Python, ~0.1s)
+        if self._structural_resolver:
+            with sw.lap("structural_resolve"):
+                sr_result = self._structural_resolver.resolve(document_id, fields)
+            fields = apply_resolved_labels(fields, sr_result)
+            step_logs.append(PipelineStepLog(
+                step_name="structural_resolve",
+                status="success",
+                duration_ms=sw.laps["structural_resolve"],
+                summary=f"{len(sr_result.field_labels)} resolved, {len(sr_result.unresolved_field_ids)} unresolved",
+                details={
+                    "resolved_count": len(sr_result.field_labels),
+                    "unresolved_count": len(sr_result.unresolved_field_ids),
+                    "field_labels": sr_result.field_labels,
+                    "resolution_methods": sr_result.resolution_method,
+                },
+            ))
 
         # Step 1: Parallel — build context + analyze rules
         with sw.lap("context_build"):
@@ -164,6 +186,11 @@ class AutofillPipelineService:
             1 for a in plan.actions if a.action == FillActionType.ASK_USER
         )
 
+        plan_prompt_chars = (
+            (len(plan.system_prompt) if plan.system_prompt else 0)
+            + (len(plan.user_prompt) if plan.user_prompt else 0)
+        )
+        plan_response_chars = len(plan.raw_llm_response) if plan.raw_llm_response else 0
         step_logs.append(PipelineStepLog(
             step_name="fill_plan",
             status="success",
@@ -171,6 +198,9 @@ class AutofillPipelineService:
             summary=f"{fill_count} fill, {skip_count} skip, {ask_user_count} ask_user",
             details={
                 "model_used": plan.model_used,
+                "prompt_chars": plan_prompt_chars,
+                "prompt_tokens_est": plan_prompt_chars // 4,
+                "response_chars": plan_response_chars,
                 "system_prompt": plan.system_prompt,
                 "user_prompt": plan.user_prompt,
                 "raw_llm_response": plan.raw_llm_response,
@@ -260,6 +290,24 @@ class AutofillPipelineService:
                 details={"cached": True},
             ))
         else:
+            # Step 0: StructuralResolver (Python, ~0.1s)
+            if self._structural_resolver:
+                with sw.lap("structural_resolve"):
+                    sr_result = self._structural_resolver.resolve(document_id, fields)
+                fields = apply_resolved_labels(fields, sr_result)
+                step_logs.append(PipelineStepLog(
+                    step_name="structural_resolve",
+                    status="success",
+                    duration_ms=sw.laps["structural_resolve"],
+                    summary=f"{len(sr_result.field_labels)} resolved, {len(sr_result.unresolved_field_ids)} unresolved",
+                    details={
+                        "resolved_count": len(sr_result.field_labels),
+                        "unresolved_count": len(sr_result.unresolved_field_ids),
+                        "field_labels": sr_result.field_labels,
+                        "resolution_methods": sr_result.resolution_method,
+                    },
+                ))
+
             # Step 1: Build context (same as quick mode)
             with sw.lap("context_build"):
                 context_task = self._context_builder.build(
@@ -310,6 +358,24 @@ class AutofillPipelineService:
                 just_fill=just_fill,
             )
 
+        # Reasoning pre-check step log (if it ran)
+        if turn_result.reasoning_decision is not None:
+            step_logs.append(PipelineStepLog(
+                step_name="reasoning_precheck",
+                status="success",
+                duration_ms=turn_result.reasoning_duration_ms,
+                summary=f"decision={turn_result.reasoning_decision}: {turn_result.reasoning}",
+                details={
+                    "decision": turn_result.reasoning_decision,
+                    "reasoning": turn_result.reasoning,
+                },
+            ))
+
+        prompt_chars = (
+            (len(turn_result.system_prompt) if turn_result.system_prompt else 0)
+            + (len(turn_result.user_prompt) if turn_result.user_prompt else 0)
+        )
+        response_chars = len(turn_result.raw_llm_response) if turn_result.raw_llm_response else 0
         step_logs.append(PipelineStepLog(
             step_name="fill_plan_turn",
             status="success",
@@ -318,6 +384,9 @@ class AutofillPipelineService:
             details={
                 "turn_type": turn_result.type,
                 "model_used": turn_result.model_used,
+                "prompt_chars": prompt_chars,
+                "prompt_tokens_est": prompt_chars // 4,
+                "response_chars": response_chars,
                 "system_prompt": turn_result.system_prompt,
                 "user_prompt": turn_result.user_prompt,
                 "raw_llm_response": turn_result.raw_llm_response,

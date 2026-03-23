@@ -21,9 +21,11 @@ You must return a valid JSON response with this exact structure:
     {"field_id": "...", "value": "...", "confidence": 0.95, "source": "..."},
     ...
   ],
-  "unfilled_fields": ["field_id_1", "field_id_2"],
   "warnings": ["any warnings about data quality"]
 }
+
+IMPORTANT: Only include filled_fields and warnings. Do NOT include unfilled_fields — \
+any field not in filled_fields is automatically treated as unfilled.
 
 ## Field Identification:
 Each field may include a `nearby_labels` array — text found near the field on \
@@ -48,7 +50,6 @@ Include any filled compact fields in your filled_fields response using their fie
 - Match date formats to field type (use YYYY-MM-DD for date fields)
 - For checkboxes, return "true" or "false"
 - Include the source name/identifier for each filled field
-- If a field cannot be filled, include it in unfilled_fields
 - Add warnings for ambiguous or uncertain matches
 
 ## Response Guidelines:
@@ -81,9 +82,10 @@ Match field labels/names semantically - e.g., "Full Name" should match data labe
 "Name" or "Applicant Name".
 
 Return your response as a valid JSON object with:
-- filled_fields: Array of filled field objects
-- unfilled_fields: Array of field IDs that could not be filled
-- warnings: Array of warning messages
+- filled_fields: Array of filled field objects (only fields you can fill)
+- warnings: Array of warning messages (if any)
+
+Do NOT include unfilled_fields — omit fields you cannot fill.
 """
 
 
@@ -141,9 +143,11 @@ B) A fill plan (JSON):
   "filled_fields": [
     {"field_id": "...", "value": "...", "confidence": 0.95, "source": "..."}
   ],
-  "unfilled_fields": ["field_id_1", "field_id_2"],
   "warnings": ["any warnings about data quality"]
 }
+
+IMPORTANT: Only include filled_fields and warnings. Do NOT include unfilled_fields — \
+any field not in filled_fields is automatically treated as unfilled.
 
 ## Field Identification:
 Each field may include a `nearby_labels` array — text found near the field on \
@@ -170,14 +174,17 @@ at a time — gather everything you need in one round.
 - Typical forms need 3-5 questions. Ask about different categories of information \
 (e.g., personal info, dates, addresses, selections) all at once.
 - Prioritize questions that resolve ambiguity for MANY fields at once.
+- NEVER repeat a question that appears in the conversation history. Read the \
+history carefully — if a question was already asked and answered, use that answer.
 - When the user answers, integrate their answers and decide: do you still have \
-gaps or low confidence for remaining fields? If yes, ask another batch.
+gaps or low confidence for remaining fields? If yes, ask another batch of NEW questions.
 - Only return a fill plan when:
   (a) You are confident (>= 0.8) about most field values, OR
   (b) Further questions would not meaningfully improve accuracy, OR
-  (c) You have already asked 5+ questions total
+  (c) You have already asked 5+ questions total — STOP asking and fill now
 - Use the form's language for questions (match the language of nearby_labels).
 - Give each question a unique id (q1, q2, q3, ...).
+- After 2 rounds of questions, return a fill plan even if some fields have low confidence.
 
 ## Question Type Selection (CRITICAL — DO NOT default to free_text):
 - single_choice: When the answer is ONE of a known set of options.
@@ -231,11 +238,59 @@ is still missing or ambiguous.
 - If there are fields you cannot confidently fill (confidence < 0.8), ask ALL \
 clarifying questions you need at once in a single batch. Cover different \
 categories (personal info, dates, addresses, selections) together.
+- NEVER repeat questions from the conversation history — check what was already asked.
 - Only return a fill plan if you are confident about most field values, or if \
 you have already asked enough questions (5+).
+- When returning a fill plan, only include filled_fields. Do NOT include unfilled_fields.
 
 Return your response as a valid JSON object — either questions or a fill plan.
 """
+
+
+REASONING_SYSTEM_PROMPT = """You are a routing assistant for a form-filling system.
+Decide: "ask" (information missing) or "fill" (enough info available).
+
+Rules:
+- If questions_asked >= 3 and data covers most fields, choose "fill".
+- If the user already answered questions covering key missing info, choose "fill".
+- Only choose "ask" when critical information is genuinely missing and cannot be \
+inferred from the available data sources.
+- When in doubt, prefer "fill" — the system can always ask more later.
+"""
+
+REASONING_USER_PROMPT_TEMPLATE = """Fields to fill: {total_fields}
+Data source keys available: {data_source_keys}
+Questions asked so far: {questions_asked}
+
+Conversation summary:
+{conversation_summary}
+
+Should I ask more questions or fill the form now?"""
+
+
+def build_reasoning_prompt(
+    total_fields: int,
+    data_source_keys: list[str],
+    questions_asked: int,
+    conversation_summary: str,
+) -> str:
+    """Build the user prompt for the reasoning pre-check.
+
+    Args:
+        total_fields: Total number of form fields to fill.
+        data_source_keys: Keys available from data sources.
+        questions_asked: Number of Q&A rounds completed.
+        conversation_summary: Compact "Asked: ... / Answered: ..." lines.
+
+    Returns:
+        Formatted prompt string (~300-500 tokens).
+    """
+    return REASONING_USER_PROMPT_TEMPLATE.format(
+        total_fields=total_fields,
+        data_source_keys=", ".join(data_source_keys),
+        questions_asked=questions_asked,
+        conversation_summary=conversation_summary or "No conversation yet.",
+    )
 
 
 def build_detailed_prompt(
