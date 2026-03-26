@@ -1,7 +1,5 @@
 """Tests for correction REST endpoints."""
 
-import os
-
 import pytest
 from fastapi.testclient import TestClient
 
@@ -16,9 +14,11 @@ def _memory_mode(monkeypatch):
 def client():
     """Create a test client with fresh singletons."""
     from app.infrastructure.repositories.factory import clear_repository_singletons
+
     clear_repository_singletons()
 
     from app.main import create_app
+
     app = create_app()
     return TestClient(app)
 

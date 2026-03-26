@@ -385,9 +385,7 @@ async def _check_job_queue() -> ComponentHealth:
 
         # Count active jobs (non-blocking operation)
         all_jobs = job_repo.list_all()
-        active_count = sum(
-            1 for j in all_jobs if j.status.value not in ("completed", "failed")
-        )
+        active_count = sum(1 for j in all_jobs if j.status.value not in ("completed", "failed"))
 
         latency_ms = (time.perf_counter() - start_time) * 1000
         return ComponentHealth(

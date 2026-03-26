@@ -15,7 +15,6 @@ Endpoints:
 - GET    /api/v2/conversations/{id}/download  - Download filled PDF
 """
 
-from datetime import datetime, timezone
 from typing import Annotated
 from uuid import uuid4
 
@@ -402,7 +401,7 @@ async def send_message(
     )
 
     # Store agent message
-    stored_agent_message = message_repo.create(
+    message_repo.create(
         conversation_id=conversation_id,
         role=MessageRole.AGENT,
         content=agent_response.message.content,

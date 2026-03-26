@@ -16,7 +16,6 @@ from app.application.ports.embedding_gateway import (
     EmbeddingResult,
 )
 
-
 # Default embedding dimensions (matches text-embedding-3-small)
 DEFAULT_DIMENSIONS: Final[int] = 1536
 

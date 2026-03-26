@@ -18,16 +18,16 @@ Usage:
         # Use client for database operations
 """
 
-from app.infrastructure.supabase.client import get_supabase_client, SupabaseClient
+from app.infrastructure.supabase.auth import SupabaseAuthAdapter
+from app.infrastructure.supabase.client import SupabaseClient, get_supabase_client
 from app.infrastructure.supabase.config import (
-    get_supabase_config,
-    is_supabase_configured,
-    SupabaseConfig,
-    RepositoryMode,
     REPOSITORY_MODE_MEMORY,
     REPOSITORY_MODE_SUPABASE,
+    RepositoryMode,
+    SupabaseConfig,
+    get_supabase_config,
+    is_supabase_configured,
 )
-from app.infrastructure.supabase.auth import SupabaseAuthAdapter
 from app.infrastructure.supabase.storage import SupabaseStorageAdapter
 
 __all__ = [

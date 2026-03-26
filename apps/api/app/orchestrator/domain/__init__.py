@@ -6,11 +6,11 @@ These are pure functions with no external dependencies.
 """
 
 from app.orchestrator.domain.rules import (
-    TerminationCondition,
     TerminationAction,
-    check_termination,
+    TerminationCondition,
     calculate_improvement_rate,
     calculate_issue_score,
+    check_termination,
 )
 
 __all__ = [

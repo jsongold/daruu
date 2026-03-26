@@ -4,30 +4,17 @@ These tests verify that the Supabase repository classes correctly implement
 the repository protocols and properly convert data between models and database rows.
 """
 
-import pytest
-from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
+import pytest
 from app.models import (
-    Activity,
-    ActivityAction,
-    Document,
     DocumentMeta,
     DocumentType,
-    Evidence,
-    Extraction,
-    FieldModel,
     FieldType,
-    Issue,
-    IssueType,
     IssueSeverity,
-    JobContext,
-    JobMode,
-    JobStatus,
-    Mapping,
+    IssueType,
 )
-from app.models.common import BBox, CostSummaryModel
 
 
 class TestSupabaseDocumentRepository:
@@ -56,9 +43,7 @@ class TestSupabaseDocumentRepository:
         }
 
         # Mock the client
-        with patch(
-            "app.repositories.supabase.document_repository.get_supabase_client"
-        ):
+        with patch("app.repositories.supabase.document_repository.get_supabase_client"):
             repo = SupabaseDocumentRepository()
             doc = repo._to_document(row)
 
@@ -84,13 +69,9 @@ class TestSupabaseDocumentRepository:
             has_acroform=False,
         )
 
-        with patch(
-            "app.repositories.supabase.document_repository.get_supabase_client"
-        ):
+        with patch("app.repositories.supabase.document_repository.get_supabase_client"):
             repo = SupabaseDocumentRepository()
-            row = repo._to_row(
-                DocumentType.TARGET, meta, "supabase://docs/test.pdf", "doc-123"
-            )
+            row = repo._to_row(DocumentType.TARGET, meta, "supabase://docs/test.pdf", "doc-123")
 
         assert row["id"] == "doc-123"
         assert row["ref"] == "supabase://docs/test.pdf"
@@ -118,9 +99,7 @@ class TestSupabaseJobRepository:
             "is_editable": True,
         }
 
-        with patch(
-            "app.repositories.supabase.job_repository.get_supabase_client"
-        ):
+        with patch("app.repositories.supabase.job_repository.get_supabase_client"):
             repo = SupabaseJobRepository()
             field = repo._to_field(row)
 
@@ -145,9 +124,7 @@ class TestSupabaseJobRepository:
             "suggested_action": "Review the extracted value",
         }
 
-        with patch(
-            "app.repositories.supabase.job_repository.get_supabase_client"
-        ):
+        with patch("app.repositories.supabase.job_repository.get_supabase_client"):
             repo = SupabaseJobRepository()
             issue = repo._to_issue(row)
 
@@ -174,9 +151,7 @@ class TestSupabaseJobRepository:
             "model_name": "gpt-4o-mini",
         }
 
-        with patch(
-            "app.repositories.supabase.job_repository.get_supabase_client"
-        ):
+        with patch("app.repositories.supabase.job_repository.get_supabase_client"):
             repo = SupabaseJobRepository()
             cost = repo._to_cost_summary(cost_data)
 
@@ -190,9 +165,7 @@ class TestSupabaseJobRepository:
         """Test that empty cost data returns empty CostSummaryModel."""
         from app.repositories.supabase.job_repository import SupabaseJobRepository
 
-        with patch(
-            "app.repositories.supabase.job_repository.get_supabase_client"
-        ):
+        with patch("app.repositories.supabase.job_repository.get_supabase_client"):
             repo = SupabaseJobRepository()
             cost = repo._to_cost_summary({})
 
@@ -210,11 +183,10 @@ class TestSupabaseFileRepository:
         # The method should parse supabase://bucket/path correctly
         ref = "supabase://documents/doc-123/test.pdf"
 
-        with patch(
-            "app.repositories.supabase.file_repository.get_supabase_client"
-        ) as mock_client, patch(
-            "app.repositories.supabase.file_repository.get_supabase_config"
-        ) as mock_config:
+        with (
+            patch("app.repositories.supabase.file_repository.get_supabase_client") as mock_client,
+            patch("app.repositories.supabase.file_repository.get_supabase_config") as mock_config,
+        ):
             mock_config.return_value.bucket_documents = "documents"
             mock_bucket = MagicMock()
             mock_bucket.download.return_value = b"PDF content"
@@ -231,11 +203,10 @@ class TestSupabaseFileRepository:
         """Test that store creates the correct storage path."""
         from app.repositories.supabase.file_repository import SupabaseFileRepository
 
-        with patch(
-            "app.repositories.supabase.file_repository.get_supabase_client"
-        ) as mock_client, patch(
-            "app.repositories.supabase.file_repository.get_supabase_config"
-        ) as mock_config:
+        with (
+            patch("app.repositories.supabase.file_repository.get_supabase_client") as mock_client,
+            patch("app.repositories.supabase.file_repository.get_supabase_config") as mock_config,
+        ):
             mock_config.return_value.bucket_documents = "documents"
             mock_bucket = MagicMock()
             mock_client.return_value.storage.from_.return_value = mock_bucket
@@ -254,15 +225,15 @@ class TestRepositoryFactory:
     def test_memory_mode_returns_memory_repos(self) -> None:
         """Test that memory mode returns in-memory repositories."""
         from app.infrastructure.repositories.factory import (
-            get_document_repository,
-            get_job_repository,
-            get_file_repository,
             clear_repository_singletons,
+            get_document_repository,
+            get_file_repository,
+            get_job_repository,
         )
         from app.infrastructure.repositories.memory_repository import (
             MemoryDocumentRepository,
-            MemoryJobRepository,
             MemoryFileRepository,
+            MemoryJobRepository,
         )
 
         clear_repository_singletons()
@@ -278,8 +249,8 @@ class TestRepositoryFactory:
     def test_auto_mode_without_supabase_returns_memory(self) -> None:
         """Test that auto mode without Supabase config returns memory repos."""
         from app.infrastructure.repositories.factory import (
-            get_document_repository,
             clear_repository_singletons,
+            get_document_repository,
         )
         from app.infrastructure.repositories.memory_repository import (
             MemoryDocumentRepository,
@@ -298,18 +269,21 @@ class TestRepositoryFactory:
     def test_default_mode_without_config_raises_error(self) -> None:
         """Test that default (supabase) mode without config raises RuntimeError."""
         from app.infrastructure.repositories.factory import (
-            get_document_repository,
             clear_repository_singletons,
+            get_document_repository,
         )
 
         clear_repository_singletons()
 
-        with patch(
-            "app.infrastructure.repositories.factory.is_supabase_configured",
-            return_value=False,
-        ), patch(
-            "app.infrastructure.repositories.factory._is_test_mode",
-            return_value=False,
+        with (
+            patch(
+                "app.infrastructure.repositories.factory.is_supabase_configured",
+                return_value=False,
+            ),
+            patch(
+                "app.infrastructure.repositories.factory._is_test_mode",
+                return_value=False,
+            ),
         ):
             with pytest.raises(RuntimeError, match="Supabase is not configured"):
                 get_document_repository()  # Default is supabase, should raise
@@ -341,14 +315,11 @@ class TestProtocolCompliance:
 
     def test_document_repository_protocol(self) -> None:
         """Test SupabaseDocumentRepository implements DocumentRepository."""
-        from app.repositories import DocumentRepository
         from app.repositories.supabase.document_repository import (
             SupabaseDocumentRepository,
         )
 
-        with patch(
-            "app.repositories.supabase.document_repository.get_supabase_client"
-        ):
+        with patch("app.repositories.supabase.document_repository.get_supabase_client"):
             repo = SupabaseDocumentRepository()
 
         # Check required methods exist
@@ -363,12 +334,9 @@ class TestProtocolCompliance:
 
     def test_job_repository_protocol(self) -> None:
         """Test SupabaseJobRepository implements JobRepository."""
-        from app.repositories import JobRepository
         from app.repositories.supabase.job_repository import SupabaseJobRepository
 
-        with patch(
-            "app.repositories.supabase.job_repository.get_supabase_client"
-        ):
+        with patch("app.repositories.supabase.job_repository.get_supabase_client"):
             repo = SupabaseJobRepository()
 
         # Check required methods exist
@@ -385,13 +353,11 @@ class TestProtocolCompliance:
 
     def test_file_repository_protocol(self) -> None:
         """Test SupabaseFileRepository implements FileRepository."""
-        from app.repositories import FileRepository
         from app.repositories.supabase.file_repository import SupabaseFileRepository
 
-        with patch(
-            "app.repositories.supabase.file_repository.get_supabase_client"
-        ), patch(
-            "app.repositories.supabase.file_repository.get_supabase_config"
+        with (
+            patch("app.repositories.supabase.file_repository.get_supabase_client"),
+            patch("app.repositories.supabase.file_repository.get_supabase_config"),
         ):
             repo = SupabaseFileRepository()
 

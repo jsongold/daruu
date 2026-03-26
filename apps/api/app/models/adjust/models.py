@@ -41,16 +41,10 @@ class RenderParams(BaseModel):
     Controls how a field value should be rendered in the target document.
     """
 
-    font_size: float | None = Field(
-        default=None, gt=0, le=72, description="Font size in points"
-    )
-    line_height: float | None = Field(
-        default=None, gt=0, description="Line height multiplier"
-    )
+    font_size: float | None = Field(default=None, gt=0, le=72, description="Font size in points")
+    line_height: float | None = Field(default=None, gt=0, description="Line height multiplier")
     wrap: bool | None = Field(default=None, description="Enable text wrapping")
-    max_lines: int | None = Field(
-        default=None, ge=1, description="Maximum number of lines"
-    )
+    max_lines: int | None = Field(default=None, ge=1, description="Maximum number of lines")
     alignment: str | None = Field(
         default=None,
         description="Text alignment (left, center, right, justify)",
@@ -73,19 +67,13 @@ class FieldPatch(BaseModel):
 
     field_id: str = Field(..., min_length=1, description="ID of the field to patch")
     patch_type: PatchType = Field(..., description="Type of patch being applied")
-    original_bbox: BBox | None = Field(
-        default=None, description="Original bbox before adjustment"
-    )
-    adjusted_bbox: BBox | None = Field(
-        default=None, description="New bbox after adjustment"
-    )
+    original_bbox: BBox | None = Field(default=None, description="Original bbox before adjustment")
+    adjusted_bbox: BBox | None = Field(default=None, description="New bbox after adjustment")
     render_params: RenderParams | None = Field(
         default=None, description="Render parameter adjustments"
     )
     reason: str = Field(..., description="Human-readable reason for adjustment")
-    issue_id: str | None = Field(
-        default=None, description="ID of the issue this patch addresses"
-    )
+    issue_id: str | None = Field(default=None, description="ID of the issue this patch addresses")
     confidence_delta: float | None = Field(
         default=None,
         ge=-1.0,
@@ -167,9 +155,7 @@ class AdjustError(BaseModel):
 
     code: AdjustErrorCode = Field(..., description="Error code")
     message: str = Field(..., description="Human-readable error message")
-    field_id: str | None = Field(
-        default=None, description="Field ID if error is field-specific"
-    )
+    field_id: str | None = Field(default=None, description="Field ID if error is field-specific")
 
     model_config = {"frozen": True}
 

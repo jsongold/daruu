@@ -9,8 +9,6 @@ These models represent the core domain concepts for value extraction:
 All models use frozen=True for immutability, following project conventions.
 """
 
-from enum import Enum
-
 from pydantic import BaseModel, Field
 
 from app.models.common import BBox
@@ -38,9 +36,7 @@ class OcrToken(BaseModel):
 
     text: str = Field(..., description="Recognized text content")
     bbox: BBox = Field(..., description="Bounding box of the token")
-    confidence: float = Field(
-        ..., ge=0.0, le=1.0, description="OCR confidence score"
-    )
+    confidence: float = Field(..., ge=0.0, le=1.0, description="OCR confidence score")
 
     model_config = {"frozen": True}
 
@@ -53,13 +49,9 @@ class OcrLine(BaseModel):
     """
 
     text: str = Field(..., description="Full line text (concatenated tokens)")
-    tokens: tuple[OcrToken, ...] = Field(
-        ..., description="Individual tokens in the line"
-    )
+    tokens: tuple[OcrToken, ...] = Field(..., description="Individual tokens in the line")
     bbox: BBox = Field(..., description="Bounding box encompassing the line")
-    confidence: float = Field(
-        ..., ge=0.0, le=1.0, description="Aggregate line confidence"
-    )
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Aggregate line confidence")
 
     model_config = {"frozen": True}
 
@@ -72,15 +64,11 @@ class OcrResult(BaseModel):
     """
 
     page: int = Field(..., ge=1, description="Page number (1-indexed)")
-    lines: tuple[OcrLine, ...] = Field(
-        ..., description="Recognized lines of text"
-    )
+    lines: tuple[OcrLine, ...] = Field(..., description="Recognized lines of text")
     region_bbox: BBox | None = Field(
         None, description="Bounding box of the OCR region (None = full page)"
     )
-    engine: str = Field(
-        default="paddleocr", description="OCR engine used (paddleocr, tesseract)"
-    )
+    engine: str = Field(default="paddleocr", description="OCR engine used (paddleocr, tesseract)")
     processing_time_ms: int | None = Field(
         None, description="Time taken for OCR processing in milliseconds"
     )
@@ -123,9 +111,7 @@ class NativeTextResult(BaseModel):
     """
 
     page: int = Field(..., ge=1, description="Page number (1-indexed)")
-    lines: tuple[NativeTextLine, ...] = Field(
-        ..., description="Extracted text lines"
-    )
+    lines: tuple[NativeTextLine, ...] = Field(..., description="Extracted text lines")
     region_bbox: BBox | None = Field(
         None, description="Bounding box of extraction region (None = full page)"
     )
@@ -153,14 +139,8 @@ class ValueCandidate(BaseModel):
     """
 
     value: str = Field(..., description="Candidate value string")
-    confidence: float = Field(
-        ..., ge=0.0, le=1.0, description="Confidence score"
-    )
-    rationale: str | None = Field(
-        None, description="Explanation for this candidate"
-    )
-    evidence_refs: tuple[str, ...] = Field(
-        default=(), description="IDs of supporting evidence"
-    )
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Confidence score")
+    rationale: str | None = Field(None, description="Explanation for this candidate")
+    evidence_refs: tuple[str, ...] = Field(default=(), description="IDs of supporting evidence")
 
     model_config = {"frozen": True}

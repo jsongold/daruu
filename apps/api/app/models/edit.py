@@ -9,7 +9,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-
 # ============================================
 # Bbox Model
 # ============================================
@@ -154,7 +153,9 @@ class EditResponse(BaseModel):
     field_id: str = Field(..., description="ID of the edited field")
     old_value: str | None = Field(None, description="Previous value")
     new_value: str = Field(..., description="New value after edit")
-    message: str = Field(..., description="Human-readable message (e.g., 'Updated [field] to [value]')")
+    message: str = Field(
+        ..., description="Human-readable message (e.g., 'Updated [field] to [value]')"
+    )
 
     model_config = {"frozen": True}
 

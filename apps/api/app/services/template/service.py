@@ -19,14 +19,12 @@ from app.application.ports.vector_db_gateway import VectorDBGateway
 from app.infrastructure.observability import get_logger
 from app.models.template import (
     Template,
-    TemplateBbox,
     TemplateCreate,
     TemplateMatch,
     TemplateRule,
     TemplateUpdate,
 )
 from app.repositories.template_repository import TemplateRepository
-
 
 logger = get_logger(__name__)
 
@@ -191,7 +189,9 @@ class TemplateService:
         form_type = request.form_type if request.form_type is not None else existing.form_type
         bboxes = tuple(request.bboxes) if request.bboxes is not None else existing.bboxes
         rules = tuple(request.rules) if request.rules is not None else existing.rules
-        preview_url = request.preview_url if request.preview_url is not None else existing.preview_url
+        preview_url = (
+            request.preview_url if request.preview_url is not None else existing.preview_url
+        )
         field_count = len(bboxes)
 
         # Update embedding if new image provided

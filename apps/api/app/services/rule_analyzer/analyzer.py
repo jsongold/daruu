@@ -191,9 +191,7 @@ class RuleAnalyzer:
                 logger.warning(f"Failed to persist rule snippet: {e}")
                 return snippet
 
-        persisted = list(await asyncio.gather(
-            *(_safe_persist(s) for s in all_snippets)
-        ))
+        persisted = list(await asyncio.gather(*(_safe_persist(s) for s in all_snippets)))
         t_persist = int((time.time() - t_persist_start) * 1000)
 
         total_ms = int((time.time() - t_start) * 1000)

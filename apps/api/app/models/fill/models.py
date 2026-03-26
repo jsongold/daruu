@@ -75,12 +75,8 @@ class RenderParams(BaseModel):
     All parameters have sensible defaults for general use.
     """
 
-    font_name: str = Field(
-        default="Helvetica", description="Font family name"
-    )
-    font_size: float = Field(
-        default=12.0, gt=0, le=200, description="Font size in points"
-    )
+    font_name: str = Field(default="Helvetica", description="Font family name")
+    font_size: float = Field(default=12.0, gt=0, le=200, description="Font size in points")
     font_color: tuple[float, float, float] = Field(
         default=(0.0, 0.0, 0.0),
         description="RGB color as tuple of floats (0-1 range)",
@@ -88,12 +84,8 @@ class RenderParams(BaseModel):
     alignment: str = Field(
         default="left", pattern="^(left|center|right)$", description="Text alignment"
     )
-    line_height: float = Field(
-        default=1.2, gt=0, le=5, description="Line height multiplier"
-    )
-    word_wrap: bool = Field(
-        default=True, description="Enable automatic word wrapping"
-    )
+    line_height: float = Field(default=1.2, gt=0, le=5, description="Line height multiplier")
+    word_wrap: bool = Field(default=True, description="Enable automatic word wrapping")
     overflow_handling: str = Field(
         default="truncate",
         pattern="^(truncate|shrink|error)$",
@@ -145,9 +137,7 @@ class FillIssue(BaseModel):
     issue_type: IssueType = Field(..., description="Type of issue detected")
     severity: IssueSeverity = Field(..., description="Severity level")
     message: str = Field(..., description="Human-readable description")
-    details: dict[str, Any] | None = Field(
-        default=None, description="Additional issue details"
-    )
+    details: dict[str, Any] | None = Field(default=None, description="Additional issue details")
 
     model_config = {"frozen": True}
 
@@ -160,9 +150,7 @@ class FillError(BaseModel):
 
     code: FillErrorCode = Field(..., description="Error code")
     message: str = Field(..., description="Human-readable error message")
-    field_id: str | None = Field(
-        default=None, description="Field ID if error is field-specific"
-    )
+    field_id: str | None = Field(default=None, description="Field ID if error is field-specific")
 
     model_config = {"frozen": True}
 
@@ -213,21 +201,13 @@ class FillResult(BaseModel):
     filled_document_ref: str | None = Field(
         default=None, description="Reference to the filled PDF (if successful)"
     )
-    method_used: FillMethod = Field(
-        ..., description="Method that was actually used for filling"
-    )
+    method_used: FillMethod = Field(..., description="Method that was actually used for filling")
     field_results: tuple[FieldFillResult, ...] = Field(
         default=(), description="Per-field fill results"
     )
-    filled_count: int = Field(
-        default=0, ge=0, description="Number of fields successfully filled"
-    )
-    failed_count: int = Field(
-        default=0, ge=0, description="Number of fields that failed to fill"
-    )
-    errors: tuple[FillError, ...] = Field(
-        default=(), description="Fatal errors encountered"
-    )
+    filled_count: int = Field(default=0, ge=0, description="Number of fields successfully filled")
+    failed_count: int = Field(default=0, ge=0, description="Number of fields that failed to fill")
+    errors: tuple[FillError, ...] = Field(default=(), description="Fatal errors encountered")
     artifacts: tuple[RenderArtifact, ...] = Field(
         default=(), description="Rendering artifacts produced"
     )

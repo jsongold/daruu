@@ -140,9 +140,7 @@ class RedisJobStore:
                 return
             except Exception as e:
                 last_error = e
-                logger.warning(
-                    f"Redis connection attempt {attempt + 1}/{max_retries} failed: {e}"
-                )
+                logger.warning(f"Redis connection attempt {attempt + 1}/{max_retries} failed: {e}")
                 if attempt < max_retries - 1:
                     await asyncio.sleep(retry_delay * (attempt + 1))
 
@@ -265,9 +263,7 @@ class RedisJobStore:
         new_fields = [*job.fields, field]
         return await self.update(job_id, fields=new_fields)
 
-    async def update_field(
-        self, job_id: str, field_id: str, **updates: Any
-    ) -> JobContext | None:
+    async def update_field(self, job_id: str, field_id: str, **updates: Any) -> JobContext | None:
         job = await self.get(job_id)
         if job is None:
             return None
@@ -295,9 +291,7 @@ class RedisJobStore:
         new_mappings = [*job.mappings, mapping]
         return await self.update(job_id, mappings=new_mappings)
 
-    async def add_extraction(
-        self, job_id: str, extraction: Extraction
-    ) -> JobContext | None:
+    async def add_extraction(self, job_id: str, extraction: Extraction) -> JobContext | None:
         job = await self.get(job_id)
         if job is None:
             return None
@@ -333,7 +327,9 @@ class RedisJobStore:
         job_ids = await self._redis.smembers(self._all_jobs_key())
         jobs = []
         for job_id_bytes in job_ids:
-            job_id = job_id_bytes.decode("utf-8") if isinstance(job_id_bytes, bytes) else job_id_bytes
+            job_id = (
+                job_id_bytes.decode("utf-8") if isinstance(job_id_bytes, bytes) else job_id_bytes
+            )
             job = await self.get(job_id)
             if job is not None:
                 jobs.append(job)
@@ -344,7 +340,9 @@ class RedisJobStore:
         job_ids = await self._redis.smembers(self._status_key(status))
         jobs = []
         for job_id_bytes in job_ids:
-            job_id = job_id_bytes.decode("utf-8") if isinstance(job_id_bytes, bytes) else job_id_bytes
+            job_id = (
+                job_id_bytes.decode("utf-8") if isinstance(job_id_bytes, bytes) else job_id_bytes
+            )
             job = await self.get(job_id)
             if job is not None and job.status == status:
                 jobs.append(job)
@@ -373,9 +371,7 @@ class RedisJobStore:
         lock_timeout = timeout if timeout is not None else self._lock_timeout
         lock_key = self._lock_key(job_id)
 
-        acquired = await self._redis.set(
-            lock_key, "1", nx=True, ex=lock_timeout
-        )
+        acquired = await self._redis.set(lock_key, "1", nx=True, ex=lock_timeout)
 
         if acquired:
             logger.debug(f"Acquired lock for job {job_id}")
@@ -457,7 +453,9 @@ class RedisJobStore:
         job_ids = await self._redis.smembers(self._all_jobs_key())
 
         for job_id_bytes in job_ids:
-            job_id = job_id_bytes.decode("utf-8") if isinstance(job_id_bytes, bytes) else job_id_bytes
+            job_id = (
+                job_id_bytes.decode("utf-8") if isinstance(job_id_bytes, bytes) else job_id_bytes
+            )
             exists = await self._redis.exists(self._job_key(job_id))
             if not exists:
                 async with self._redis.pipeline() as pipe:

@@ -1,7 +1,5 @@
 """Tests for the text chunker used by RuleAnalyzer."""
 
-import pytest
-
 from app.services.rule_analyzer.chunker import chunk_document
 
 

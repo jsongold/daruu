@@ -34,9 +34,7 @@ class OCRLine(BaseModel):
         ..., description="Bounding box (x0, y0, x1, y1)"
     )
     confidence: float = Field(..., ge=0.0, le=1.0, description="Average confidence")
-    tokens: list[OCRToken] = Field(
-        default_factory=list, description="Tokens in this line"
-    )
+    tokens: list[OCRToken] = Field(default_factory=list, description="Tokens in this line")
 
     model_config = {"frozen": True}
 
@@ -48,12 +46,8 @@ class OCRResult(BaseModel):
     ocr_tokens: list[OCRToken] = Field(
         default_factory=list, description="Individual tokens with positions"
     )
-    ocr_lines: list[OCRLine] = Field(
-        default_factory=list, description="Lines with positions"
-    )
-    ocr_language: str = Field(
-        default="ja-JP", description="Detected/specified language"
-    )
+    ocr_lines: list[OCRLine] = Field(default_factory=list, description="Lines with positions")
+    ocr_language: str = Field(default="ja-JP", description="Detected/specified language")
     average_confidence: float = Field(
         ..., ge=0.0, le=1.0, description="Average confidence across all tokens"
     )

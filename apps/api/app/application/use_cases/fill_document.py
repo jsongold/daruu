@@ -76,9 +76,7 @@ class FillResult(BaseModel):
     document_id: str = Field(..., description="Target document ID")
     output_ref: str = Field(..., description="Reference to filled PDF")
     success: bool = Field(..., description="Whether filling succeeded")
-    filled_fields: list[str] = Field(
-        default_factory=list, description="Field IDs that were filled"
-    )
+    filled_fields: list[str] = Field(default_factory=list, description="Field IDs that were filled")
     failed_fields: list[str] = Field(
         default_factory=list, description="Field IDs that failed to fill"
     )
@@ -86,9 +84,7 @@ class FillResult(BaseModel):
         default_factory=list,
         description="Issues encountered (overflow, overlap, etc.)",
     )
-    errors: list[str] = Field(
-        default_factory=list, description="Any errors encountered"
-    )
+    errors: list[str] = Field(default_factory=list, description="Any errors encountered")
 
     model_config = {"frozen": True}
 
@@ -204,9 +200,7 @@ class FillDocumentUseCase:
                         field_value.bbox, field_value.value, params
                     )
                     if would_overflow:
-                        issues.append(
-                            f"Field {field_value.field_id}: Text may overflow bbox"
-                        )
+                        issues.append(f"Field {field_value.field_id}: Text may overflow bbox")
 
                     # Check overlap
                     page_bboxes = filled_bboxes.get(field_value.page, [])
@@ -215,14 +209,11 @@ class FillDocumentUseCase:
                     )
                     if would_overlap:
                         issues.append(
-                            f"Field {field_value.field_id}: Bbox overlaps with "
-                            "another field"
+                            f"Field {field_value.field_id}: Bbox overlaps with another field"
                         )
 
                 # Fill the field
-                success = await self._fill_field(
-                    pdf_writer, request, field_value, params
-                )
+                success = await self._fill_field(pdf_writer, request, field_value, params)
 
                 if success:
                     filled_fields.append(field_value.field_id)

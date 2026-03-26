@@ -12,7 +12,7 @@ from uuid import uuid4
 
 from mcp.types import CallToolResult, TextContent
 
-from app.mcp.session import get_current_session, save_session
+from app.mcp.session import get_current_session
 
 
 # Redis for tracking pending uploads
@@ -20,6 +20,7 @@ def _get_redis_client() -> Any:
     """Get Redis client."""
     try:
         import redis
+
         redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/2")
         client = redis.from_url(redis_url, decode_responses=True)
         client.ping()
@@ -51,10 +52,11 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
     session = await get_current_session()
     if not session:
         return CallToolResult(
-            content=[TextContent(
-                type="text",
-                text="Error: No active session. Please start a new conversation."
-            )]
+            content=[
+                TextContent(
+                    type="text", text="Error: No active session. Please start a new conversation."
+                )
+            ]
         )
 
     # Create upload token
@@ -93,9 +95,7 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
         f"_Upload ID: `{upload_id}`_"
     )
 
-    return CallToolResult(
-        content=[TextContent(type="text", text=response_text)]
-    )
+    return CallToolResult(content=[TextContent(type="text", text=response_text)])
 
 
 async def check_upload_status(arguments: dict[str, Any]) -> CallToolResult:
@@ -112,28 +112,17 @@ async def check_upload_status(arguments: dict[str, Any]) -> CallToolResult:
 
     if not upload_id:
         return CallToolResult(
-            content=[TextContent(
-                type="text",
-                text="Error: upload_id is required"
-            )]
+            content=[TextContent(type="text", text="Error: upload_id is required")]
         )
 
     client = _get_redis_client()
     if not client:
-        return CallToolResult(
-            content=[TextContent(
-                type="text",
-                text="Error: Storage unavailable"
-            )]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="Error: Storage unavailable")])
 
     data = client.get(f"{UPLOAD_PREFIX}{upload_id}")
     if not data:
         return CallToolResult(
-            content=[TextContent(
-                type="text",
-                text="Error: Upload not found or expired"
-            )]
+            content=[TextContent(type="text", text="Error: Upload not found or expired")]
         )
 
     upload_data = json.loads(data)
@@ -142,34 +131,33 @@ async def check_upload_status(arguments: dict[str, Any]) -> CallToolResult:
 
     if status == "completed" and form_id:
         return CallToolResult(
-            content=[TextContent(
-                type="text",
-                text=(
-                    f"✓ Upload complete!\n\n"
-                    f"Form ID: `{form_id}`\n\n"
-                    f"You can now use `get_fields`, `autofill_form`, "
-                    f"or other tools with this form."
+            content=[
+                TextContent(
+                    type="text",
+                    text=(
+                        f"✓ Upload complete!\n\n"
+                        f"Form ID: `{form_id}`\n\n"
+                        f"You can now use `get_fields`, `autofill_form`, "
+                        f"or other tools with this form."
+                    ),
                 )
-            )]
+            ]
         )
     elif status == "pending":
         return CallToolResult(
-            content=[TextContent(
-                type="text",
-                text=(
-                    f"⏳ Waiting for upload...\n\n"
-                    f"The user hasn't uploaded a file yet. "
-                    f"Please wait for them to complete the upload."
+            content=[
+                TextContent(
+                    type="text",
+                    text=(
+                        "⏳ Waiting for upload...\n\n"
+                        "The user hasn't uploaded a file yet. "
+                        "Please wait for them to complete the upload."
+                    ),
                 )
-            )]
+            ]
         )
     else:
-        return CallToolResult(
-            content=[TextContent(
-                type="text",
-                text=f"Upload status: {status}"
-            )]
-        )
+        return CallToolResult(content=[TextContent(type="text", text=f"Upload status: {status}")])
 
 
 async def handle_source_docs(arguments: dict[str, Any]) -> CallToolResult:
@@ -180,12 +168,7 @@ async def handle_source_docs(arguments: dict[str, Any]) -> CallToolResult:
     """
     session = await get_current_session()
     if not session:
-        return CallToolResult(
-            content=[TextContent(
-                type="text",
-                text="Error: No active session"
-            )]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="Error: No active session")])
 
     upload_id = str(uuid4())
     session_id = session["id"]
@@ -217,6 +200,4 @@ async def handle_source_docs(arguments: dict[str, Any]) -> CallToolResult:
         f"_Upload ID: `{upload_id}`_"
     )
 
-    return CallToolResult(
-        content=[TextContent(type="text", text=response_text)]
-    )
+    return CallToolResult(content=[TextContent(type="text", text=response_text)])

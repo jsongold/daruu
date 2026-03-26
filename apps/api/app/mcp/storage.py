@@ -46,6 +46,7 @@ def _get_redis_client() -> Any:
 
     try:
         import redis
+
         redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/2")
         _redis_client = redis.from_url(redis_url, decode_responses=True)
         _redis_client.ping()
@@ -122,7 +123,9 @@ class MCPStorage:
                         "page": page_num,
                         "bbox": list(widget.rect),
                         "value": widget.field_value,
-                        "options": widget.choice_values if field_type in ("dropdown", "radio") else None,
+                        "options": widget.choice_values
+                        if field_type in ("dropdown", "radio")
+                        else None,
                         "required": False,  # AcroForm doesn't always specify
                         "readonly": bool(widget.field_flags & 1),
                     }
@@ -165,12 +168,12 @@ class MCPStorage:
     def _get_field_type(self, widget_type: int) -> str:
         """Map PyMuPDF widget type to field type string."""
         type_map = {
-            0: "text",      # PDF_WIDGET_TYPE_UNKNOWN
-            1: "text",      # PDF_WIDGET_TYPE_TEXT
+            0: "text",  # PDF_WIDGET_TYPE_UNKNOWN
+            1: "text",  # PDF_WIDGET_TYPE_TEXT
             2: "checkbox",  # PDF_WIDGET_TYPE_BUTTON
             3: "dropdown",  # PDF_WIDGET_TYPE_COMBOBOX
             4: "dropdown",  # PDF_WIDGET_TYPE_LISTBOX
-            5: "text",      # PDF_WIDGET_TYPE_SIGNATURE
+            5: "text",  # PDF_WIDGET_TYPE_SIGNATURE
         }
         return type_map.get(widget_type, "text")
 
@@ -299,6 +302,7 @@ class MCPStorage:
         page_count = 1
         if mime_type == "application/pdf":
             import fitz
+
             doc = fitz.open(str(file_path))
             page_count = len(doc)
             doc.close()
@@ -369,10 +373,7 @@ class MCPStorage:
                 if cursor == 0:
                     break
             return docs
-        return [
-            doc for key, doc in _memory_source_docs.items()
-            if key.startswith(prefix)
-        ]
+        return [doc for key, doc in _memory_source_docs.items() if key.startswith(prefix)]
 
     async def get_user_profile(
         self,
@@ -452,11 +453,7 @@ class MCPStorage:
                     break
         else:
             global _memory_forms, _memory_source_docs
-            _memory_forms = {
-                k: v for k, v in _memory_forms.items()
-                if not k.startswith(prefix)
-            }
+            _memory_forms = {k: v for k, v in _memory_forms.items() if not k.startswith(prefix)}
             _memory_source_docs = {
-                k: v for k, v in _memory_source_docs.items()
-                if not k.startswith(prefix)
+                k: v for k, v in _memory_source_docs.items() if not k.startswith(prefix)
             }

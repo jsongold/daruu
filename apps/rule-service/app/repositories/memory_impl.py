@@ -15,9 +15,7 @@ class MemoryRuleSnippetRepository:
     def __init__(self) -> None:
         self._store: list[tuple[RuleSnippet, list[float] | None]] = []
 
-    def create(
-        self, snippet: RuleSnippet, embedding: list[float] | None = None
-    ) -> RuleSnippet:
+    def create(self, snippet: RuleSnippet, embedding: list[float] | None = None) -> RuleSnippet:
         stored = RuleSnippet(
             id=snippet.id or str(uuid4()),
             document_id=snippet.document_id,
@@ -30,12 +28,8 @@ class MemoryRuleSnippetRepository:
         self._store.append((stored, embedding))
         return stored
 
-    def list_by_document(
-        self, document_id: str, limit: int = 100
-    ) -> list[RuleSnippet]:
-        matches = [
-            s for s, _ in self._store if s.document_id == document_id
-        ]
+    def list_by_document(self, document_id: str, limit: int = 100) -> list[RuleSnippet]:
+        matches = [s for s, _ in self._store if s.document_id == document_id]
         matches.sort(key=lambda s: s.created_at, reverse=True)
         return matches[:limit]
 
@@ -57,9 +51,7 @@ class MemoryRuleSnippetRepository:
 
     def delete_by_document(self, document_id: str) -> int:
         before = len(self._store)
-        self._store = [
-            (s, e) for s, e in self._store if s.document_id != document_id
-        ]
+        self._store = [(s, e) for s, e in self._store if s.document_id != document_id]
         return before - len(self._store)
 
 

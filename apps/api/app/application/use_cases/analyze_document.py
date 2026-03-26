@@ -25,9 +25,7 @@ class AnalyzeRequest(BaseModel):
 
     document_id: str = Field(..., description="Document ID to analyze")
     document_ref: str = Field(..., description="Reference to the document file")
-    page_image_refs: list[str] = Field(
-        ..., description="References to page images for analysis"
-    )
+    page_image_refs: list[str] = Field(..., description="References to page images for analysis")
     options: dict[str, str | int | float | bool] = Field(
         default_factory=dict, description="Analysis options"
     )
@@ -43,12 +41,8 @@ class AnalyzeResult(BaseModel):
         default_factory=list, description="Detected and linked fields"
     )
     success: bool = Field(..., description="Whether analysis succeeded")
-    errors: list[str] = Field(
-        default_factory=list, description="Any errors encountered"
-    )
-    warnings: list[str] = Field(
-        default_factory=list, description="Any warnings generated"
-    )
+    errors: list[str] = Field(default_factory=list, description="Any errors encountered")
+    warnings: list[str] = Field(default_factory=list, description="Any warnings generated")
 
     model_config = {"frozen": True}
 
@@ -56,15 +50,11 @@ class AnalyzeResult(BaseModel):
 class DocumentAnalyzer(Protocol):
     """Interface for document structure analysis (detecting boxes/labels)."""
 
-    async def detect_labels(
-        self, page_image_ref: str
-    ) -> list[LabelCandidate]:
+    async def detect_labels(self, page_image_ref: str) -> list[LabelCandidate]:
         """Detect label candidates in a page image."""
         ...
 
-    async def detect_boxes(
-        self, page_image_ref: str
-    ) -> list[BoxCandidate]:
+    async def detect_boxes(self, page_image_ref: str) -> list[BoxCandidate]:
         """Detect input box candidates in a page image."""
         ...
 
@@ -110,12 +100,8 @@ class AnalyzeDocumentUseCase:
             try:
                 # Step 1: Detect labels and boxes
                 if document_analyzer:
-                    label_candidates = await document_analyzer.detect_labels(
-                        page_image_ref
-                    )
-                    box_candidates = await document_analyzer.detect_boxes(
-                        page_image_ref
-                    )
+                    label_candidates = await document_analyzer.detect_labels(page_image_ref)
+                    box_candidates = await document_analyzer.detect_boxes(page_image_ref)
                 else:
                     # Fallback to OCR-based detection
                     label_candidates, box_candidates = await self._detect_via_ocr(
@@ -171,8 +157,7 @@ class AnalyzeDocumentUseCase:
         # In production, this would use more sophisticated detection
         text_regions = await self.ocr_gateway.detect_text_regions(page_image_ref)
         box_candidates = [
-            BoxCandidate(bbox=bbox, page=page, box_type="text")
-            for bbox in text_regions
+            BoxCandidate(bbox=bbox, page=page, box_type="text") for bbox in text_regions
         ]
 
         return label_candidates, box_candidates

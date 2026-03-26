@@ -1,14 +1,12 @@
 """Tests for Supabase resilience module."""
 
-import pytest
 import time
-from unittest.mock import Mock, patch
 
+import pytest
 from app.infrastructure.supabase.resilience import (
     is_retryable_error,
     with_retry,
     with_retry_result,
-    RETRYABLE_STATUS_CODES,
 )
 
 

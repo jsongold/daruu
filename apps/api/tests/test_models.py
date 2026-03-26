@@ -1,22 +1,16 @@
 """Tests for Pydantic models."""
 
 import pytest
-from pydantic import ValidationError
-
 from app.models import (
     Activity,
     ActivityAction,
     ApiResponse,
     BBox,
     ConfidenceSummary,
-    Document,
     DocumentMeta,
-    DocumentResponse,
-    DocumentType,
     ErrorDetail,
     ErrorResponse,
     Evidence,
-    EvidenceResponse,
     Extraction,
     FieldAnswer,
     FieldEdit,
@@ -25,19 +19,13 @@ from app.models import (
     Issue,
     IssueSeverity,
     IssueType,
-    JobContext,
     JobCreate,
     JobMode,
-    JobResponse,
-    JobStatus,
     Mapping,
-    PagePreview,
-    PaginationMeta,
-    ReviewResponse,
     RunMode,
     RunRequest,
-    RunResponse,
 )
+from pydantic import ValidationError
 
 
 class TestBBox:

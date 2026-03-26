@@ -35,9 +35,7 @@ class SupabaseClient(Protocol):
 class AuthClient(Protocol):
     """Protocol for Supabase Auth client."""
 
-    async def sign_in_with_password(
-        self, email: str, password: str
-    ) -> dict:
+    async def sign_in_with_password(self, email: str, password: str) -> dict:
         """Sign in with email and password."""
         ...
 
@@ -90,9 +88,7 @@ class BucketClient(Protocol):
         """Get the public URL for a file."""
         ...
 
-    async def create_signed_url(
-        self, path: str, expires_in: int
-    ) -> dict:
+    async def create_signed_url(self, path: str, expires_in: int) -> dict:
         """Create a signed URL for private file access."""
         ...
 
@@ -132,9 +128,7 @@ class QueryBuilder(Protocol):
         """Limit results."""
         ...
 
-    def order(
-        self, column: str, desc: bool = False
-    ) -> "QueryBuilder":
+    def order(self, column: str, desc: bool = False) -> "QueryBuilder":
         """Order results."""
         ...
 
@@ -165,9 +159,7 @@ class MockSupabaseClient:
 class MockAuthClient:
     """Mock Auth client."""
 
-    async def sign_in_with_password(
-        self, email: str, password: str
-    ) -> dict:
+    async def sign_in_with_password(self, email: str, password: str) -> dict:
         raise NotImplementedError("Supabase Auth not configured")
 
     async def sign_up(self, email: str, password: str) -> dict:
@@ -213,9 +205,7 @@ class MockBucketClient:
     def get_public_url(self, path: str) -> str:
         raise NotImplementedError("Supabase Storage not configured")
 
-    async def create_signed_url(
-        self, path: str, expires_in: int
-    ) -> dict:
+    async def create_signed_url(self, path: str, expires_in: int) -> dict:
         raise NotImplementedError("Supabase Storage not configured")
 
 
@@ -250,9 +240,7 @@ class MockQueryBuilder:
     def limit(self, count: int) -> "MockQueryBuilder":
         return self
 
-    def order(
-        self, column: str, desc: bool = False
-    ) -> "MockQueryBuilder":
+    def order(self, column: str, desc: bool = False) -> "MockQueryBuilder":
         return self
 
     async def execute(self) -> dict:
@@ -279,7 +267,7 @@ def get_supabase_client() -> SupabaseClient | MockSupabaseClient:
 
     # Import and create real client only when configured
     try:
-        from supabase import create_client, Client
+        from supabase import Client, create_client
 
         client: Client = create_client(supabase_url, supabase_key)
         return client  # type: ignore[return-value]

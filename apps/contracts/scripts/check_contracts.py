@@ -19,7 +19,6 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
 
 # Paths
 CONTRACTS_DIR = Path(__file__).parent.parent
@@ -192,9 +191,7 @@ def regenerate_typescript() -> bool:
 
 def main() -> None:
     """Main entry point."""
-    parser = argparse.ArgumentParser(
-        description="Check contract consistency and drift"
-    )
+    parser = argparse.ArgumentParser(description="Check contract consistency and drift")
     parser.add_argument(
         "--fix",
         action="store_true",

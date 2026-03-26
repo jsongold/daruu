@@ -7,7 +7,7 @@ the domain depends on abstractions, not concrete implementations.
 
 from typing import Protocol, Sequence
 
-from app.services.adjust.domain.models import BboxValues, OverlapInfo, OverflowInfo
+from app.services.adjust.domain.models import BboxValues, OverflowInfo, OverlapInfo
 
 
 class BboxCalculatorPort(Protocol):

@@ -19,10 +19,15 @@ from typing import Any
 from uuid import uuid4
 
 from app.config import get_pipeline_progress_config
+from app.infrastructure.observability import (
+    get_logger,
+    get_tracer,
+    metrics,
+)
+from app.infrastructure.repositories import get_job_repository
 from app.models import (
     Activity,
     ActivityAction,
-    Issue,
     JobContext,
     JobStatus,
 )
@@ -34,12 +39,6 @@ from app.models.orchestrator import (
 )
 from app.orchestrator.service_client import ServiceClient
 from app.repositories import JobRepository
-from app.infrastructure.repositories import get_job_repository
-from app.infrastructure.observability import (
-    get_tracer,
-    get_logger,
-    metrics,
-)
 
 
 class PipelineExecutor:
@@ -285,7 +284,11 @@ class PipelineExecutor:
             if stage == PipelineStage.FILL:
                 action = ActivityAction.RENDERING_COMPLETED
             elif stage == PipelineStage.REVIEW:
-                action = ActivityAction.JOB_COMPLETED if not result.issues else ActivityAction.QUESTION_ASKED
+                action = (
+                    ActivityAction.JOB_COMPLETED
+                    if not result.issues
+                    else ActivityAction.QUESTION_ASKED
+                )
             elif stage == PipelineStage.MAP:
                 action = ActivityAction.MAPPING_CREATED
         else:
@@ -464,7 +467,9 @@ class PipelineExecutor:
         # Add activity for the action
         self.add_activity(
             job_id,
-            ActivityAction.QUESTION_ASKED if next_action.action == "ask" else ActivityAction.JOB_COMPLETED,
+            ActivityAction.QUESTION_ASKED
+            if next_action.action == "ask"
+            else ActivityAction.JOB_COMPLETED,
             details={
                 "action": next_action.action,
                 "reason": next_action.reason,

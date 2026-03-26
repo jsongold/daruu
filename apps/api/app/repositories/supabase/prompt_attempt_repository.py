@@ -120,7 +120,20 @@ class SupabasePromptAttemptRepository:
         )
 
         try:
-            return self._create_with_retry(row, attempt_id, conversation_id, document_id, system_prompt, user_prompt, custom_rules, raw_response, parsed_result, success, error, metadata)
+            return self._create_with_retry(
+                row,
+                attempt_id,
+                conversation_id,
+                document_id,
+                system_prompt,
+                user_prompt,
+                custom_rules,
+                raw_response,
+                parsed_result,
+                success,
+                error,
+                metadata,
+            )
         except Exception as e:
             logger.error(f"Failed to create prompt attempt: {e}")
             raise
@@ -175,12 +188,7 @@ class SupabasePromptAttemptRepository:
     @with_retry(max_retries=3, base_delay=1.0)
     def _get_with_retry(self, attempt_id: str) -> PromptAttempt | None:
         """Internal get with retry logic."""
-        result = (
-            self._client.table(self.TABLE_NAME)
-            .select("*")
-            .eq("id", attempt_id)
-            .execute()
-        )
+        result = self._client.table(self.TABLE_NAME).select("*").eq("id", attempt_id).execute()
 
         if result.data and len(result.data) > 0:
             return self._to_model(result.data[0])

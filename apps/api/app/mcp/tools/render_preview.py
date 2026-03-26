@@ -15,29 +15,28 @@ import base64
 import io
 from typing import Any, Literal
 
-from mcp.types import CallToolResult, TextContent, ImageContent
+from mcp.types import CallToolResult, ImageContent, TextContent
 
 from app.mcp.session import get_current_session
 from app.mcp.storage import MCPStorage
 
-
 # Field status colors (RGB normalized 0-1)
 COLORS = {
     "active": {
-        "fill": (1.0, 1.0, 0.7),      # Light yellow fill
-        "stroke": (1.0, 0.8, 0.0),     # Yellow outline
+        "fill": (1.0, 1.0, 0.7),  # Light yellow fill
+        "stroke": (1.0, 0.8, 0.0),  # Yellow outline
     },
     "filled": {
-        "fill": None,                   # No fill
-        "stroke": (0.2, 0.7, 0.2),      # Green outline
+        "fill": None,  # No fill
+        "stroke": (0.2, 0.7, 0.2),  # Green outline
     },
     "empty_required": {
-        "fill": None,                   # No fill
-        "stroke": (0.8, 0.2, 0.2),      # Red outline
+        "fill": None,  # No fill
+        "stroke": (0.8, 0.2, 0.2),  # Red outline
     },
     "empty_optional": {
-        "fill": None,                   # No fill
-        "stroke": (0.5, 0.5, 0.5),      # Gray outline
+        "fill": None,  # No fill
+        "stroke": (0.5, 0.5, 0.5),  # Gray outline
     },
 }
 
@@ -69,21 +68,11 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
     show_values = arguments.get("show_values", True)
 
     if not form_id:
-        return CallToolResult(
-            content=[TextContent(
-                type="text",
-                text="Error: form_id is required"
-            )]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="Error: form_id is required")])
 
     session = await get_current_session()
     if not session:
-        return CallToolResult(
-            content=[TextContent(
-                type="text",
-                text="Error: No active session"
-            )]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="Error: No active session")])
 
     storage = MCPStorage()
 
@@ -91,10 +80,7 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
         form = await storage.get_form(session["id"], form_id)
         if not form:
             return CallToolResult(
-                content=[TextContent(
-                    type="text",
-                    text=f"Error: Form not found: {form_id}"
-                )]
+                content=[TextContent(type="text", text=f"Error: Form not found: {form_id}")]
             )
 
         # Render the page with visual enhancements
@@ -132,19 +118,13 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
                     data=image_b64,
                     mimeType=mime_type,
                 ),
-                TextContent(
-                    type="text",
-                    text=info_text
-                ),
+                TextContent(type="text", text=info_text),
             ]
         )
 
     except Exception as e:
         return CallToolResult(
-            content=[TextContent(
-                type="text",
-                text=f"Error rendering preview: {str(e)}"
-            )]
+            content=[TextContent(type="text", text=f"Error rendering preview: {str(e)}")]
         )
 
 

@@ -21,9 +21,7 @@ class ValidationResult(BaseModel):
     """Validation result for a rendered field value."""
 
     valid: bool = Field(..., description="Whether the value passed validation")
-    message: str | None = Field(
-        None, description="Validation message (if invalid)"
-    )
+    message: str | None = Field(None, description="Validation message (if invalid)")
 
     model_config = {"frozen": True}
 
@@ -33,15 +31,9 @@ class FieldRenderResult(BaseModel):
 
     field_id: str = Field(..., description="Field ID that was rendered")
     status: RenderStatus = Field(..., description="Render status")
-    value_written: str | None = Field(
-        None, description="Actual value written to PDF"
-    )
-    validation: ValidationResult | None = Field(
-        None, description="Validation result"
-    )
-    error_message: str | None = Field(
-        None, description="Error message (if status=failed)"
-    )
+    value_written: str | None = Field(None, description="Actual value written to PDF")
+    validation: ValidationResult | None = Field(None, description="Validation result")
+    error_message: str | None = Field(None, description="Error message (if status=failed)")
 
     model_config = {"frozen": True}
 
@@ -59,12 +51,8 @@ class RenderReport(BaseModel):
     field_results: tuple[FieldRenderResult, ...] = Field(
         default=(), description="Per-field render results"
     )
-    filled_count: int = Field(
-        default=0, ge=0, description="Number of fields successfully rendered"
-    )
-    failed_count: int = Field(
-        default=0, ge=0, description="Number of fields that failed to render"
-    )
+    filled_count: int = Field(default=0, ge=0, description="Number of fields successfully rendered")
+    failed_count: int = Field(default=0, ge=0, description="Number of fields that failed to render")
     error_message: str | None = Field(
         None, description="Top-level error message (if success=False)"
     )

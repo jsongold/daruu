@@ -4,7 +4,6 @@ Provides an implementation of the TaskQueue protocol using Celery
 for asynchronous task processing.
 """
 
-from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Any
 
@@ -12,7 +11,6 @@ from celery.result import AsyncResult
 
 from app.infrastructure.celery.app import get_celery_app
 from app.infrastructure.celery.config import get_celery_config
-from app.services.orchestrator.application.ports.task_queue import TaskQueue
 
 
 class TaskNotFoundError(Exception):
@@ -230,7 +228,6 @@ class CeleryTaskQueue:
         Returns:
             Number of tasks purged.
         """
-        queue = queue_name or self._config.task_default_queue
         return self._app.control.purge() or 0
 
 

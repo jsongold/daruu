@@ -29,10 +29,10 @@ from app.models.extract.models import (
     ExtractError,
     ExtractErrorCode,
     ExtractField,
-    ExtractRequest,
-    ExtractResult,
     Extraction,
     ExtractionSource,
+    ExtractRequest,
+    ExtractResult,
     FollowupQuestion,
     OcrRequest,
     PageArtifact,
@@ -181,13 +181,15 @@ class ExtractService:
         """
         # Resolve effective strategy
         effective_strategy = self._resolve_strategy(
-            getattr(request, 'options', None),
+            getattr(request, "options", None),
             strategy_override,
         )
 
         # Derive use_ocr/use_llm from strategy if not explicitly set in request
-        use_ocr = request.use_ocr if hasattr(request, 'use_ocr') else True
-        use_llm = request.use_llm if hasattr(request, 'use_llm') else effective_strategy.should_use_llm()
+        use_ocr = request.use_ocr if hasattr(request, "use_ocr") else True
+        use_llm = (
+            request.use_llm if hasattr(request, "use_llm") else effective_strategy.should_use_llm()
+        )
 
         # Override based on strategy
         if effective_strategy.strategy == ProcessingStrategy.LOCAL_ONLY:
@@ -280,9 +282,7 @@ class ExtractService:
                     strategy_enum = ProcessingStrategy(strategy_value)
                     return StrategyConfig(strategy=strategy_enum)
                 except ValueError:
-                    logger.warning(
-                        f"Unknown strategy '{strategy_value}', using default"
-                    )
+                    logger.warning(f"Unknown strategy '{strategy_value}', using default")
 
         return self._strategy
 
@@ -480,9 +480,7 @@ class ExtractService:
         source = self._determine_source(best, evidence)
 
         # Check if review is needed
-        needs_review = (
-            best.confidence < confidence_threshold or conflict_detected
-        )
+        needs_review = best.confidence < confidence_threshold or conflict_detected
 
         extraction = Extraction(
             field_id=field.field_id,

@@ -9,7 +9,6 @@ from fastapi import APIRouter, HTTPException, status
 from app.adapters.dto.analyze import (
     AnalyzeRequestDTO,
     AnalyzeResponseDTO,
-    FieldDTO,
 )
 from app.models import ApiResponse
 

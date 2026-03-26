@@ -134,8 +134,7 @@ def _is_job_complete(job_context: JobContext, config: OrchestratorConfig) -> boo
 def _get_critical_issues(issues: Sequence[Issue]) -> list[Issue]:
     """Filter critical or high severity issues."""
     return [
-        issue for issue in issues
-        if issue.severity in (IssueSeverity.CRITICAL, IssueSeverity.HIGH)
+        issue for issue in issues if issue.severity in (IssueSeverity.CRITICAL, IssueSeverity.HIGH)
     ]
 
 
@@ -207,7 +206,4 @@ def calculate_issue_score(issues: Sequence[Issue]) -> float:
         IssueSeverity.INFO: scoring_config.info_weight,
     }
 
-    return sum(
-        severity_weights.get(issue.severity, scoring_config.info_weight)
-        for issue in issues
-    )
+    return sum(severity_weights.get(issue.severity, scoring_config.info_weight) for issue in issues)

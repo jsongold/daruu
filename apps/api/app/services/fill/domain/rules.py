@@ -227,13 +227,15 @@ def layout_text_block(
 
         x_offset = calculate_alignment_offset(line_width, bbox.width, alignment)
 
-        text_lines.append(TextLine(
-            text=line_text,
-            x=bbox.x + x_offset,
-            y=current_y,
-            width=line_width,
-            height=actual_line_height,
-        ))
+        text_lines.append(
+            TextLine(
+                text=line_text,
+                x=bbox.x + x_offset,
+                y=current_y,
+                width=line_width,
+                height=actual_line_height,
+            )
+        )
 
         current_y -= actual_line_height
 

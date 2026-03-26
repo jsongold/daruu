@@ -24,7 +24,6 @@ from app.models import (
     JobContext,
 )
 from app.models.orchestrator import PipelineStage, StageResult
-from app.services.orchestrator.application.ports.service_gateway import ServiceGateway
 
 
 class HttpServiceClient:

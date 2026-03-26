@@ -11,7 +11,6 @@ from typing import Any
 from app.infrastructure.supabase.client import get_supabase_client
 from app.infrastructure.supabase.config import get_supabase_config
 from app.infrastructure.supabase.resilience import is_retryable_error, with_retry
-from app.repositories import FileRepository
 
 logger = logging.getLogger(__name__)
 
@@ -239,10 +238,10 @@ class SupabaseFileRepository:
         """Internal get_content with retry logic."""
         # Parse supabase:// or supabase:/ URL (handle legacy single-slash format)
         if ref.startswith("supabase://"):
-            path_part = ref[len("supabase://"):]
+            path_part = ref[len("supabase://") :]
         elif ref.startswith("supabase:/"):
             # Legacy format with single slash (due to Path normalization bug)
-            path_part = ref[len("supabase:/"):]
+            path_part = ref[len("supabase:/") :]
         else:
             path_part = None
 
@@ -315,7 +314,7 @@ class SupabaseFileRepository:
             if not ref.startswith("supabase://"):
                 return None
 
-            path_part = ref[len("supabase://"):]
+            path_part = ref[len("supabase://") :]
             parts = path_part.split("/", 1)
             if len(parts) < 2:
                 return None
@@ -343,7 +342,7 @@ class SupabaseFileRepository:
             if not ref.startswith("supabase://"):
                 return None
 
-            path_part = ref[len("supabase://"):]
+            path_part = ref[len("supabase://") :]
             parts = path_part.split("/", 1)
             if len(parts) < 2:
                 return None

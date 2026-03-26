@@ -51,9 +51,7 @@ class FilledField(BaseModel):
 
     field_id: str = Field(..., description="Field identifier")
     value: str = Field(..., description="Extracted/computed value")
-    confidence: float = Field(
-        ..., ge=0.0, le=1.0, description="Confidence score (0-1)"
-    )
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Confidence score (0-1)")
     source: str | None = Field(None, description="Data source that provided the value")
 
     model_config = {"frozen": True}
@@ -75,9 +73,7 @@ class VisionAutofillResponse(BaseModel):
     warnings: list[str] = Field(
         default_factory=list, description="Warnings about data quality or ambiguity"
     )
-    processing_time_ms: int = Field(
-        default=0, ge=0, description="Processing time in milliseconds"
-    )
+    processing_time_ms: int = Field(default=0, ge=0, description="Processing time in milliseconds")
     error: str | None = Field(None, description="Error message if success=False")
     raw_response: str | None = Field(
         None, description="Raw LLM response text (populated when LLM is used)"

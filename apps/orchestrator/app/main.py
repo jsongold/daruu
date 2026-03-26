@@ -15,7 +15,7 @@ from app.routes import jobs_router
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan context manager."""
     # Startup
-    config = get_config()
+    get_config()
     # Add any startup logic here (e.g., initialize connections)
 
     yield

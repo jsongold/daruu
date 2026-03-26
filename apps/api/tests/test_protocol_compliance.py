@@ -5,7 +5,6 @@ corresponding Protocol interfaces at runtime using isinstance().
 """
 
 import pytest
-
 from app.domain.protocols import (
     CorrectionTrackerProtocol,
     FillPlannerProtocol,
@@ -18,7 +17,6 @@ from app.services.fill_planner import FillPlanner
 from app.services.form_context import FormContextBuilder
 from app.services.form_renderer import FormRenderer
 from app.services.rule_analyzer import RuleAnalyzerStub
-
 
 # ============================================================================
 # Fixtures

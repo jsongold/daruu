@@ -35,21 +35,11 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
     use_profile = arguments.get("use_profile", True)
 
     if not form_id:
-        return CallToolResult(
-            content=[TextContent(
-                type="text",
-                text="Error: form_id is required"
-            )]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="Error: form_id is required")])
 
     session = await get_current_session()
     if not session:
-        return CallToolResult(
-            content=[TextContent(
-                type="text",
-                text="Error: No active session"
-            )]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="Error: No active session")])
 
     storage = MCPStorage()
 
@@ -58,10 +48,7 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
         form = await storage.get_form(session["id"], form_id)
         if not form:
             return CallToolResult(
-                content=[TextContent(
-                    type="text",
-                    text=f"Error: Form not found: {form_id}"
-                )]
+                content=[TextContent(type="text", text=f"Error: Form not found: {form_id}")]
             )
 
         # Get source documents if specified
@@ -111,16 +98,11 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
         if low_confidence_fields:
             response_text += f"\n\n⚠️ {len(low_confidence_fields)} fields have low confidence and may need review."
 
-        return CallToolResult(
-            content=[TextContent(type="text", text=response_text)]
-        )
+        return CallToolResult(content=[TextContent(type="text", text=response_text)])
 
     except Exception as e:
         return CallToolResult(
-            content=[TextContent(
-                type="text",
-                text=f"Error during auto-fill: {str(e)}"
-            )]
+            content=[TextContent(type="text", text=f"Error during auto-fill: {str(e)}")]
         )
 
 

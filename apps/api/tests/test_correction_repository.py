@@ -3,7 +3,6 @@
 from datetime import datetime, timedelta
 
 import pytest
-
 from app.domain.models.correction_record import CorrectionCategory, CorrectionRecord
 from app.infrastructure.repositories.memory_correction_repository import (
     MemoryCorrectionRepository,
@@ -55,9 +54,7 @@ class TestMemoryCorrectionRepository:
         old = _make_correction(
             document_id="doc-1", field_id="old", timestamp=now - timedelta(hours=1)
         )
-        new = _make_correction(
-            document_id="doc-1", field_id="new", timestamp=now
-        )
+        new = _make_correction(document_id="doc-1", field_id="new", timestamp=now)
 
         repo.create(old)
         repo.create(new)

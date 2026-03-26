@@ -41,16 +41,8 @@ class LiteLLMClient:
         max_retries: int = 2,
         temperature: float = 0.0,
     ) -> None:
-        self._model = (
-            model
-            or os.getenv("DARU_OPENAI_MODEL")
-            or os.getenv("OPENAI_API_KEY")
-        )
-        self._api_key = (
-            api_key
-            or os.getenv("DARU_OPENAI_API_KEY")
-            or os.getenv("OPENAI_API_KEY")
-        )
+        self._model = model or os.getenv("DARU_OPENAI_MODEL") or os.getenv("OPENAI_API_KEY")
+        self._api_key = api_key or os.getenv("DARU_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
         self._base_url = base_url or os.getenv("DARU_OPENAI_BASE_URL")
         self._max_retries = max_retries
         self._temperature = temperature
@@ -67,6 +59,7 @@ class LiteLLMClient:
         """Set LiteLLM module-level config."""
         try:
             import litellm
+
             litellm.drop_params = True
         except ImportError:
             pass
@@ -82,9 +75,7 @@ class LiteLLMClient:
             if self._base_url:
                 litellm.api_base = self._base_url
 
-            self._instructor_client = instructor.from_litellm(
-                litellm.acompletion
-            )
+            self._instructor_client = instructor.from_litellm(litellm.acompletion)
         except ImportError:
             logger.warning(
                 "instructor or litellm not installed — "
@@ -131,9 +122,7 @@ class LiteLLMClient:
             return LLMResponse(content=content)
 
         except ImportError:
-            raise RuntimeError(
-                "litellm not installed — run: pip install litellm"
-            )
+            raise RuntimeError("litellm not installed — run: pip install litellm")
 
     async def create(
         self,
@@ -144,8 +133,7 @@ class LiteLLMClient:
         """Structured output using Instructor + Pydantic validation."""
         if not self._instructor_client:
             raise RuntimeError(
-                "Instructor client not available — "
-                "install: pip install instructor litellm"
+                "Instructor client not available — install: pip install instructor litellm"
             )
 
         return await self._instructor_client.chat.completions.create(

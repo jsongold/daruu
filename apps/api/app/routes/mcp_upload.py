@@ -20,6 +20,7 @@ def _get_redis_client() -> Any:
     """Get Redis client."""
     try:
         import redis
+
         redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/2")
         client = redis.from_url(redis_url, decode_responses=True)
         client.ping()
@@ -35,6 +36,7 @@ STORAGE_TTL = 3600
 
 class UploadStatusResponse(BaseModel):
     """Upload status response."""
+
     upload_id: str
     status: str
     form_id: str | None = None
@@ -141,7 +143,9 @@ async def complete_upload(
                         "page": page_num,
                         "bbox": list(widget.rect),
                         "value": widget.field_value,
-                        "options": widget.choice_values if field_type in ("dropdown", "radio") else None,
+                        "options": widget.choice_values
+                        if field_type in ("dropdown", "radio")
+                        else None,
                         "required": False,
                         "readonly": bool(widget.field_flags & 1),
                     }

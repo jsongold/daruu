@@ -37,7 +37,6 @@ from app.models.structure_labelling import (
     BoxCandidateInput,
     EvidenceOutput,
     FieldOutput,
-    PageImageInput,
     StructureLabellingRequest,
     StructureLabellingResult,
     TableCandidateInput,
@@ -209,9 +208,7 @@ class StructureLabellingService:
         # Convert request inputs to domain models
         text_blocks_by_page = self._convert_text_blocks(request.native_text_blocks)
         box_candidates_by_page = self._convert_box_candidates(request.box_candidates)
-        table_candidates_by_page = self._convert_table_candidates(
-            request.table_candidates
-        )
+        table_candidates_by_page = self._convert_table_candidates(request.table_candidates)
 
         # Process each page
         for page_input in request.page_images:
@@ -241,9 +238,7 @@ class StructureLabellingService:
 
         # Convert domain models to output DTOs
         field_outputs = [self._field_to_output(f) for f in all_fields]
-        evidence_outputs = [
-            self._evidence_to_output(e, request.document_id) for e in all_evidence
-        ]
+        evidence_outputs = [self._evidence_to_output(e, request.document_id) for e in all_evidence]
 
         return StructureLabellingResult(
             document_id=request.document_id,
@@ -289,9 +284,7 @@ class StructureLabellingService:
                     strategy_enum = ProcessingStrategy(strategy_value)
                     return StrategyConfig(strategy=strategy_enum)
                 except ValueError:
-                    logger.warning(
-                        f"Unknown strategy '{strategy_value}', using default"
-                    )
+                    logger.warning(f"Unknown strategy '{strategy_value}', using default")
 
         # Fall back to service default
         return self._strategy
@@ -380,8 +373,7 @@ class StructureLabellingService:
 
         # Fallback to local-only if agent unavailable
         logger.warning(
-            "HYBRID strategy requested but agent unavailable, "
-            "falling back to local-only"
+            "HYBRID strategy requested but agent unavailable, falling back to local-only"
         )
         return self._create_fields_from_local_detection(
             page=page,
@@ -433,17 +425,13 @@ class StructureLabellingService:
                 return fields, evidence
             except Exception as e:
                 if strategy.should_fallback_on_error():
-                    logger.warning(
-                        f"LLM processing failed, falling back to local: {e}"
-                    )
+                    logger.warning(f"LLM processing failed, falling back to local: {e}")
                 else:
                     raise
 
         # LLM_ONLY without fallback should not reach here with valid config
         if strategy.strategy == ProcessingStrategy.LLM_ONLY:
-            raise RuntimeError(
-                "LLM_ONLY strategy requires a functioning agent"
-            )
+            raise RuntimeError("LLM_ONLY strategy requires a functioning agent")
 
         # Fallback to local detection
         if not box_candidates and not table_candidates:
@@ -496,9 +484,7 @@ class StructureLabellingService:
             # Find nearest label by proximity (simple heuristic)
             nearest_label = self._find_nearest_label(box, label_candidates)
 
-            field_name = (
-                nearest_label.text if nearest_label else f"field_{box.id}"
-            )
+            field_name = nearest_label.text if nearest_label else f"field_{box.id}"
             field_type = self._infer_field_type(box, nearest_label)
 
             field = LinkedField(
@@ -781,8 +767,9 @@ class StructureLabellingService:
         # Check for mismatch penalties
         has_checkbox_hint = "checkbox" in label.semantic_hints
         is_checkbox_box = box_type == "checkbox" or (
-            box.bbox.width < 40 and box.bbox.height < 40 and
-            0.7 < box.bbox.width / max(box.bbox.height, 1) < 1.5
+            box.bbox.width < 40
+            and box.bbox.height < 40
+            and 0.7 < box.bbox.width / max(box.bbox.height, 1) < 1.5
         )
 
         if has_checkbox_hint != is_checkbox_box:
@@ -923,63 +910,243 @@ class StructureLabellingService:
         # Comprehensive field type patterns (Japanese and English)
         patterns = {
             "name": [
-                "name", "名前", "氏名", "フリガナ", "姓", "名", "full name", "姓名",
-                "ふりがな", "カナ", "かな", "漢字", "first name", "last name",
-                "given name", "family name", "担当者", "代表者", "申請者",
+                "name",
+                "名前",
+                "氏名",
+                "フリガナ",
+                "姓",
+                "名",
+                "full name",
+                "姓名",
+                "ふりがな",
+                "カナ",
+                "かな",
+                "漢字",
+                "first name",
+                "last name",
+                "given name",
+                "family name",
+                "担当者",
+                "代表者",
+                "申請者",
             ],
             "date": [
-                "date", "日付", "年月日", "生年月日", "年", "月", "日", "有効期限",
-                "発行日", "期限", "開始日", "終了日", "締切", "deadline", "due date",
-                "expiry", "valid until", "valid from", "issued", "birthday", "dob",
-                "入社日", "退社日", "作成日", "更新日", "登録日",
+                "date",
+                "日付",
+                "年月日",
+                "生年月日",
+                "年",
+                "月",
+                "日",
+                "有効期限",
+                "発行日",
+                "期限",
+                "開始日",
+                "終了日",
+                "締切",
+                "deadline",
+                "due date",
+                "expiry",
+                "valid until",
+                "valid from",
+                "issued",
+                "birthday",
+                "dob",
+                "入社日",
+                "退社日",
+                "作成日",
+                "更新日",
+                "登録日",
             ],
             "address": [
-                "address", "住所", "所在地", "居所", "郵便番号", "〒", "都道府県",
-                "市区町村", "番地", "建物名", "マンション", "アパート", "street",
-                "city", "state", "zip", "postal", "prefecture", "country",
-                "送付先", "請求先", "配送先", "本店所在地",
+                "address",
+                "住所",
+                "所在地",
+                "居所",
+                "郵便番号",
+                "〒",
+                "都道府県",
+                "市区町村",
+                "番地",
+                "建物名",
+                "マンション",
+                "アパート",
+                "street",
+                "city",
+                "state",
+                "zip",
+                "postal",
+                "prefecture",
+                "country",
+                "送付先",
+                "請求先",
+                "配送先",
+                "本店所在地",
             ],
             "phone": [
-                "phone", "tel", "電話", "携帯", "fax", "ファックス", "連絡先",
-                "telephone", "mobile", "cell", "緊急連絡先", "内線", "ext",
-                "自宅電話", "勤務先電話", "fax番号", "ファクス",
+                "phone",
+                "tel",
+                "電話",
+                "携帯",
+                "fax",
+                "ファックス",
+                "連絡先",
+                "telephone",
+                "mobile",
+                "cell",
+                "緊急連絡先",
+                "内線",
+                "ext",
+                "自宅電話",
+                "勤務先電話",
+                "fax番号",
+                "ファクス",
             ],
             "email": [
-                "email", "mail", "メール", "e-mail", "eメール", "メールアドレス",
-                "electronic mail", "連絡先メール", "email address",
+                "email",
+                "mail",
+                "メール",
+                "e-mail",
+                "eメール",
+                "メールアドレス",
+                "electronic mail",
+                "連絡先メール",
+                "email address",
             ],
             "amount": [
-                "amount", "金額", "合計", "円", "￥", "価格", "料金", "総額", "単価",
-                "税込", "税抜", "消費税", "小計", "total", "subtotal", "price",
-                "cost", "fee", "charge", "payment", "支払額", "請求額", "入金額",
-                "数量", "quantity", "qty", "個数",
+                "amount",
+                "金額",
+                "合計",
+                "円",
+                "￥",
+                "価格",
+                "料金",
+                "総額",
+                "単価",
+                "税込",
+                "税抜",
+                "消費税",
+                "小計",
+                "total",
+                "subtotal",
+                "price",
+                "cost",
+                "fee",
+                "charge",
+                "payment",
+                "支払額",
+                "請求額",
+                "入金額",
+                "数量",
+                "quantity",
+                "qty",
+                "個数",
             ],
             "checkbox": [
-                "check", "チェック", "該当", "有", "無", "yes", "no", "□", "■",
-                "☑", "☐", "✓", "✔", "選択", "option", "希望する", "希望しない",
-                "同意", "確認", "agree", "confirm",
+                "check",
+                "チェック",
+                "該当",
+                "有",
+                "無",
+                "yes",
+                "no",
+                "□",
+                "■",
+                "☑",
+                "☐",
+                "✓",
+                "✔",
+                "選択",
+                "option",
+                "希望する",
+                "希望しない",
+                "同意",
+                "確認",
+                "agree",
+                "confirm",
             ],
             "signature": [
-                "signature", "署名", "印", "サイン", "印鑑", "捺印", "押印",
-                "sign here", "autograph", "代表印", "社印", "認印", "実印",
-                "記名", "自署",
+                "signature",
+                "署名",
+                "印",
+                "サイン",
+                "印鑑",
+                "捺印",
+                "押印",
+                "sign here",
+                "autograph",
+                "代表印",
+                "社印",
+                "認印",
+                "実印",
+                "記名",
+                "自署",
             ],
             "number": [
-                "number", "番号", "no.", "no", "id", "コード", "個数", "数量",
-                "code", "reference", "ref", "account", "口座番号", "顧客番号",
-                "従業員番号", "社員番号", "会員番号", "整理番号", "受付番号",
-                "注文番号", "order number", "invoice number", "請求番号",
+                "number",
+                "番号",
+                "no.",
+                "no",
+                "id",
+                "コード",
+                "個数",
+                "数量",
+                "code",
+                "reference",
+                "ref",
+                "account",
+                "口座番号",
+                "顧客番号",
+                "従業員番号",
+                "社員番号",
+                "会員番号",
+                "整理番号",
+                "受付番号",
+                "注文番号",
+                "order number",
+                "invoice number",
+                "請求番号",
             ],
             "company": [
-                "company", "会社", "法人", "事業者", "企業", "組織", "corporation",
-                "corp", "inc", "ltd", "株式会社", "有限会社", "合同会社",
-                "事業所", "勤務先", "所属", "部署", "department", "division",
-                "employer", "organization",
+                "company",
+                "会社",
+                "法人",
+                "事業者",
+                "企業",
+                "組織",
+                "corporation",
+                "corp",
+                "inc",
+                "ltd",
+                "株式会社",
+                "有限会社",
+                "合同会社",
+                "事業所",
+                "勤務先",
+                "所属",
+                "部署",
+                "department",
+                "division",
+                "employer",
+                "organization",
             ],
             "bank": [
-                "bank", "銀行", "口座", "支店", "金融機関", "account", "branch",
-                "routing", "swift", "iban", "普通", "当座", "預金種別",
-                "口座名義", "account holder", "振込先",
+                "bank",
+                "銀行",
+                "口座",
+                "支店",
+                "金融機関",
+                "account",
+                "branch",
+                "routing",
+                "swift",
+                "iban",
+                "普通",
+                "当座",
+                "預金種別",
+                "口座名義",
+                "account holder",
+                "振込先",
             ],
         }
 
@@ -989,9 +1156,7 @@ class StructureLabellingService:
 
         return hints
 
-    def _convert_text_blocks(
-        self, inputs: list[TextBlockInput]
-    ) -> dict[int, list[TextBlock]]:
+    def _convert_text_blocks(self, inputs: list[TextBlockInput]) -> dict[int, list[TextBlock]]:
         """Convert input text blocks to domain models grouped by page."""
         by_page: dict[int, list[TextBlock]] = {}
 
@@ -1113,9 +1278,7 @@ class StructureLabellingService:
             box_candidate_id=field.box_candidate_id,
         )
 
-    def _evidence_to_output(
-        self, evidence: StructureEvidence, document_id: str
-    ) -> EvidenceOutput:
+    def _evidence_to_output(self, evidence: StructureEvidence, document_id: str) -> EvidenceOutput:
         """Convert domain StructureEvidence to output DTO."""
         return EvidenceOutput(
             id=evidence.id,

@@ -14,7 +14,6 @@ from app.application.ports.storage_gateway import (
 )
 from app.infrastructure.supabase.client import get_supabase_client
 
-
 # Bucket names following PRD specification
 BUCKET_DOCUMENTS = "documents"
 BUCKET_PREVIEWS = "previews"
@@ -61,7 +60,7 @@ class SupabaseStorageAdapter:
         bucket_client = client.storage.from_(bucket)
 
         # Upload the file
-        result = await bucket_client.upload(
+        await bucket_client.upload(
             path=key,
             file=content,
             file_options={"content-type": content_type},
@@ -178,9 +177,7 @@ class SupabaseStorageAdapter:
                 key=item.get("name", ""),
                 bucket=bucket,
                 size=item.get("metadata", {}).get("size", 0),
-                content_type=item.get("metadata", {}).get(
-                    "mimetype", "application/octet-stream"
-                ),
+                content_type=item.get("metadata", {}).get("mimetype", "application/octet-stream"),
                 created_at=item.get("created_at", datetime.now(timezone.utc).isoformat()),
                 url=None,
             )

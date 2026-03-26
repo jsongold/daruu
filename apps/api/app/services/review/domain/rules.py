@@ -19,7 +19,6 @@ from app.services.review.domain.models import (
     TextBounds,
 )
 
-
 # Font metrics constants (approximate for standard fonts)
 # These are used for text bounds estimation when visual detection is not available
 AVERAGE_CHAR_WIDTH_RATIO = 0.5  # Average character width as ratio of font size

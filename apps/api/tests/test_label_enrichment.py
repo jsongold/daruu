@@ -4,14 +4,11 @@ Tests the directional matching logic (compute_directional_labels, DirectionalFie
 and the compact JSON serialization in build_field_identification_prompt.
 """
 
-import pytest
-
-from app.domain.models.form_context import FormFieldSpec, LabelCandidate
+from app.domain.models.form_context import FormFieldSpec
 from app.models.acroform import AcroFormFieldInfo, AcroFormFieldsResponse, PageDimensions
 from app.models.common import BBox
 from app.services.form_context.enricher import (
     DirectionalFieldEnricher,
-    NearbyLabel,
     compute_directional_labels,
 )
 
@@ -186,6 +183,7 @@ class TestEnrichFieldsWithLabels:
 
     def test_skips_field_without_acroform_match(self):
         """Fields not found in AcroForm data are returned unchanged."""
+
         class FakeDocService:
             def extract_text_blocks(self, doc_id, pages=None):
                 return [{"text": "Label", "page": 1, "bbox": [100, 200, 50, 12]}]
@@ -207,6 +205,7 @@ class TestEnrichFieldsWithLabels:
 
     def test_enriches_field_with_left_label_using_raw_bbox(self):
         """Fields get enriched using raw AcroForm coordinates (PDF points)."""
+
         class FakeDocService:
             def extract_text_blocks(self, doc_id, pages=None):
                 return [
@@ -231,8 +230,13 @@ class TestEnrichFieldsWithLabels:
         enricher = DirectionalFieldEnricher(document_service=FakeDocService())
         fields = (
             FormFieldSpec(
-                field_id="f1", label="f1",
-                x=0.169, y=0.238, width=0.25, height=0.024, page=1,
+                field_id="f1",
+                label="f1",
+                x=0.169,
+                y=0.238,
+                width=0.25,
+                height=0.024,
+                page=1,
             ),
         )
         result = enricher._enrich_fields_directionally("doc1", fields)
@@ -245,14 +249,13 @@ class TestEnrichFieldsWithLabels:
                 raise RuntimeError("PDF parsing failed")
 
         enricher = DirectionalFieldEnricher(document_service=FakeDocService())
-        fields = (
-            FormFieldSpec(field_id="f1", label="f1", x=100, y=200),
-        )
+        fields = (FormFieldSpec(field_id="f1", label="f1", x=100, y=200),)
         result = enricher._enrich_fields_directionally("doc1", fields)
         assert result is fields  # returns original on error
 
     def test_handles_get_acroform_fields_failure(self):
         """Enrichment gracefully degrades when AcroForm extraction fails."""
+
         class FakeDocService:
             def extract_text_blocks(self, doc_id, pages=None):
                 return [{"text": "Label", "page": 1, "bbox": [100, 200, 50, 12]}]
@@ -261,15 +264,14 @@ class TestEnrichFieldsWithLabels:
                 raise RuntimeError("AcroForm extraction failed")
 
         enricher = DirectionalFieldEnricher(document_service=FakeDocService())
-        fields = (
-            FormFieldSpec(field_id="f1", label="f1", x=100, y=200),
-        )
+        fields = (FormFieldSpec(field_id="f1", label="f1", x=100, y=200),)
         result = enricher._enrich_fields_directionally("doc1", fields)
         # No raw_bbox_map entries, so fields are returned without enrichment
         assert result[0].label_candidates == ()
 
     def test_handles_get_acroform_fields_returns_none(self):
         """Enrichment handles None response from get_acroform_fields."""
+
         class FakeDocService:
             def extract_text_blocks(self, doc_id, pages=None):
                 return [{"text": "Label", "page": 1, "bbox": [100, 200, 50, 12]}]
@@ -278,14 +280,13 @@ class TestEnrichFieldsWithLabels:
                 return None
 
         enricher = DirectionalFieldEnricher(document_service=FakeDocService())
-        fields = (
-            FormFieldSpec(field_id="f1", label="f1", x=100, y=200),
-        )
+        fields = (FormFieldSpec(field_id="f1", label="f1", x=100, y=200),)
         result = enricher._enrich_fields_directionally("doc1", fields)
         assert result[0].label_candidates == ()
 
     def test_directional_enrichment_finds_above_label(self):
         """Regression test: directional matching finds labels above fields."""
+
         class FakeDocService:
             def extract_text_blocks(self, doc_id, pages=None):
                 return [
@@ -311,8 +312,13 @@ class TestEnrichFieldsWithLabels:
         enricher = DirectionalFieldEnricher(document_service=FakeDocService())
         fields = (
             FormFieldSpec(
-                field_id="Text1", label="Text1",
-                x=0.169, y=0.238, width=0.337, height=0.024, page=1,
+                field_id="Text1",
+                label="Text1",
+                x=0.169,
+                y=0.238,
+                width=0.337,
+                height=0.024,
+                page=1,
             ),
         )
         result = enricher._enrich_fields_directionally("doc1", fields)
@@ -328,9 +334,7 @@ class TestCompactFieldIdentificationPrompt:
         """Verify abbreviated keys: id, t, p, b for fields; s, p, b for blocks."""
         from app.services.vision_autofill.prompts import build_field_identification_prompt
 
-        fields = (
-            FormFieldSpec(field_id="Text1", label="Text1", field_type="text", page=1),
-        )
+        fields = (FormFieldSpec(field_id="Text1", label="Text1", field_type="text", page=1),)
         text_blocks = [
             {"text": "法人名", "page": 1, "bbox": [100, 200, 50, 12]},
         ]
@@ -355,9 +359,7 @@ class TestCompactFieldIdentificationPrompt:
         """Label key should be omitted when label == field_id."""
         from app.services.vision_autofill.prompts import build_field_identification_prompt
 
-        fields = (
-            FormFieldSpec(field_id="Text1", label="Text1", field_type="text", page=1),
-        )
+        fields = (FormFieldSpec(field_id="Text1", label="Text1", field_type="text", page=1),)
         raw_bbox_map = {}
 
         result = build_field_identification_prompt(fields, [], raw_bbox_map)
@@ -379,9 +381,7 @@ class TestCompactFieldIdentificationPrompt:
         """Bbox values should be rounded to integers."""
         from app.services.vision_autofill.prompts import build_field_identification_prompt
 
-        fields = (
-            FormFieldSpec(field_id="Text1", label="Text1", field_type="text", page=1),
-        )
+        fields = (FormFieldSpec(field_id="Text1", label="Text1", field_type="text", page=1),)
         text_blocks = [
             {"text": "Label", "page": 1, "bbox": [100.7, 200.3, 50.9, 12.1]},
         ]

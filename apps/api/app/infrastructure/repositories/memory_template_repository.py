@@ -62,9 +62,7 @@ class MemoryTemplateRepository:
         Returns:
             List of templates matching the criteria, sorted by name.
         """
-        templates = [
-            t for t in self._templates.values() if t.tenant_id == tenant_id
-        ]
+        templates = [t for t in self._templates.values() if t.tenant_id == tenant_id]
         return sorted(templates, key=lambda t: t.name)
 
     def update(self, template: Template) -> Template:

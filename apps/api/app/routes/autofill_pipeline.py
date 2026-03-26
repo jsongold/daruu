@@ -4,11 +4,13 @@ POST /api/v1/autofill - Auto-fill form fields using the new pipeline.
 """
 
 import logging
-from typing import Any
+from typing import Any  # noqa: F401 — used in type annotations below
 
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, Field
 
+from app.domain.models.fill_plan import FillActionType
+from app.domain.models.form_context import FormFieldSpec
 from app.infrastructure.repositories import (
     get_correction_repository,
     get_data_source_repository,
@@ -18,18 +20,14 @@ from app.infrastructure.repositories import (
 )
 from app.models.common import ApiResponse
 from app.repositories import DataSourceRepository, DocumentRepository, FileRepository
-from app.services.document_service import DocumentService
-from app.services.text_extraction_service import TextExtractionService
-
-from app.domain.models.fill_plan import FillActionType
-from app.domain.models.form_context import FormFieldSpec
 from app.services.autofill_pipeline import AutofillPipelineService
-from app.services.form_context import FormContextBuilder, DirectionalFieldEnricher
-from app.services.form_context.structural_resolver import StructuralResolver
+from app.services.correction_tracker import CorrectionTracker
+from app.services.document_service import DocumentService
 from app.services.fill_planner import FillPlanner
+from app.services.form_context import DirectionalFieldEnricher, FormContextBuilder
 from app.services.form_renderer import FormRenderer
 from app.services.rule_analyzer import RuleAnalyzer, RuleAnalyzerStub
-from app.services.correction_tracker import CorrectionTracker, CorrectionTrackerStub
+from app.services.text_extraction_service import TextExtractionService
 
 logger = logging.getLogger(__name__)
 
@@ -60,16 +58,10 @@ class AutofillRequestDTO(BaseModel):
     """Request body for autofill pipeline."""
 
     document_id: str = Field(..., min_length=1, description="Target document ID")
-    conversation_id: str = Field(
-        ..., min_length=1, description="Conversation ID with data sources"
-    )
-    fields: list[AutofillFieldDTO] = Field(
-        ..., min_length=1, description="Fields to fill"
-    )
+    conversation_id: str = Field(..., min_length=1, description="Conversation ID with data sources")
+    fields: list[AutofillFieldDTO] = Field(..., min_length=1, description="Fields to fill")
     rules: list[str] | None = Field(None, description="Optional filling rules")
-    rule_docs: list[str] | None = Field(
-        None, description="Rule document texts for RuleAnalyzer"
-    )
+    rule_docs: list[str] | None = Field(None, description="Rule document texts for RuleAnalyzer")
     mode: str = Field(
         default="quick",
         description="Autofill mode: 'quick' (one-shot) or 'detailed' (interactive Q&A)",
@@ -99,15 +91,11 @@ class AutofillResponseDTO(BaseModel):
     unfilled_fields: list[str] = Field(
         default_factory=list, description="Fields that could not be filled"
     )
-    skipped_fields: list[str] = Field(
-        default_factory=list, description="Fields explicitly skipped"
-    )
+    skipped_fields: list[str] = Field(default_factory=list, description="Fields explicitly skipped")
     ask_user_fields: list[str] = Field(
         default_factory=list, description="Fields requiring user input"
     )
-    filled_document_ref: str | None = Field(
-        None, description="Reference to the filled PDF"
-    )
+    filled_document_ref: str | None = Field(None, description="Reference to the filled PDF")
     processing_time_ms: int = Field(default=0, ge=0, description="Processing time in ms")
     error: str | None = Field(None, description="Error message if failed")
     step_logs: list[dict] = Field(
@@ -211,7 +199,27 @@ def get_pipeline_service(
         correction_repo = get_correction_repository()
         correction_tracker = CorrectionTracker(repository=correction_repo)
 
-        structural_resolver = StructuralResolver(document_service=document_service)
+        from app.services.prompt_generator import PromptGenerator, PromptStore
+        from app.services.question_generator import QuestionGenerator
+
+        prompt_generator = (
+            PromptGenerator(
+                llm_client=llm_client,
+                document_service=document_service,
+            )
+            if llm_client
+            else None
+        )
+
+        prompt_store = PromptStore()
+
+        question_generator = (
+            QuestionGenerator(
+                llm_client=llm_client,
+            )
+            if llm_client
+            else None
+        )
 
         _pipeline_service = AutofillPipelineService(
             context_builder=context_builder,
@@ -219,15 +227,17 @@ def get_pipeline_service(
             form_renderer=form_renderer,
             rule_analyzer=rule_analyzer,
             correction_tracker=correction_tracker,
-            structural_resolver=structural_resolver,
+            prompt_generator=prompt_generator,
+            prompt_store=prompt_store,
+            question_generator=question_generator,
         )
 
     # Refresh per-request dependencies (fresh DB connections each request)
     _pipeline_service._context_builder._data_source_repo = data_source_repo
     _pipeline_service._context_builder._extraction_service = extraction_service
     _pipeline_service._context_builder._enricher._document_service = document_service
-    if _pipeline_service._structural_resolver:
-        _pipeline_service._structural_resolver._document_service = document_service
+    if _pipeline_service._prompt_generator:
+        _pipeline_service._prompt_generator._document_service = document_service
 
     return _pipeline_service
 
@@ -347,12 +357,14 @@ async def autofill_pipeline(
 
     for action in result.plan.actions:
         if action.action == FillActionType.FILL and action.value:
-            filled_fields.append(FilledFieldDTO(
-                field_id=action.field_id,
-                value=action.value,
-                confidence=action.confidence,
-                source=action.source,
-            ))
+            filled_fields.append(
+                FilledFieldDTO(
+                    field_id=action.field_id,
+                    value=action.value,
+                    confidence=action.confidence,
+                    source=action.source,
+                )
+            )
         elif action.action == FillActionType.ASK_USER:
             ask_user_fields.append(action.field_id)
         elif action.action == FillActionType.SKIP:
@@ -406,48 +418,31 @@ class QuestionOptionDTO(BaseModel):
     model_config = {"frozen": True}
 
 
-class ConversationTurnDTO(BaseModel):
-    """A single turn in the detailed mode conversation."""
+class AnswerDTO(BaseModel):
+    """A user answer to a question from the draft fill phase."""
 
-    role: str = Field(..., description="'assistant' or 'user'")
-    type: str = Field(..., description="'question', 'answer', or 'fill_plan'")
-    question_id: str | None = Field(None, description="Question ID for linking answers to questions")
-    question: str | None = Field(None, description="Question text (assistant turns)")
-    question_type: str | None = Field(
-        None, description="single_choice | multiple_choice | free_text | confirm"
-    )
-    options: list[QuestionOptionDTO] = Field(
-        default_factory=list, description="Options for choice questions"
-    )
-    placeholder: str | None = Field(None, description="Placeholder for free_text")
-    context: str | None = Field(None, description="Why the system is asking")
-    selected_option_ids: list[str] = Field(
-        default_factory=list, description="Selected option IDs (user turns)"
-    )
-    free_text: str | None = Field(None, description="Free text answer (user turns)")
+    question_id: str = Field(..., description="Question ID this answer responds to")
+    question_text: str = Field(default="", description="Original question text")
+    selected_option_ids: list[str] = Field(default_factory=list, description="Selected option IDs")
+    free_text: str | None = Field(None, description="Free text answer")
 
     model_config = {"frozen": True}
 
 
 class AutofillTurnRequestDTO(BaseModel):
-    """Request body for a single turn in detailed autofill mode."""
+    """Request body for a single turn in detailed autofill mode (fill-first).
+
+    Turn 1: answers=None -> draft fill + questions.
+    Turn 2: answers provided -> final fill with user answers.
+    """
 
     document_id: str = Field(..., min_length=1, description="Target document ID")
-    conversation_id: str = Field(
-        ..., min_length=1, description="Conversation ID with data sources"
-    )
-    fields: list[AutofillFieldDTO] = Field(
-        ..., min_length=1, description="Fields to fill"
-    )
+    conversation_id: str = Field(..., min_length=1, description="Conversation ID with data sources")
+    fields: list[AutofillFieldDTO] = Field(..., min_length=1, description="Fields to fill")
     rules: list[str] | None = Field(None, description="Optional filling rules")
-    rule_docs: list[str] | None = Field(
-        None, description="Rule document texts for RuleAnalyzer"
-    )
-    conversation: list[ConversationTurnDTO] = Field(
-        default_factory=list, description="Previous Q&A conversation history"
-    )
-    just_fill: bool = Field(
-        default=False, description="Skip questions and fill with accumulated context"
+    rule_docs: list[str] | None = Field(None, description="Rule document texts for RuleAnalyzer")
+    answers: list[AnswerDTO] | None = Field(
+        None, description="User answers from the question phase (None on first turn)"
     )
 
     model_config = {"frozen": True}
@@ -458,7 +453,9 @@ class QuestionDTO(BaseModel):
 
     id: str = Field(..., description="Question identifier (q0, q1, ...)")
     question: str = Field(..., description="Question text")
-    question_type: str = Field(..., description="single_choice | multiple_choice | free_text | confirm")
+    question_type: str = Field(
+        ..., description="single_choice | multiple_choice | free_text | confirm"
+    )
     options: list[QuestionOptionDTO] = Field(
         default_factory=list, description="Options for choice questions"
     )
@@ -468,24 +465,21 @@ class QuestionDTO(BaseModel):
 
 
 class AutofillTurnResponseDTO(BaseModel):
-    """Response from a single turn in detailed autofill mode."""
+    """Response from a single turn in detailed autofill mode (fill-first).
 
-    type: str = Field(
-        ..., description="'questions' (needs user answers) or 'fill_plan' (ready to render)"
+    Always includes filled_fields (draft or final).
+    questions non-empty = draft (show Q&A modal), empty = final (done).
+    """
+
+    filled_fields: list[FilledFieldDTO] = Field(
+        default_factory=list, description="Filled fields (always present: draft or final)"
     )
     questions: list[QuestionDTO] = Field(
-        default_factory=list, description="Batch of questions (when type=questions)"
+        default_factory=list, description="Non-empty = draft, empty = final"
     )
-    filled_fields: list[FilledFieldDTO] = Field(
-        default_factory=list, description="Filled fields (when type=fill_plan)"
-    )
-    unfilled_fields: list[str] = Field(
-        default_factory=list, description="Unfilled field IDs"
-    )
-    skipped_fields: list[str] = Field(
-        default_factory=list, description="Skipped field IDs"
-    )
+    skipped_fields: list[str] = Field(default_factory=list, description="Skipped field IDs")
     filled_document_ref: str | None = Field(None, description="Filled PDF ref")
+    is_draft: bool = Field(default=False, description="True when questions are present")
     processing_time_ms: int = Field(default=0, ge=0, description="Processing time")
     step_logs: list[dict] = Field(
         default_factory=list, description="Per-step pipeline execution logs"
@@ -503,14 +497,16 @@ class AutofillTurnResponseDTO(BaseModel):
     "/turn",
     response_model=ApiResponse[AutofillTurnResponseDTO],
     status_code=status.HTTP_200_OK,
-    summary="Single turn in detailed autofill mode",
+    summary="Single turn in detailed autofill mode (fill-first)",
     description="""
-A single LLM turn for interactive detailed autofill. Returns either a
-question (needs user answer) or a fill plan (ready to render).
+Fill-first pipeline for detailed autofill mode.
 
-First request: conversation=[] (no history).
-Subsequent: conversation contains all previous Q&A pairs.
-Set just_fill=true to skip questions and fill immediately.
+Turn 1 (answers=null): Draft fill + generate questions from gaps.
+Returns filled_fields (draft) + questions. Frontend shows draft values
+and QuestionModal.
+
+Turn 2 (answers provided): Re-fill with user answers.
+Returns filled_fields (final) + empty questions. Done.
 """,
 )
 async def autofill_turn(
@@ -518,12 +514,9 @@ async def autofill_turn(
     pipeline: AutofillPipelineService = Depends(get_pipeline_service),
     doc_service: DocumentService = Depends(get_document_service),
 ) -> ApiResponse[AutofillTurnResponseDTO]:
-    """Handle a single turn in detailed autofill mode."""
-    logger.info(
-        f"Autofill turn: document={request.document_id}, "
-        f"conversation_turns={len(request.conversation)}, "
-        f"just_fill={request.just_fill}"
-    )
+    """Handle a single turn in detailed autofill mode (fill-first)."""
+    has_answers = request.answers is not None and len(request.answers) > 0
+    logger.info(f"Autofill turn: document={request.document_id}, has_answers={has_answers}")
 
     fields = tuple(
         FormFieldSpec(
@@ -545,91 +538,74 @@ async def autofill_turn(
     doc = doc_service.get_document(request.document_id)
     target_ref = doc.ref if doc else request.document_id
 
-    # Convert conversation DTOs to dicts for the planner
-    conversation_history = [
-        {
-            "role": turn.role,
-            "type": turn.type,
-            "question_id": turn.question_id,
-            "question": turn.question,
-            "question_type": turn.question_type,
-            "options": [{"id": o.id, "label": o.label} for o in turn.options],
-            "selected_option_ids": turn.selected_option_ids,
-            "free_text": turn.free_text,
-        }
-        for turn in request.conversation
-    ]
+    # Convert AnswerDTOs to dicts for the planner
+    answers: list[dict[str, Any]] | None = None
+    if request.answers:
+        answers = [
+            {
+                "question_id": a.question_id,
+                "question_text": a.question_text,
+                "selected_option_ids": a.selected_option_ids,
+                "free_text": a.free_text,
+            }
+            for a in request.answers
+        ]
 
     try:
-        turn_result, step_logs, pipeline_result = await pipeline.autofill_turn(
+        plan, questions, pipeline_result, step_logs = await pipeline.autofill_turn(
             document_id=request.document_id,
             conversation_id=request.conversation_id,
             fields=fields,
             target_document_ref=target_ref,
             user_rules=user_rules,
             rule_docs=rule_docs,
-            conversation_history=conversation_history,
-            just_fill=request.just_fill,
+            answers=answers,
         )
     except Exception as e:
         logger.exception(f"Autofill turn failed: {e}")
-        error_dto = AutofillTurnResponseDTO(
-            type="fill_plan",
-            processing_time_ms=0,
-        )
+        error_dto = AutofillTurnResponseDTO(processing_time_ms=0)
         return ApiResponse(success=False, data=error_dto, error=str(e))
 
-    if turn_result.type == "questions" and turn_result.questions:
-        question_dtos = [
-            QuestionDTO(
-                id=q.id,
-                question=q.text,
-                question_type=q.type.value,
-                options=[
-                    QuestionOptionDTO(id=o.id, label=o.label)
-                    for o in q.options
-                ],
-                context=q.context,
-            )
-            for q in turn_result.questions
-        ]
-        response_dto = AutofillTurnResponseDTO(
-            type="questions",
-            questions=question_dtos,
-            step_logs=[log.model_dump() for log in step_logs],
-        )
-        return ApiResponse(success=True, data=response_dto)
-
-    # Fill plan response
+    # Build filled fields from plan
     filled_fields: list[FilledFieldDTO] = []
-    unfilled_fields: list[str] = []
     skipped_fields: list[str] = []
 
-    if pipeline_result:
-        for action in pipeline_result.plan.actions:
-            if action.action == FillActionType.FILL and action.value:
-                filled_fields.append(FilledFieldDTO(
+    for action in plan.actions:
+        if action.action == FillActionType.FILL and action.value:
+            filled_fields.append(
+                FilledFieldDTO(
                     field_id=action.field_id,
                     value=action.value,
                     confidence=action.confidence,
                     source=action.source,
-                ))
-            elif action.action == FillActionType.SKIP:
-                skipped_fields.append(action.field_id)
-            else:
-                unfilled_fields.append(action.field_id)
+                )
+            )
+        elif action.action == FillActionType.SKIP:
+            skipped_fields.append(action.field_id)
+
+    # Build question DTOs
+    question_dtos = [
+        QuestionDTO(
+            id=q.id,
+            question=q.text,
+            question_type=q.type.value,
+            options=[QuestionOptionDTO(id=o.id, label=o.label) for o in q.options],
+            context=q.context,
+        )
+        for q in questions
+    ]
+
+    is_draft = len(question_dtos) > 0
 
     response_dto = AutofillTurnResponseDTO(
-        type="fill_plan",
         filled_fields=filled_fields,
-        unfilled_fields=unfilled_fields,
+        questions=question_dtos,
         skipped_fields=skipped_fields,
         filled_document_ref=(
             pipeline_result.report.filled_document_ref if pipeline_result else None
         ),
-        processing_time_ms=(
-            pipeline_result.processing_time_ms if pipeline_result else 0
-        ),
+        is_draft=is_draft,
+        processing_time_ms=(pipeline_result.processing_time_ms if pipeline_result else 0),
         step_logs=[log.model_dump() for log in step_logs],
     )
 

@@ -256,6 +256,44 @@ export async function getAcroFormFields(
 }
 
 // ============================================================================
+// Text Blocks API
+// ============================================================================
+
+export interface TextBlock {
+  id: string;
+  text: string;
+  page: number;
+  /** [x, y, width, height] in PDF coordinates */
+  bbox: [number, number, number, number];
+  font_name: string | null;
+  font_size: number | null;
+}
+
+export interface TextBlocksResponse {
+  blocks: TextBlock[];
+}
+
+export async function getTextBlocks(
+  documentId: string,
+  page?: number
+): Promise<TextBlocksResponse> {
+  const params = page !== undefined ? `?page=${page}` : '';
+  const response = await request<ApiResponse<TextBlocksResponse>>(
+    `${API_PREFIX}/documents/${documentId}/text-blocks${params}`
+  );
+
+  if (!response.success || !response.data) {
+    throw new ApiError(
+      response.error || 'Failed to get text blocks',
+      'TEXT_BLOCKS_ERROR',
+      400
+    );
+  }
+
+  return response.data;
+}
+
+// ============================================================================
 // Jobs API
 // ============================================================================
 
@@ -671,4 +709,94 @@ export async function fillAndDownloadPdf(
     filledCount: fillResponse.filled_count,
     failedCount: fillResponse.failed_count,
   };
+}
+
+// ============================================================================
+// Annotations API
+// ============================================================================
+
+export interface AnnotationPairResponse {
+  id: string;
+  document_id: string;
+  label_id: string;
+  label_text: string;
+  label_bbox: { x: number; y: number; width: number; height: number };
+  label_page: number;
+  field_id: string;
+  field_name: string;
+  field_bbox: { x: number; y: number; width: number; height: number };
+  field_page: number;
+  confidence: number;
+  status: 'confirmed' | 'flagged';
+  is_manual: boolean;
+}
+
+export interface CreateAnnotationPairRequest {
+  label_id: string;
+  label_text: string;
+  label_bbox: { x: number; y: number; width: number; height: number };
+  label_page: number;
+  field_id: string;
+  field_name: string;
+  field_bbox: { x: number; y: number; width: number; height: number };
+  field_page: number;
+  confidence: number;
+  status: 'confirmed' | 'flagged';
+  is_manual: boolean;
+}
+
+export async function listAnnotationPairs(
+  documentId: string
+): Promise<AnnotationPairResponse[]> {
+  const response = await request<ApiResponse<{ pairs: AnnotationPairResponse[] }>>(
+    `${API_PREFIX}/documents/${documentId}/annotations`
+  );
+  if (!response.success || !response.data) {
+    throw new ApiError(
+      response.error || 'Failed to list annotations',
+      'ANNOTATION_ERROR',
+      400
+    );
+  }
+  return response.data.pairs;
+}
+
+export async function createAnnotationPair(
+  documentId: string,
+  data: CreateAnnotationPairRequest
+): Promise<AnnotationPairResponse> {
+  const response = await request<ApiResponse<AnnotationPairResponse>>(
+    `${API_PREFIX}/documents/${documentId}/annotations`,
+    {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }
+  );
+  if (!response.success || !response.data) {
+    throw new ApiError(
+      response.error || 'Failed to create annotation',
+      'ANNOTATION_ERROR',
+      400
+    );
+  }
+  return response.data;
+}
+
+export async function deleteAnnotationPair(
+  documentId: string,
+  pairId: string
+): Promise<void> {
+  await request<ApiResponse<{ deleted: boolean }>>(
+    `${API_PREFIX}/documents/${documentId}/annotations/${pairId}`,
+    { method: 'DELETE' }
+  );
+}
+
+export async function clearAnnotationPairs(
+  documentId: string
+): Promise<void> {
+  await request<ApiResponse<{ deleted_count: number }>>(
+    `${API_PREFIX}/documents/${documentId}/annotations`,
+    { method: 'DELETE' }
+  );
 }

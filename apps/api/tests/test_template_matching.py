@@ -40,6 +40,7 @@ class TestTemplateMatchingAccuracy:
         from app.infrastructure.repositories.memory_template_repository import (
             MemoryTemplateRepository,
         )
+
         return MemoryTemplateRepository()
 
     @pytest.fixture
@@ -65,7 +66,7 @@ class TestTemplateMatchingAccuracy:
         mock_embedding_gateway,
     ) -> None:
         """Test that searching with the same image returns high score."""
-        from app.models.template import TemplateCreate, Template
+        from app.models.template import TemplateCreate
 
         # Create a template
         create_request = TemplateCreate(
@@ -82,9 +83,7 @@ class TestTemplateMatchingAccuracy:
         )
 
         # When searching with the same image, vector DB should return high score
-        mock_vector_db.search.return_value = [
-            {"id": template.embedding_id, "score": 0.99}
-        ]
+        mock_vector_db.search.return_value = [{"id": template.embedding_id, "score": 0.99}]
 
         results = await template_service.search_by_embedding(
             page_image=b"original_image",
@@ -116,9 +115,7 @@ class TestTemplateMatchingAccuracy:
         )
 
         # Simulate vector DB returning perfect match
-        mock_vector_db.search.return_value = [
-            {"id": "emb-001", "score": 1.0}
-        ]
+        mock_vector_db.search.return_value = [{"id": "emb-001", "score": 1.0}]
 
         results = await template_service.search_by_embedding(
             page_image=b"exact_image",  # Same image
@@ -175,9 +172,7 @@ class TestTemplateMatchingAccuracy:
     ) -> None:
         """Test same form type but different version gets medium score."""
         # Simulate medium score match for form version variation
-        mock_vector_db.search.return_value = [
-            {"id": "emb-001", "score": 0.78}
-        ]
+        mock_vector_db.search.return_value = [{"id": "emb-001", "score": 0.78}]
 
         results = await template_service.search_by_embedding(
             page_image=b"form_v2_image",
@@ -315,9 +310,7 @@ class TestTemplateMatchingAccuracy:
         )
 
         # Search with page 2
-        mock_vector_db.search.return_value = [
-            {"id": "emb-001", "score": 0.92}
-        ]
+        mock_vector_db.search.return_value = [{"id": "emb-001", "score": 0.92}]
 
         results = await template_service.search_by_embedding(
             page_image=b"page2",
@@ -334,7 +327,6 @@ class TestTemplateMatchingAccuracy:
         memory_repository,
     ) -> None:
         """Test that match results include which pages matched."""
-        from app.models.template import Template
 
         # Create a template manually in the repository
         template = memory_repository.create(
@@ -345,9 +337,7 @@ class TestTemplateMatchingAccuracy:
         )
         memory_repository.update(template.id, embedding_id="emb-123")
 
-        mock_vector_db.search.return_value = [
-            {"id": "emb-123", "score": 0.95, "matched_page": 2}
-        ]
+        mock_vector_db.search.return_value = [{"id": "emb-123", "score": 0.95, "matched_page": 2}]
 
         results = await template_service.search_by_embedding(
             page_image=b"search_image",
@@ -356,7 +346,7 @@ class TestTemplateMatchingAccuracy:
 
         # Verify results contain page information
         if results:
-            assert hasattr(results[0], 'matched_pages') or hasattr(results[0], 'template')
+            assert hasattr(results[0], "matched_pages") or hasattr(results[0], "template")
 
     # =========================================================================
     # Score Ordering Tests
@@ -421,8 +411,7 @@ class TestTemplateMatchingAccuracy:
             memory_repository.update(t.id, embedding_id=f"emb-{i}")
 
         mock_vector_db.search.return_value = [
-            {"id": f"emb-{i}", "score": 0.9 - i * 0.1}
-            for i in range(5)
+            {"id": f"emb-{i}", "score": 0.9 - i * 0.1} for i in range(5)
         ]
 
         results = await template_service.search_by_embedding(
@@ -459,6 +448,7 @@ class TestTemplateMatchingEdgeCases:
         from app.infrastructure.repositories.memory_template_repository import (
             MemoryTemplateRepository,
         )
+
         return MemoryTemplateRepository()
 
     @pytest.fixture
@@ -481,9 +471,7 @@ class TestTemplateMatchingEdgeCases:
     ) -> None:
         """Test handling when embedding exists but template is deleted."""
         # Vector DB returns embedding for deleted template
-        mock_vector_db.search.return_value = [
-            {"id": "orphan-embedding", "score": 0.95}
-        ]
+        mock_vector_db.search.return_value = [{"id": "orphan-embedding", "score": 0.95}]
 
         results = await template_service.search_by_embedding(
             page_image=b"image",
@@ -530,8 +518,7 @@ class TestTemplateMatchingEdgeCases:
 
         # Return many results from vector DB
         mock_vector_db.search.return_value = [
-            {"id": f"emb-{i}", "score": 0.99 - i * 0.005}
-            for i in range(100)
+            {"id": f"emb-{i}", "score": 0.99 - i * 0.005} for i in range(100)
         ]
 
         results = await template_service.search_by_embedding(

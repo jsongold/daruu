@@ -10,8 +10,7 @@ Tests API endpoints with TestClient:
 """
 
 import io
-import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -23,7 +22,7 @@ class TestTemplateRoutes:
     @pytest.fixture
     def mock_template_service(self):
         """Create a mock template service."""
-        from app.models.template import Template, TemplateBbox, TemplateRule, TemplateMatch
+        from app.models.template import Template, TemplateBbox, TemplateMatch, TemplateRule
 
         sample_template = Template(
             id="tpl-001",
@@ -33,8 +32,14 @@ class TestTemplateRoutes:
             page_count=2,
             bboxes=[
                 TemplateBbox(
-                    x=10.0, y=20.0, width=100.0, height=30.0, page=1,
-                    field_name="name", field_type="text", label="Full Name"
+                    x=10.0,
+                    y=20.0,
+                    width=100.0,
+                    height=30.0,
+                    page=1,
+                    field_name="name",
+                    field_type="text",
+                    label="Full Name",
                 )
             ],
             rules=[
@@ -54,9 +59,9 @@ class TestTemplateRoutes:
         mock.list_templates = MagicMock(return_value=[sample_template])
         mock.save_template = AsyncMock(return_value=sample_template)
         mock.delete_template = AsyncMock(return_value=True)
-        mock.search_by_embedding = AsyncMock(return_value=[
-            TemplateMatch(template=sample_template, score=0.95, matched_pages=[1])
-        ])
+        mock.search_by_embedding = AsyncMock(
+            return_value=[TemplateMatch(template=sample_template, score=0.95, matched_pages=[1])]
+        )
         mock.get_rules = MagicMock(return_value=sample_template.rules)
         mock.get_bboxes = MagicMock(return_value=sample_template.bboxes)
         return mock

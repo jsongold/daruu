@@ -223,11 +223,6 @@ class LangChainLLMGateway:
 
         # Basic half-width to full-width conversion for numbers (Japanese forms)
         # This is a stub - real implementation would use LangChain
-        half_to_full = {
-            "0": "0", "1": "1", "2": "2", "3": "3", "4": "4",
-            "5": "5", "6": "6", "7": "7", "8": "8", "9": "9",
-        }
-
         # Apply basic normalization based on field type
         if field_context.field_type == "date":
             # Try to normalize date format

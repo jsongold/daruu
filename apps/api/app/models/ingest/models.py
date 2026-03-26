@@ -48,9 +48,7 @@ class DocumentMeta(BaseModel):
     """
 
     page_count: int = Field(..., ge=1, description="Total number of pages")
-    pages: tuple[PageMeta, ...] = Field(
-        ..., description="Metadata for each page (immutable tuple)"
-    )
+    pages: tuple[PageMeta, ...] = Field(..., description="Metadata for each page (immutable tuple)")
 
     model_config = {"frozen": True}
 
@@ -95,12 +93,8 @@ class IngestRequest(BaseModel):
     """
 
     document_id: str = Field(..., min_length=1, description="Unique document identifier")
-    document_ref: str = Field(
-        ..., min_length=1, description="Reference/path to the PDF file"
-    )
-    render_dpi: int = Field(
-        default=150, gt=0, le=600, description="DPI for page rendering"
-    )
+    document_ref: str = Field(..., min_length=1, description="Reference/path to the PDF file")
+    render_dpi: int = Field(default=150, gt=0, le=600, description="DPI for page rendering")
     render_pages: list[int] | None = Field(
         default=None,
         description="Specific pages to render (None = all pages)",
@@ -118,9 +112,7 @@ class IngestResult(BaseModel):
 
     document_id: str = Field(..., description="Document identifier from request")
     success: bool = Field(..., description="Whether ingestion completed successfully")
-    meta: DocumentMeta | None = Field(
-        default=None, description="Document metadata (if successful)"
-    )
+    meta: DocumentMeta | None = Field(default=None, description="Document metadata (if successful)")
     artifacts: tuple[RenderedPage, ...] = Field(
         default=(), description="Rendered page images (immutable tuple)"
     )

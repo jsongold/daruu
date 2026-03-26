@@ -24,15 +24,13 @@ from app.infrastructure.repositories import (
 from app.models.common import ApiResponse
 from app.models.conversation import ErrorCode, ErrorDetail, ErrorResponse
 from app.models.data_source import (
-    CreateTextDataSourceRequest,
-    DataSource,
+    EXTENSION_TYPE_MAP,
+    MIME_TYPE_MAP,
+    SIZE_LIMITS,
     DataSourceListResponse,
     DataSourceResponse,
     DataSourceType,
     ExtractionResult,
-    EXTENSION_TYPE_MAP,
-    MIME_TYPE_MAP,
-    SIZE_LIMITS,
 )
 from app.repositories import (
     ConversationRepository,
@@ -247,11 +245,11 @@ async def create_data_source(
                 "yes" if "_raw_text" in saved else "no",
             )
         except Exception:
-            logger.warning("Eager extraction failed for text source %s", data_source.id, exc_info=True)
+            logger.warning(
+                "Eager extraction failed for text source %s", data_source.id, exc_info=True
+            )
 
-        logger.info(
-            f"Created text data source {data_source.id} for conversation {conversation_id}"
-        )
+        logger.info(f"Created text data source {data_source.id} for conversation {conversation_id}")
 
         return ApiResponse(
             success=True,

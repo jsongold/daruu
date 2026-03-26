@@ -8,7 +8,7 @@ DELETE /api/v1/rules/{document_id}       - Delete rules for a document
 
 import logging
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Query, status
 
 from app.infrastructure.embedding import MockEmbeddingGateway, OpenAIEmbeddingGateway
 from app.repositories.memory_impl import MemoryRuleSnippetRepository
@@ -157,9 +157,7 @@ async def analyze_rules(
 async def search_rules(
     q: str = Query(..., min_length=1, description="Search query"),
     limit: int = Query(default=10, ge=1, le=100, description="Max results"),
-    threshold: float = Query(
-        default=0.7, ge=0.0, le=1.0, description="Min similarity"
-    ),
+    threshold: float = Query(default=0.7, ge=0.0, le=1.0, description="Min similarity"),
 ) -> ApiResponse[list[RuleSnippetDTO]]:
     """Semantic search for rule snippets using vector embeddings."""
     repo = _get_repo()

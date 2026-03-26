@@ -8,8 +8,6 @@ Phase 3: Edit & Adjust feature.
 from datetime import datetime, timezone
 
 import pytest
-from pydantic import ValidationError
-
 from app.models.edit import (
     BatchEditRequest,
     BatchEditResponse,
@@ -21,10 +19,11 @@ from app.models.edit import (
     FieldEdit,
     FieldState,
     FieldValue,
-    FieldValueUpdate,
     FieldValuesResponse,
+    FieldValueUpdate,
     UndoRedoResponse,
 )
+from pydantic import ValidationError
 
 
 class TestFieldEdit:
@@ -170,8 +169,7 @@ class TestEditHistory:
         """Test when both undo and redo are available."""
         now = datetime.now(timezone.utc)
         edits = [
-            FieldEdit(field_id=f"field-{i}", new_value=f"value{i}", timestamp=now)
-            for i in range(3)
+            FieldEdit(field_id=f"field-{i}", new_value=f"value{i}", timestamp=now) for i in range(3)
         ]
         # At index 1 (middle)
         history = EditHistory(
@@ -538,8 +536,7 @@ class TestEditHistoryResponse:
         """Test response with edits in history."""
         now = datetime.now(timezone.utc)
         edits = [
-            FieldEdit(field_id=f"field-{i}", new_value=f"v{i}", timestamp=now)
-            for i in range(3)
+            FieldEdit(field_id=f"field-{i}", new_value=f"v{i}", timestamp=now) for i in range(3)
         ]
         history = EditHistory(
             conversation_id="conv-456",

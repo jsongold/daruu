@@ -10,12 +10,10 @@ Tests edge cases and complex scenarios for the undo/redo system:
 Phase 3: Edit & Adjust feature.
 """
 
-from datetime import datetime, timezone, timedelta
-from typing import Any
+from datetime import datetime, timedelta, timezone
 
 import pytest
-
-from app.models.edit import EditHistory, FieldEdit
+from app.models.edit import FieldEdit
 
 
 class UndoRedoStack:
@@ -268,8 +266,12 @@ class TestConcurrentEdits:
 
         edits = [
             FieldEdit(field_id="f", old_value=None, new_value="v1", timestamp=now),
-            FieldEdit(field_id="f", old_value="v1", new_value="v2", timestamp=now + timedelta(seconds=1)),
-            FieldEdit(field_id="f", old_value="v2", new_value="v3", timestamp=now + timedelta(seconds=2)),
+            FieldEdit(
+                field_id="f", old_value="v1", new_value="v2", timestamp=now + timedelta(seconds=1)
+            ),
+            FieldEdit(
+                field_id="f", old_value="v2", new_value="v3", timestamp=now + timedelta(seconds=2)
+            ),
         ]
 
         for edit in edits:

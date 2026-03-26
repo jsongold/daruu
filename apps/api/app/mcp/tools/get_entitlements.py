@@ -9,7 +9,7 @@ from typing import Any
 
 from mcp.types import CallToolResult, TextContent
 
-from app.mcp.session import get_current_session, MCPSessionManager
+from app.mcp.session import MCPSessionManager, get_current_session
 
 
 async def handle(arguments: dict[str, Any]) -> CallToolResult:
@@ -24,9 +24,7 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
     """
     session = await get_current_session()
     if not session:
-        return CallToolResult(
-            content=[TextContent(type="text", text="Error: No active session")]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="Error: No active session")])
 
     session_manager = MCPSessionManager()
 
@@ -36,28 +34,30 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
         if not user_id:
             # Not logged in - show free tier info
             return CallToolResult(
-                content=[TextContent(
-                    type="text",
-                    text=(
-                        "**Current Status: Not Logged In**\n\n"
-                        "You can:\n"
-                        "- ✓ Upload and auto-fill forms\n"
-                        "- ✓ Preview filled forms\n"
-                        "- ✓ Edit field values\n\n"
-                        "To download PDFs, please log in.\n\n"
-                        "---\n"
-                        "**Free Plan** (after login):\n"
-                        "- 5 exports per month\n"
-                        "- Basic form filling\n"
-                        "- Standard support\n\n"
-                        "**Pro Plan** ($9/month):\n"
-                        "- Unlimited exports\n"
-                        "- Priority processing\n"
-                        "- User profile auto-fill\n"
-                        "- Template library\n"
-                        "- Priority support"
+                content=[
+                    TextContent(
+                        type="text",
+                        text=(
+                            "**Current Status: Not Logged In**\n\n"
+                            "You can:\n"
+                            "- ✓ Upload and auto-fill forms\n"
+                            "- ✓ Preview filled forms\n"
+                            "- ✓ Edit field values\n\n"
+                            "To download PDFs, please log in.\n\n"
+                            "---\n"
+                            "**Free Plan** (after login):\n"
+                            "- 5 exports per month\n"
+                            "- Basic form filling\n"
+                            "- Standard support\n\n"
+                            "**Pro Plan** ($9/month):\n"
+                            "- Unlimited exports\n"
+                            "- Priority processing\n"
+                            "- User profile auto-fill\n"
+                            "- Template library\n"
+                            "- Priority support"
+                        ),
                     )
-                )]
+                ]
             )
 
         # Get user's entitlements
@@ -66,8 +66,6 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
         plan = entitlements.get("plan", "free")
         exports_remaining = entitlements.get("exports_remaining", 0)
         exports_total = entitlements.get("exports_total", 5)
-        features = entitlements.get("features", [])
-
         # Format plan name
         plan_display = {
             "free": "Free",
@@ -122,15 +120,15 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
 
         # Add upgrade prompt for free users
         if plan == "free":
-            lines.extend([
-                "",
-                "---",
-                "[Upgrade to Pro](https://daru-pdf.io/pricing) for unlimited exports and more features.",
-            ])
+            lines.extend(
+                [
+                    "",
+                    "---",
+                    "[Upgrade to Pro](https://daru-pdf.io/pricing) for unlimited exports and more features.",
+                ]
+            )
 
-        return CallToolResult(
-            content=[TextContent(type="text", text="\n".join(lines))]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="\n".join(lines))])
 
     except Exception as e:
         return CallToolResult(

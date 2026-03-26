@@ -114,9 +114,7 @@ class Mapping(BaseModel):
     id: str = Field(..., description="Unique mapping ID")
     source_field_id: str = Field(..., description="ID of source field")
     target_field_id: str = Field(..., description="ID of target field")
-    confidence: float = Field(
-        ..., ge=0.0, le=1.0, description="Confidence score for this mapping"
-    )
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Confidence score for this mapping")
     is_confirmed: bool = Field(default=False, description="Whether mapping is user-confirmed")
 
     model_config = {"frozen": True}

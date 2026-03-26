@@ -31,7 +31,6 @@ from app.services.fill.ports import (
     TextMeasurePort,
 )
 
-
 # Register CJK fonts for Japanese text support
 _FONTS_REGISTERED = False
 
@@ -230,9 +229,7 @@ class PyMuPdfReaderAdapter:
 
         page_count = len(self._doc)
         if page_number < 1 or page_number > page_count:
-            raise ValueError(
-                f"Page number {page_number} out of range (1-{page_count})"
-            )
+            raise ValueError(f"Page number {page_number} out of range (1-{page_count})")
 
         page = self._doc[page_number - 1]
         rect = page.rect
@@ -722,8 +719,6 @@ class PyMuPdfMergerAdapter:
 
             # Get the overlay page (assuming single page overlay)
             if len(overlay_doc) > 0:
-                overlay_page = overlay_doc[0]
-
                 # Overlay the content using show_pdf_page
                 # This renders the overlay page on top of the base page
                 base_page.show_pdf_page(

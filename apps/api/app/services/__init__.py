@@ -45,27 +45,35 @@ def __getattr__(name: str):
     """
     if name == "AdjustService":
         from app.services.adjust import AdjustService
+
         return AdjustService
     elif name == "ExtractService":
         from app.services.extract import ExtractService
+
         return ExtractService
     elif name == "FillService":
         from app.services.fill import FillService
+
         return FillService
     elif name == "IngestService":
         from app.services.ingest import IngestService
+
         return IngestService
     elif name == "MappingService":
         from app.services.mapping import MappingService
+
         return MappingService
     elif name == "ReviewService":
         from app.services.review import ReviewService
+
         return ReviewService
     elif name == "StructureLabellingService":
         from app.services.structure_labelling import StructureLabellingService
+
         return StructureLabellingService
     elif name == "JobService":
         from app.services.job_service import JobService
+
         return JobService
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 

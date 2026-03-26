@@ -1,19 +1,19 @@
 """Tests for the rules API endpoints."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-from fastapi.testclient import TestClient
-
 from app.main import app
 from app.repositories.memory_impl import MemoryRuleSnippetRepository
-from app.schemas.rule_schemas import ChunkAnalysisResult, ExtractedRule, RuleSnippet
+from app.schemas.rule_schemas import RuleSnippet
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture(autouse=True)
 def reset_singletons():
     """Reset module-level singletons between tests."""
     import app.routes.rules as rules_mod
+
     rules_mod._repo = None
     rules_mod._embedding_gw = None
     yield

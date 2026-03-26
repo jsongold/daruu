@@ -189,9 +189,7 @@ class PageImageLoaderPort(Protocol):
         """
         ...
 
-    async def load_images(
-        self, image_refs: list[str]
-    ) -> dict[str, bytes]:
+    async def load_images(self, image_refs: list[str]) -> dict[str, bytes]:
         """Load multiple page images.
 
         Optimized for batch loading with potential parallelization.

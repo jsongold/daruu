@@ -42,8 +42,7 @@ class CorrectionTracker:
         try:
             self._repo.create(correction)
             logger.info(
-                f"Recorded correction: doc={correction.document_id}, "
-                f"field={correction.field_id}"
+                f"Recorded correction: doc={correction.document_id}, field={correction.field_id}"
             )
         except Exception as e:
             logger.error(f"Failed to record correction: {e}")

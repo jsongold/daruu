@@ -1,6 +1,6 @@
 """Tests for RuleServiceClient — HTTP client for standalone rule-service."""
 
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 

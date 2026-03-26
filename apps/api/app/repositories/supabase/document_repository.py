@@ -41,6 +41,7 @@ class SupabaseDocumentRepository:
         meta_dict = row.get("meta", {})
         if isinstance(meta_dict, str):
             import json
+
             meta_dict = json.loads(meta_dict)
 
         meta = DocumentMeta(
@@ -171,12 +172,7 @@ class SupabaseDocumentRepository:
     @with_retry(max_retries=3, base_delay=1.0)
     def _get_with_retry(self, document_id: str) -> Document | None:
         """Internal get with retry logic."""
-        result = (
-            self._client.table(self.TABLE_NAME)
-            .select("*")
-            .eq("id", document_id)
-            .execute()
-        )
+        result = self._client.table(self.TABLE_NAME).select("*").eq("id", document_id).execute()
 
         if result.data and len(result.data) > 0:
             return self._to_document(result.data[0])

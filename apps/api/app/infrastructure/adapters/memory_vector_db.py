@@ -32,9 +32,7 @@ def _cosine_similarity(vec_a: list[float], vec_b: list[float]) -> float:
         ValueError: If vectors have different dimensions.
     """
     if len(vec_a) != len(vec_b):
-        raise ValueError(
-            f"Vector dimensions must match: {len(vec_a)} vs {len(vec_b)}"
-        )
+        raise ValueError(f"Vector dimensions must match: {len(vec_a)} vs {len(vec_b)}")
 
     dot_product = sum(a * b for a, b in zip(vec_a, vec_b))
     norm_a = math.sqrt(sum(a * a for a in vec_a))
@@ -150,9 +148,7 @@ class MemoryVectorDB:
         results.sort(key=lambda x: x[1], reverse=True)
         results = results[:limit]
 
-        return [
-            SimilarityResult(id=r[0], score=r[1], metadata=r[2]) for r in results
-        ]
+        return [SimilarityResult(id=r[0], score=r[1], metadata=r[2]) for r in results]
 
     async def delete_embedding(
         self,

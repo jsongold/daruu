@@ -13,11 +13,9 @@ from pathlib import Path
 from typing import Generator
 
 import pytest
-from fastapi.testclient import TestClient
-
 from app.main import app
 from app.models.acroform import AcroFormFieldInfo, AcroFormFieldsResponse
-
+from fastapi.testclient import TestClient
 
 # =============================================================================
 # Test Assets
@@ -26,7 +24,9 @@ from app.models.acroform import AcroFormFieldInfo, AcroFormFieldsResponse
 # Path to test PDF with AcroForm fields
 # Test file is at: apps/api/tests/test_acroform_e2e.py
 # PDF is at: apps/tests/assets/2025bun_01_input.pdf
-ACROFORM_PDF_PATH = Path(__file__).parent.parent.parent / "tests" / "assets" / "2025bun_01_input.pdf"
+ACROFORM_PDF_PATH = (
+    Path(__file__).parent.parent.parent / "tests" / "assets" / "2025bun_01_input.pdf"
+)
 
 
 def create_pdf_with_acroform_fields() -> bytes:
@@ -110,6 +110,7 @@ def client() -> Generator[TestClient, None, None]:
 def api_prefix() -> str:
     """Get the API prefix."""
     from app.config import get_settings
+
     return get_settings().api_prefix
 
 
@@ -279,7 +280,9 @@ class TestNonAcroFormPDF:
         # Upload the PDF
         upload_response = client.post(
             f"{api_prefix}/documents",
-            files={"file": ("regular.pdf", io.BytesIO(non_acroform_pdf_content), "application/pdf")},
+            files={
+                "file": ("regular.pdf", io.BytesIO(non_acroform_pdf_content), "application/pdf")
+            },
             data={"document_type": "target"},
         )
         assert upload_response.status_code == 201
@@ -306,7 +309,9 @@ class TestNonAcroFormPDF:
         # Upload the PDF
         upload_response = client.post(
             f"{api_prefix}/documents",
-            files={"file": ("regular.pdf", io.BytesIO(non_acroform_pdf_content), "application/pdf")},
+            files={
+                "file": ("regular.pdf", io.BytesIO(non_acroform_pdf_content), "application/pdf")
+            },
             data={"document_type": "target"},
         )
         document_id = upload_response.json()["data"]["document_id"]
@@ -341,7 +346,13 @@ class TestAcroFormEndpointEdgeCases:
         # Upload the PDF
         upload_response = client.post(
             f"{api_prefix}/documents",
-            files={"file": ("simple_form.pdf", io.BytesIO(simple_acroform_pdf_content), "application/pdf")},
+            files={
+                "file": (
+                    "simple_form.pdf",
+                    io.BytesIO(simple_acroform_pdf_content),
+                    "application/pdf",
+                )
+            },
             data={"document_type": "target"},
         )
         assert upload_response.status_code == 201
@@ -369,7 +380,13 @@ class TestAcroFormEndpointEdgeCases:
         # Upload the PDF
         upload_response = client.post(
             f"{api_prefix}/documents",
-            files={"file": ("simple_form.pdf", io.BytesIO(simple_acroform_pdf_content), "application/pdf")},
+            files={
+                "file": (
+                    "simple_form.pdf",
+                    io.BytesIO(simple_acroform_pdf_content),
+                    "application/pdf",
+                )
+            },
             data={"document_type": "target"},
         )
         document_id = upload_response.json()["data"]["document_id"]
@@ -379,10 +396,7 @@ class TestAcroFormEndpointEdgeCases:
         result = response.json()["data"]
 
         # Find the text field that was pre-filled
-        text_field = next(
-            (f for f in result["fields"] if f["field_name"] == "test_name"),
-            None
-        )
+        text_field = next((f for f in result["fields"] if f["field_name"] == "test_name"), None)
 
         assert text_field is not None
         assert text_field["value"] == "John Doe"
@@ -490,7 +504,16 @@ class TestResponseModelValidation:
         for field in validated.fields:
             assert isinstance(field, AcroFormFieldInfo)
             assert field.field_name is not None
-            assert field.field_type in ["text", "checkbox", "combobox", "radio", "button", "listbox", "signature", "unknown"]
+            assert field.field_type in [
+                "text",
+                "checkbox",
+                "combobox",
+                "radio",
+                "button",
+                "listbox",
+                "signature",
+                "unknown",
+            ]
 
     def test_bbox_model_validation(
         self,

@@ -8,8 +8,9 @@ Tests in-memory VectorDBGateway:
 - Tenant isolation
 """
 
-import pytest
 import math
+
+import pytest
 
 
 class TestInMemoryVectorDB:
@@ -81,7 +82,9 @@ class TestInMemoryVectorDB:
         assert len(results) >= 3
 
     @pytest.mark.asyncio
-    async def test_store_overwrites_existing(self, vector_db, sample_embedding, different_embedding) -> None:
+    async def test_store_overwrites_existing(
+        self, vector_db, sample_embedding, different_embedding
+    ) -> None:
         """Test that storing with same ID overwrites."""
         await vector_db.store(
             id="emb-001",
@@ -496,7 +499,7 @@ class TestVectorDBEdgeCases:
     @pytest.mark.asyncio
     async def test_nan_in_embedding(self, vector_db) -> None:
         """Test handling NaN in embedding."""
-        nan_embedding = [0.1] * 1535 + [float('nan')]
+        nan_embedding = [0.1] * 1535 + [float("nan")]
 
         # Should handle gracefully - either store and handle, or reject
         try:
@@ -507,7 +510,7 @@ class TestVectorDBEdgeCases:
     @pytest.mark.asyncio
     async def test_infinity_in_embedding(self, vector_db) -> None:
         """Test handling infinity in embedding."""
-        inf_embedding = [0.1] * 1535 + [float('inf')]
+        inf_embedding = [0.1] * 1535 + [float("inf")]
 
         # Should handle gracefully
         try:

@@ -436,9 +436,7 @@ def create_adjustment_result(
     Returns:
         Complete AdjustmentResult.
     """
-    confidence_impact = calculate_adjustment_confidence_impact(
-        adjustment, original_bbox
-    )
+    confidence_impact = calculate_adjustment_confidence_impact(adjustment, original_bbox)
 
     # Resolving an issue gives a confidence boost
     if resolved_issue and confidence_impact <= 0:

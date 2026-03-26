@@ -9,13 +9,21 @@ Tests cover:
 - Template routes (API endpoints)
 """
 
-import asyncio
 import base64
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
+from app.infrastructure.adapters.memory_embedding import (
+    MemoryEmbedding,
+    _hash_to_vector,
+)
+from app.infrastructure.adapters.memory_vector_db import (
+    MemoryVectorDB,
+    _cosine_similarity,
+)
+from app.infrastructure.repositories.memory_template_repository import (
+    MemoryTemplateRepository,
+)
 from app.models.template import (
     FieldType,
     RuleType,
@@ -26,19 +34,7 @@ from app.models.template import (
     TemplateRule,
     TemplateUpdate,
 )
-from app.infrastructure.repositories.memory_template_repository import (
-    MemoryTemplateRepository,
-)
-from app.infrastructure.adapters.memory_vector_db import (
-    MemoryVectorDB,
-    _cosine_similarity,
-)
-from app.infrastructure.adapters.memory_embedding import (
-    MemoryEmbedding,
-    _hash_to_vector,
-)
 from app.services.template.service import TemplateService
-
 
 # --------------------------------------------------------------------------
 # Fixtures
@@ -240,19 +236,43 @@ class TestMemoryTemplateRepository:
 
         # Create templates with different tenants
         t1 = Template(
-            id="t1", name="A", form_type="T1", bboxes=(), rules=(),
-            embedding_id=None, preview_url=None, field_count=0,
-            created_at=now, updated_at=now, tenant_id=None,
+            id="t1",
+            name="A",
+            form_type="T1",
+            bboxes=(),
+            rules=(),
+            embedding_id=None,
+            preview_url=None,
+            field_count=0,
+            created_at=now,
+            updated_at=now,
+            tenant_id=None,
         )
         t2 = Template(
-            id="t2", name="B", form_type="T2", bboxes=(), rules=(),
-            embedding_id=None, preview_url=None, field_count=0,
-            created_at=now, updated_at=now, tenant_id="tenant-1",
+            id="t2",
+            name="B",
+            form_type="T2",
+            bboxes=(),
+            rules=(),
+            embedding_id=None,
+            preview_url=None,
+            field_count=0,
+            created_at=now,
+            updated_at=now,
+            tenant_id="tenant-1",
         )
         t3 = Template(
-            id="t3", name="C", form_type="T3", bboxes=(), rules=(),
-            embedding_id=None, preview_url=None, field_count=0,
-            created_at=now, updated_at=now, tenant_id=None,
+            id="t3",
+            name="C",
+            form_type="T3",
+            bboxes=(),
+            rules=(),
+            embedding_id=None,
+            preview_url=None,
+            field_count=0,
+            created_at=now,
+            updated_at=now,
+            tenant_id=None,
         )
 
         template_repo.create(t1)
@@ -330,19 +350,43 @@ class TestMemoryTemplateRepository:
         now = datetime.now(timezone.utc)
 
         t1 = Template(
-            id="t1", name="W-9 2023", form_type="W-9", bboxes=(), rules=(),
-            embedding_id=None, preview_url=None, field_count=0,
-            created_at=now, updated_at=now, tenant_id=None,
+            id="t1",
+            name="W-9 2023",
+            form_type="W-9",
+            bboxes=(),
+            rules=(),
+            embedding_id=None,
+            preview_url=None,
+            field_count=0,
+            created_at=now,
+            updated_at=now,
+            tenant_id=None,
         )
         t2 = Template(
-            id="t2", name="W-9 2024", form_type="w-9", bboxes=(), rules=(),
-            embedding_id=None, preview_url=None, field_count=0,
-            created_at=now, updated_at=now, tenant_id=None,
+            id="t2",
+            name="W-9 2024",
+            form_type="w-9",
+            bboxes=(),
+            rules=(),
+            embedding_id=None,
+            preview_url=None,
+            field_count=0,
+            created_at=now,
+            updated_at=now,
+            tenant_id=None,
         )
         t3 = Template(
-            id="t3", name="I-9", form_type="I-9", bboxes=(), rules=(),
-            embedding_id=None, preview_url=None, field_count=0,
-            created_at=now, updated_at=now, tenant_id=None,
+            id="t3",
+            name="I-9",
+            form_type="I-9",
+            bboxes=(),
+            rules=(),
+            embedding_id=None,
+            preview_url=None,
+            field_count=0,
+            created_at=now,
+            updated_at=now,
+            tenant_id=None,
         )
 
         template_repo.create(t1)
@@ -514,6 +558,7 @@ class TestMemoryEmbedding:
     def test_hash_to_vector_normalized(self) -> None:
         """Test that hash_to_vector produces normalized vectors."""
         import math
+
         data = b"test data"
         vec = _hash_to_vector(data, 100)
         norm = math.sqrt(sum(v * v for v in vec))
@@ -798,9 +843,9 @@ class TestTemplateRoutes:
     @pytest.fixture
     def client(self):
         """Create a test client."""
-        from fastapi.testclient import TestClient
         from app.main import app
         from app.routes.templates import clear_template_singletons
+        from fastapi.testclient import TestClient
 
         # Clear singletons before each test
         clear_template_singletons()

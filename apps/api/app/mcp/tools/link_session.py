@@ -8,6 +8,7 @@ Implements the Y Pattern where:
 """
 
 from typing import Any
+
 from mcp.types import CallToolResult, TextContent
 
 from app.mcp.session import MCPSessionManager
@@ -31,10 +32,7 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
 
     if not session_token:
         return CallToolResult(
-            content=[TextContent(
-                type="text",
-                text="Error: session_token is required"
-            )]
+            content=[TextContent(type="text", text="Error: session_token is required")]
         )
 
     session_manager = MCPSessionManager()
@@ -45,10 +43,12 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
 
         if not session:
             return CallToolResult(
-                content=[TextContent(
-                    type="text",
-                    text="Error: Invalid or expired session token. Please start a new session."
-                )]
+                content=[
+                    TextContent(
+                        type="text",
+                        text="Error: Invalid or expired session token. Please start a new session.",
+                    )
+                ]
             )
 
         # Check if already linked to a user
@@ -57,14 +57,16 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
             entitlements = await session_manager.get_user_entitlements(user_id)
 
             return CallToolResult(
-                content=[TextContent(
-                    type="text",
-                    text=(
-                        f"✓ Session linked to your account.\n"
-                        f"Plan: {entitlements.get('plan', 'free')}\n"
-                        f"Exports remaining: {entitlements.get('exports_remaining', 0)}"
+                content=[
+                    TextContent(
+                        type="text",
+                        text=(
+                            f"✓ Session linked to your account.\n"
+                            f"Plan: {entitlements.get('plan', 'free')}\n"
+                            f"Exports remaining: {entitlements.get('exports_remaining', 0)}"
+                        ),
                     )
-                )]
+                ]
             )
 
         # Session exists but not linked - check for existing auth cookie
@@ -73,22 +75,21 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
         login_url = await session_manager.get_login_url(session_token)
 
         return CallToolResult(
-            content=[TextContent(
-                type="text",
-                text=(
-                    f"🔒 Login required to save and export forms.\n\n"
-                    f"You can continue filling the form, but to download "
-                    f"the completed PDF, please log in:\n\n"
-                    f"[Login to Daru PDF]({login_url})\n\n"
-                    f"Once logged in, your session will be automatically linked."
+            content=[
+                TextContent(
+                    type="text",
+                    text=(
+                        f"🔒 Login required to save and export forms.\n\n"
+                        f"You can continue filling the form, but to download "
+                        f"the completed PDF, please log in:\n\n"
+                        f"[Login to Daru PDF]({login_url})\n\n"
+                        f"Once logged in, your session will be automatically linked."
+                    ),
                 )
-            )]
+            ]
         )
 
     except Exception as e:
         return CallToolResult(
-            content=[TextContent(
-                type="text",
-                text=f"Error linking session: {str(e)}"
-            )]
+            content=[TextContent(type="text", text=f"Error linking session: {str(e)}")]
         )

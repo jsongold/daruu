@@ -4,14 +4,10 @@ Tests the ConversationLogger class for logging conversation events.
 Ensures all log methods work without errors and produce correct output.
 """
 
-import logging
-from datetime import datetime, timezone
-from io import StringIO
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-from app.services.conversation_logger import ConversationLogger, log, _truncate
+from app.services.conversation_logger import ConversationLogger, _truncate, log
 
 
 class TestTruncateFunction:

@@ -1,9 +1,6 @@
 """Tests for MemoryRuleSnippetRepository — CRUD + vector search."""
 
-import math
-
 import pytest
-
 from app.domain.models.rule_snippet import RuleSnippet
 from app.infrastructure.repositories.memory_rule_snippet_repository import (
     MemoryRuleSnippetRepository,
@@ -89,9 +86,7 @@ class TestSearchSimilar:
         repo.create(_snippet(rule_text="Rule B"), embedding=[0.0, 1.0, 0.0])
 
         # Query close to Rule A
-        results = repo.search_similar(
-            query_embedding=[0.9, 0.1, 0.0], limit=10, threshold=0.5
-        )
+        results = repo.search_similar(query_embedding=[0.9, 0.1, 0.0], limit=10, threshold=0.5)
         assert len(results) >= 1
         assert results[0].rule_text == "Rule A"
 
@@ -100,9 +95,7 @@ class TestSearchSimilar:
         repo.create(_snippet(rule_text="Rule B"), embedding=[0.0, 1.0, 0.0])
 
         # Very high threshold: only exact match
-        results = repo.search_similar(
-            query_embedding=[1.0, 0.0, 0.0], limit=10, threshold=0.99
-        )
+        results = repo.search_similar(query_embedding=[1.0, 0.0, 0.0], limit=10, threshold=0.99)
         assert len(results) == 1
         assert results[0].rule_text == "Rule A"
 
@@ -112,9 +105,7 @@ class TestSearchSimilar:
                 _snippet(rule_text=f"Rule {i}"),
                 embedding=[1.0, 0.0, 0.0],
             )
-        results = repo.search_similar(
-            query_embedding=[1.0, 0.0, 0.0], limit=3, threshold=0.5
-        )
+        results = repo.search_similar(query_embedding=[1.0, 0.0, 0.0], limit=3, threshold=0.5)
         assert len(results) == 3
 
     def test_skips_no_embedding(self, repo: MemoryRuleSnippetRepository):
@@ -124,9 +115,7 @@ class TestSearchSimilar:
             embedding=[1.0, 0.0, 0.0],
         )
 
-        results = repo.search_similar(
-            query_embedding=[1.0, 0.0, 0.0], limit=10, threshold=0.5
-        )
+        results = repo.search_similar(query_embedding=[1.0, 0.0, 0.0], limit=10, threshold=0.5)
         assert len(results) == 1
         assert results[0].rule_text == "Has Embedding"
 
@@ -148,9 +137,7 @@ class TestDeleteByDocument:
         assert repo.list_by_document("doc-1") == []
         assert len(repo.list_by_document("doc-2")) == 1
 
-    def test_delete_nonexistent_returns_zero(
-        self, repo: MemoryRuleSnippetRepository
-    ):
+    def test_delete_nonexistent_returns_zero(self, repo: MemoryRuleSnippetRepository):
         assert repo.delete_by_document("nonexistent") == 0
 
 

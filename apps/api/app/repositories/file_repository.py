@@ -4,7 +4,6 @@ This defines the contract for file storage operations.
 Implementations can be local filesystem, S3, GCS, or any other storage.
 """
 
-from pathlib import Path
 from typing import Protocol
 
 

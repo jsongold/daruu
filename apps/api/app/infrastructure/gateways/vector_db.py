@@ -103,11 +103,13 @@ class InMemoryVectorDB:
             if min_score is not None and score < min_score:
                 continue
 
-            results.append({
-                "id": id,
-                "score": score,
-                "metadata": stored_metadata,
-            })
+            results.append(
+                {
+                    "id": id,
+                    "score": score,
+                    "metadata": stored_metadata,
+                }
+            )
 
         # Sort by score descending and limit
         results.sort(key=lambda x: x["score"], reverse=True)

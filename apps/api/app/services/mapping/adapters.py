@@ -216,11 +216,7 @@ class RapidFuzzStringMatcher:
             Similarity score from 0.0 (no match) to 1.0 (exact match)
         """
         if self._use_rapidfuzz:
-            processor = (
-                rapidfuzz_utils.default_process
-                if self._processor == "default"
-                else None
-            )
+            processor = rapidfuzz_utils.default_process if self._processor == "default" else None
             score = self._scorer(source, target, processor=processor)
             return score / 100.0
 
@@ -253,11 +249,7 @@ class RapidFuzzStringMatcher:
             return ()
 
         if self._use_rapidfuzz:
-            processor = (
-                rapidfuzz_utils.default_process
-                if self._processor == "default"
-                else None
-            )
+            processor = rapidfuzz_utils.default_process if self._processor == "default" else None
 
             results = rapidfuzz_process.extract(
                 source,
@@ -305,9 +297,7 @@ class RapidFuzzStringMatcher:
             # Use cdist for efficient batch matching
             try:
                 processor = (
-                    rapidfuzz_utils.default_process
-                    if self._processor == "default"
-                    else None
+                    rapidfuzz_utils.default_process if self._processor == "default" else None
                 )
 
                 # Create similarity matrix
@@ -331,9 +321,7 @@ class RapidFuzzStringMatcher:
                 return results
 
             except Exception as e:
-                logger.warning(
-                    "cdist failed, falling back to sequential matching: %s", str(e)
-                )
+                logger.warning("cdist failed, falling back to sequential matching: %s", str(e))
 
         # Fallback: iterate over sources
         results = {}

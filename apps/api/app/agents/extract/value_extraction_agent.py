@@ -22,10 +22,10 @@ from typing import Any
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
-from app.config import get_settings
-from app.models.cost import CostTracker, LLMUsage
-from app.models.extract.models import ExtractField, FollowupQuestion
 from app.agents.llm_wrapper import extract_usage_from_response, log_llm_io
+from app.config import get_settings
+from app.models.cost import CostTracker
+from app.models.extract.models import ExtractField, FollowupQuestion
 from app.services.extract.domain.models import ValueCandidate
 from app.services.extract.ports import ValueExtractionAgentPort
 
@@ -71,9 +71,7 @@ class LangChainValueExtractionAgent:
             api_key = settings.openai_api_key
 
             if not api_key:
-                logger.warning(
-                    "OPENAI_API_KEY not configured. LLM operations will fail."
-                )
+                logger.warning("OPENAI_API_KEY not configured. LLM operations will fail.")
 
             self._llm = ChatOpenAI(
                 model=self._model_name,
@@ -186,9 +184,7 @@ class LangChainValueExtractionAgent:
 
             # Parse response to get selected index
             response_text = response.content.strip()
-            selected_index = self._parse_selected_index(
-                response_text, len(candidates)
-            )
+            selected_index = self._parse_selected_index(response_text, len(candidates))
 
             # Return selected candidate with updated rationale
             selected = candidates[selected_index]
@@ -332,10 +328,7 @@ class LangChainValueExtractionAgent:
             return False, None
 
         # Prepare candidates for LLM analysis
-        candidates_info = [
-            {"value": c.value, "confidence": c.confidence}
-            for c in candidates
-        ]
+        candidates_info = [{"value": c.value, "confidence": c.confidence} for c in candidates]
 
         system_prompt = CONFLICT_SYSTEM_PROMPT
         user_prompt = CONFLICT_USER_PROMPT.format(
@@ -367,7 +360,13 @@ class LangChainValueExtractionAgent:
             # Don't flag as conflict if explicitly no conflict
             if any(
                 phrase in response_text
-                for phrase in ["no conflict", "no real conflict", "same", "equivalent", "formatting"]
+                for phrase in [
+                    "no conflict",
+                    "no real conflict",
+                    "same",
+                    "equivalent",
+                    "formatting",
+                ]
             ):
                 has_conflict = False
 
@@ -398,9 +397,7 @@ class LangChainValueExtractionAgent:
         Returns:
             FollowupQuestion with appropriate question text
         """
-        candidate_values = (
-            [c.value for c in candidates] if candidates else []
-        )
+        candidate_values = [c.value for c in candidates] if candidates else []
 
         system_prompt = QUESTION_SYSTEM_PROMPT
         user_prompt = QUESTION_USER_PROMPT.format(

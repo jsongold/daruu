@@ -11,26 +11,23 @@ Endpoints:
 - GET   /api/v2/conversations/{id}/edit-history       - Get edit history
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 
 from app.infrastructure.repositories import (
     get_conversation_repository,
     get_edit_repository,
 )
 from app.models.conversation import (
-    ErrorCode,
-    ErrorDetail,
     ErrorResponse,
 )
 from app.models.edit import (
     BatchEditRequest,
     BatchEditResponse,
-    EditErrorCode,
     EditHistoryResponse,
     EditRequest,
     EditResponse,
-    FieldValueUpdate,
     FieldValuesResponse,
+    FieldValueUpdate,
     UndoRedoResponse,
 )
 from app.repositories import ConversationRepository, EditRepository

@@ -7,10 +7,8 @@ Phase 3: Edit & Adjust feature.
 
 from datetime import datetime, timezone
 from typing import Any
-from uuid import uuid4
 
 import pytest
-
 from app.models.edit import (
     BatchEditRequest,
     EditHistory,
@@ -125,9 +123,7 @@ class MockEditRepository:
         self._field_states.pop(conversation_id, None)
 
     def get_field_value(self, conversation_id: str, field_id: str) -> FieldState | None:
-        self.record_call(
-            "get_field_value", conversation_id=conversation_id, field_id=field_id
-        )
+        self.record_call("get_field_value", conversation_id=conversation_id, field_id=field_id)
         conv_states = self._field_states.get(conversation_id, {})
         return conv_states.get(field_id)
 
@@ -135,9 +131,7 @@ class MockEditRepository:
         self.record_call("get_all_field_values", conversation_id=conversation_id)
         return list(self._field_states.get(conversation_id, {}).values())
 
-    def set_field_value(
-        self, conversation_id: str, field_state: FieldState
-    ) -> FieldState:
+    def set_field_value(self, conversation_id: str, field_state: FieldState) -> FieldState:
         self.record_call(
             "set_field_value",
             conversation_id=conversation_id,
@@ -344,9 +338,7 @@ class EditService:
             "can_redo": history.can_redo,
         }
 
-    def get_field_value(
-        self, conversation_id: str, field_id: str
-    ) -> dict[str, Any] | None:
+    def get_field_value(self, conversation_id: str, field_id: str) -> dict[str, Any] | None:
         """Get current value of a field."""
         if self._conv_repo.get(conversation_id) is None:
             return None
@@ -716,12 +708,8 @@ class TestGetAllFieldValues:
         field_repo.add_field("conv-001", "name")
         field_repo.add_field("conv-001", "email")
 
-        edit_service.apply_edit(
-            "conv-001", EditRequest(field_id="name", value="John")
-        )
-        edit_service.apply_edit(
-            "conv-001", EditRequest(field_id="email", value="john@example.com")
-        )
+        edit_service.apply_edit("conv-001", EditRequest(field_id="name", value="John"))
+        edit_service.apply_edit("conv-001", EditRequest(field_id="email", value="john@example.com"))
 
         result = edit_service.get_all_field_values("conv-001")
 

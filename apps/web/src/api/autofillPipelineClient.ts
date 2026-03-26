@@ -183,7 +183,7 @@ export async function autofillPipeline(
 }
 
 // ============================================================================
-// Detailed Mode: Turn Endpoint Types
+// Detailed Mode: Fill-First Turn Types
 // ============================================================================
 
 /** A question option */
@@ -201,47 +201,47 @@ export interface QuestionItem {
   context?: string | null;
 }
 
-/** A single conversation turn */
-export interface ConversationTurn {
-  role: 'assistant' | 'user';
-  type: 'question' | 'answer' | 'fill_plan';
-  question_id?: string | null;
-  question?: string | null;
-  question_type?: 'single_choice' | 'multiple_choice' | 'free_text' | 'confirm' | null;
-  options?: QuestionOption[];
-  placeholder?: string | null;
-  context?: string | null;
-  selected_option_ids?: string[];
+/** A user answer to a question from the draft fill phase */
+export interface AnswerItem {
+  question_id: string;
+  question_text: string;
+  selected_option_ids: string[];
   free_text?: string | null;
 }
 
-/** Request for a single turn in detailed autofill mode */
+/** Request for a single turn in detailed autofill mode (fill-first) */
 export interface AutofillTurnRequest {
   document_id: string;
   conversation_id: string;
   fields: AutofillPipelineFieldInfo[];
   rules?: string[];
   rule_docs?: string[];
-  conversation: ConversationTurn[];
-  just_fill?: boolean;
+  answers?: AnswerItem[] | null;  // null on first turn
 }
 
-/** Response from a single turn in detailed autofill mode */
+/** Response from a single turn in detailed autofill mode (fill-first) */
 export interface AutofillTurnResponse {
-  type: 'questions' | 'fill_plan';
-  questions?: QuestionItem[];
-  filled_fields?: PipelineFilledField[];
-  unfilled_fields?: string[];
-  skipped_fields?: string[];
+  /** Filled fields (always present: draft or final) */
+  filled_fields: PipelineFilledField[];
+  /** Non-empty = draft (show Q&A modal), empty = final (done) */
+  questions: QuestionItem[];
+  /** Skipped field IDs */
+  skipped_fields: string[];
+  /** Filled PDF reference */
   filled_document_ref?: string | null;
+  /** True when questions are present (draft fill) */
+  is_draft: boolean;
+  /** Processing time in ms */
   processing_time_ms?: number;
+  /** Per-step pipeline execution logs */
   step_logs?: PipelineStepLog[];
 }
 
 /**
- * Execute a single turn in detailed autofill mode.
+ * Execute a single turn in detailed autofill mode (fill-first).
  *
- * Returns either a question (needs user answer) or a fill plan (done).
+ * Turn 1 (answers=null): Draft fill + questions.
+ * Turn 2 (answers provided): Final fill with user answers.
  */
 export async function autofillTurn(
   req: AutofillTurnRequest

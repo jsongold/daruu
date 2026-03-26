@@ -224,12 +224,7 @@ class SupabaseDataSourceRepository:
     @with_retry(max_retries=3, base_delay=1.0)
     def _get_with_retry(self, data_source_id: str) -> DataSource | None:
         """Internal get with retry logic."""
-        result = (
-            self._client.table(self.TABLE_NAME)
-            .select("*")
-            .eq("id", data_source_id)
-            .execute()
-        )
+        result = self._client.table(self.TABLE_NAME).select("*").eq("id", data_source_id).execute()
 
         if result.data and len(result.data) > 0:
             return self._to_data_source(result.data[0])

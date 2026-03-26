@@ -17,9 +17,7 @@ class AuthUser(BaseModel):
     id: str = Field(..., description="User ID")
     email: str = Field(..., description="User email")
     role: str = Field(default="user", description="User role")
-    metadata: dict[str, str] = Field(
-        default_factory=dict, description="User metadata"
-    )
+    metadata: dict[str, str] = Field(default_factory=dict, description="User metadata")
 
     model_config = {"frozen": True}
 

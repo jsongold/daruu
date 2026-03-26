@@ -6,10 +6,43 @@ their dependencies wired up properly.
 
 from typing import cast
 
+from app.models.adjust.models import AdjustRequest, AdjustResult
+from app.models.fill.models import FillRequest, FillResult
+
+# Import request/result types for adapters
+from app.models.ingest.models import IngestRequest, IngestResult
+from app.models.mapping.models import MappingRequest, MappingResult
+from app.models.review.models import ReviewRequest, ReviewResult
+from app.models.structure_labelling.models import (
+    StructureLabellingRequest,
+    StructureLabellingResult,
+)
+from app.services.adjust.adapters import SimpleOverlapDetector
+from app.services.adjust.service import AdjustService
 from app.services.extract import ExtractService
 from app.services.extract.adapters import PdfPlumberTextAdapter
 from app.services.extract.agents import LangChainValueExtractionAgent
 from app.services.extract.ports import OcrServicePort
+from app.services.fill.adapters import (
+    LocalStorageAdapter as FillStorageAdapter,
+)
+from app.services.fill.adapters import (
+    PyMuPdfAcroFormAdapter,
+    PyMuPdfMergerAdapter,
+    ReportlabMeasureAdapter,
+    ReportlabOverlayAdapter,
+)
+from app.services.fill.adapters import (
+    PyMuPdfReaderAdapter as FillPdfReader,
+)
+from app.services.fill.service import FillService
+from app.services.ingest.adapters import LocalStorageAdapter as IngestStorageAdapter
+from app.services.ingest.adapters import PyMuPdfAdapter
+
+# Import services
+from app.services.ingest.service import IngestService
+from app.services.mapping.adapters import InMemoryTemplateHistory, RapidFuzzStringMatcher
+from app.services.mapping.service import MappingService
 from app.services.orchestrator.adapters.extract_service_adapter import (
     ExtractServiceAdapter,
 )
@@ -22,51 +55,23 @@ from app.services.orchestrator.application.ports.pipeline_services import (
     ReviewServicePort,
     StructureLabellingServicePort,
 )
-
-# Import services
-from app.services.ingest.service import IngestService
-from app.services.ingest.adapters import PyMuPdfAdapter, LocalStorageAdapter as IngestStorageAdapter
-from app.services.structure_labelling.service import StructureLabellingService
-from app.services.structure_labelling.adapters import (
-    OpenCVStructureDetector,
-    LocalPageImageLoader,
-)
-from app.services.mapping.service import MappingService
-from app.services.mapping.adapters import RapidFuzzStringMatcher, InMemoryTemplateHistory
-from app.services.adjust.service import AdjustService
-from app.services.adjust.adapters import SimpleOverlapDetector
-from app.services.fill.service import FillService
-from app.services.fill.adapters import (
-    PyMuPdfReaderAdapter as FillPdfReader,
-    PyMuPdfAcroFormAdapter,
-    ReportlabOverlayAdapter,
-    PyMuPdfMergerAdapter,
-    LocalStorageAdapter as FillStorageAdapter,
-    ReportlabMeasureAdapter,
+from app.services.review.adapters import (
+    LocalPreviewStorage,
+    OpenCVDiffGenerator,
+    PyMuPdfRenderer,
+    RuleBasedIssueDetector,
 )
 from app.services.review.service import ReviewService
-from app.services.review.adapters import (
-    PyMuPdfRenderer,
-    OpenCVDiffGenerator,
-    RuleBasedIssueDetector,
-    LocalPreviewStorage,
+from app.services.structure_labelling.adapters import (
+    LocalPageImageLoader,
+    OpenCVStructureDetector,
 )
-
-# Import request/result types for adapters
-from app.models.ingest.models import IngestRequest, IngestResult
-from app.models.structure_labelling.models import (
-    StructureLabellingRequest,
-    StructureLabellingResult,
-)
-from app.models.mapping.models import MappingRequest, MappingResult
-from app.models.adjust.models import AdjustRequest, AdjustResult
-from app.models.fill.models import FillRequest, FillResult
-from app.models.review.models import ReviewRequest, ReviewResult
+from app.services.structure_labelling.service import StructureLabellingService
 
 
 class NullOcrService:
     """Null object pattern for OCR service when OCR is not available.
-    
+
     This implements OcrServicePort but always returns None,
     indicating that OCR is not available. The ExtractService
     will handle this gracefully by skipping OCR extraction.

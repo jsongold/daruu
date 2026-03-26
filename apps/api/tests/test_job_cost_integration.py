@@ -1,17 +1,17 @@
 """Integration tests for job cost tracking."""
 
-import pytest
 from datetime import datetime, timezone
 
+import pytest
 from app.models import (
+    CostBreakdown,
+    CostSummaryModel,
     JobContext,
     JobMode,
     JobStatus,
-    CostSummaryModel,
-    CostBreakdown,
 )
-from app.models.document import Document, DocumentMeta, DocumentType
 from app.models.cost import CostTracker, LLMUsage, tracker_to_pydantic
+from app.models.document import Document, DocumentMeta, DocumentType
 
 
 class TestJobContextCostIntegration:

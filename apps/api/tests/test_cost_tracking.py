@@ -1,18 +1,18 @@
 """Tests for cost tracking functionality."""
 
-import pytest
 from datetime import datetime, timezone
 
+import pytest
 from app.config import DEFAULT_MODEL
+from app.models.common import CostBreakdown, CostSummaryModel
 from app.models.cost import (
-    CostTracker,
-    CostSummary,
-    LLMUsage,
     DEFAULT_LLM_PRICING,
     DEFAULT_OCR_COST_PER_PAGE,
+    CostSummary,
+    CostTracker,
+    LLMUsage,
     tracker_to_pydantic,
 )
-from app.models.common import CostBreakdown, CostSummaryModel
 
 
 class TestLLMUsage:
@@ -631,9 +631,7 @@ class TestCostTrackingUtilities:
         tracker = CostTracker.create().add_llm_usage(usage)
 
         # Set warning threshold lower than current cost
-        within_budget, warning = check_budget(
-            tracker, "test", max_cost=10.0, warn_threshold=0.001
-        )
+        within_budget, warning = check_budget(tracker, "test", max_cost=10.0, warn_threshold=0.001)
         assert within_budget is True
         assert warning is not None
         assert "warning" in warning.lower()

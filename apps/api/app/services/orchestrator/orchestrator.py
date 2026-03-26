@@ -16,12 +16,19 @@ Service vs Agent Architecture:
 from datetime import datetime, timezone
 from time import time
 from typing import Any
-from uuid import uuid4
 
 from app.config import get_settings
+from app.infrastructure.observability import (
+    get_logger,
+    get_tracer,
+    metrics,
+    with_job_context,
+)
+from app.infrastructure.repositories import (
+    get_event_publisher,
+    get_job_repository,
+)
 from app.models import (
-    Activity,
-    ActivityAction,
     JobContext,
     JobStatus,
     RunMode,
@@ -29,12 +36,10 @@ from app.models import (
 from app.models.orchestrator import (
     NextAction,
     OrchestratorConfig,
-    PipelineStage,
     StageResult,
 )
+from app.repositories import EventPublisher, JobRepository
 from app.services.orchestrator.decision_engine import DecisionEngine
-from app.services.orchestrator.pipeline_executor import PipelineExecutor
-from app.services.orchestrator.service_client import ServiceClient
 from app.services.orchestrator.factories import (
     create_adjust_service_port,
     create_extract_service_port,
@@ -44,18 +49,8 @@ from app.services.orchestrator.factories import (
     create_review_service_port,
     create_structure_labelling_service_port,
 )
-from app.repositories import EventPublisher, JobRepository
-from app.infrastructure.repositories import (
-    get_event_publisher,
-    get_job_repository,
-)
-from app.infrastructure.observability import (
-    get_tracer,
-    get_logger,
-    metrics,
-    set_span_attribute,
-    with_job_context,
-)
+from app.services.orchestrator.pipeline_executor import PipelineExecutor
+from app.services.orchestrator.service_client import ServiceClient
 
 
 class Orchestrator:
@@ -221,12 +216,16 @@ class Orchestrator:
                         )
 
                         # Publish step event
-                        await self._publish_event(job_id, "step_completed", {
-                            "step": steps_executed,
-                            "stage": next_action.stage.value if next_action.stage else None,
-                            "action": next_action.action,
-                            "progress": job.progress,
-                        })
+                        await self._publish_event(
+                            job_id,
+                            "step_completed",
+                            {
+                                "step": steps_executed,
+                                "stage": next_action.stage.value if next_action.stage else None,
+                                "action": next_action.action,
+                                "progress": job.progress,
+                            },
+                        )
 
                         # Re-evaluate after stage execution
                         next_action = self._decision_engine.decide_next_action(job, stage_result)
@@ -267,11 +266,15 @@ class Orchestrator:
                     )
 
                     # Publish completion event
-                    await self._publish_event(job_id, "run_completed", {
-                        "status": job.status.value,
-                        "steps_executed": steps_executed,
-                        "progress": job.progress,
-                    })
+                    await self._publish_event(
+                        job_id,
+                        "run_completed",
+                        {
+                            "status": job.status.value,
+                            "steps_executed": steps_executed,
+                            "progress": job.progress,
+                        },
+                    )
 
                     return job
 
@@ -451,12 +454,15 @@ class Orchestrator:
             event_type: Type of event.
             data: Event data.
         """
-        await self._event_publisher.publish(job_id, {
-            "event": event_type,
-            "job_id": job_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            **data,
-        })
+        await self._event_publisher.publish(
+            job_id,
+            {
+                "event": event_type,
+                "job_id": job_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                **data,
+            },
+        )
 
     async def run_step(self, job_id: str) -> JobContext:
         """Execute a single pipeline step.

@@ -12,12 +12,11 @@ in-Claude PDF editing experience.
 import base64
 from typing import Any
 
-from mcp.types import CallToolResult, TextContent, ImageContent
+from mcp.types import CallToolResult, ImageContent, TextContent
 
 from app.mcp.session import get_current_session
 from app.mcp.storage import MCPStorage
 from app.mcp.tools.render_preview import _render_page
-
 
 # Instructions for different field types
 FIELD_TYPE_INSTRUCTIONS = {
@@ -56,29 +55,16 @@ async def handle_visual_edit_field(arguments: dict[str, Any]) -> CallToolResult:
     field_id = arguments.get("field_id")
 
     if not form_id:
-        return CallToolResult(
-            content=[TextContent(
-                type="text",
-                text="Error: form_id is required"
-            )]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="Error: form_id is required")])
 
     if not field_id:
         return CallToolResult(
-            content=[TextContent(
-                type="text",
-                text="Error: field_id is required"
-            )]
+            content=[TextContent(type="text", text="Error: field_id is required")]
         )
 
     session = await get_current_session()
     if not session:
-        return CallToolResult(
-            content=[TextContent(
-                type="text",
-                text="Error: No active session"
-            )]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="Error: No active session")])
 
     storage = MCPStorage()
 
@@ -86,10 +72,7 @@ async def handle_visual_edit_field(arguments: dict[str, Any]) -> CallToolResult:
         form = await storage.get_form(session["id"], form_id)
         if not form:
             return CallToolResult(
-                content=[TextContent(
-                    type="text",
-                    text=f"Error: Form not found: {form_id}"
-                )]
+                content=[TextContent(type="text", text=f"Error: Form not found: {form_id}")]
             )
 
         fields = form.get("fields", {})
@@ -99,19 +82,14 @@ async def handle_visual_edit_field(arguments: dict[str, Any]) -> CallToolResult:
         target_field_id = None
 
         for fid, finfo in fields.items():
-            if (fid == field_id or
-                finfo.get("name") == field_id or
-                finfo.get("label") == field_id):
+            if fid == field_id or finfo.get("name") == field_id or finfo.get("label") == field_id:
                 target_field = finfo
                 target_field_id = fid
                 break
 
         if not target_field:
             return CallToolResult(
-                content=[TextContent(
-                    type="text",
-                    text=f"Error: Field not found: {field_id}"
-                )]
+                content=[TextContent(type="text", text=f"Error: Field not found: {field_id}")]
             )
 
         # Get field info
@@ -145,10 +123,7 @@ async def handle_visual_edit_field(arguments: dict[str, Any]) -> CallToolResult:
 
         # Add instructions
         info_lines.append("")
-        instructions = FIELD_TYPE_INSTRUCTIONS.get(
-            field_type,
-            FIELD_TYPE_INSTRUCTIONS["text"]
-        )
+        instructions = FIELD_TYPE_INSTRUCTIONS.get(field_type, FIELD_TYPE_INSTRUCTIONS["text"])
         info_lines.append(f"**Instructions:** {instructions}")
 
         # Render preview with this field highlighted
@@ -165,10 +140,7 @@ async def handle_visual_edit_field(arguments: dict[str, Any]) -> CallToolResult:
 
         return CallToolResult(
             content=[
-                TextContent(
-                    type="text",
-                    text="\n".join(info_lines)
-                ),
+                TextContent(type="text", text="\n".join(info_lines)),
                 ImageContent(
                     type="image",
                     data=image_b64,
@@ -178,12 +150,7 @@ async def handle_visual_edit_field(arguments: dict[str, Any]) -> CallToolResult:
         )
 
     except Exception as e:
-        return CallToolResult(
-            content=[TextContent(
-                type="text",
-                text=f"Error: {str(e)}"
-            )]
-        )
+        return CallToolResult(content=[TextContent(type="text", text=f"Error: {str(e)}")])
 
 
 async def handle_get_form_visual_summary(arguments: dict[str, Any]) -> CallToolResult:
@@ -208,21 +175,11 @@ async def handle_get_form_visual_summary(arguments: dict[str, Any]) -> CallToolR
     page = arguments.get("page", 1)
 
     if not form_id:
-        return CallToolResult(
-            content=[TextContent(
-                type="text",
-                text="Error: form_id is required"
-            )]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="Error: form_id is required")])
 
     session = await get_current_session()
     if not session:
-        return CallToolResult(
-            content=[TextContent(
-                type="text",
-                text="Error: No active session"
-            )]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="Error: No active session")])
 
     storage = MCPStorage()
 
@@ -230,10 +187,7 @@ async def handle_get_form_visual_summary(arguments: dict[str, Any]) -> CallToolR
         form = await storage.get_form(session["id"], form_id)
         if not form:
             return CallToolResult(
-                content=[TextContent(
-                    type="text",
-                    text=f"Error: Form not found: {form_id}"
-                )]
+                content=[TextContent(type="text", text=f"Error: Form not found: {form_id}")]
             )
 
         fields = form.get("fields", {})
@@ -252,21 +206,27 @@ async def handle_get_form_visual_summary(arguments: dict[str, Any]) -> CallToolR
             field_page = finfo.get("page", 1)
 
             if value is not None and value != "":
-                filled_fields.append({
-                    "label": label,
-                    "value": value,
-                    "page": field_page,
-                })
+                filled_fields.append(
+                    {
+                        "label": label,
+                        "value": value,
+                        "page": field_page,
+                    }
+                )
             elif required:
-                empty_required.append({
-                    "label": label,
-                    "page": field_page,
-                })
+                empty_required.append(
+                    {
+                        "label": label,
+                        "page": field_page,
+                    }
+                )
             else:
-                empty_optional.append({
-                    "label": label,
-                    "page": field_page,
-                })
+                empty_optional.append(
+                    {
+                        "label": label,
+                        "page": field_page,
+                    }
+                )
 
         total_fields = len(fields)
         filled_count = len(filled_fields)
@@ -281,19 +241,18 @@ async def handle_get_form_visual_summary(arguments: dict[str, Any]) -> CallToolR
         ]
 
         # Color legend
-        summary_lines.extend([
-            "**Legend:**",
-            "- Green outline = Filled",
-            "- Red outline = Empty (required)",
-            "- Gray outline = Empty (optional)",
-            "",
-        ])
+        summary_lines.extend(
+            [
+                "**Legend:**",
+                "- Green outline = Filled",
+                "- Red outline = Empty (required)",
+                "- Gray outline = Empty (optional)",
+                "",
+            ]
+        )
 
         # Fields on current page
-        page_fields = [
-            f for f in fields.values()
-            if f.get("page", 1) == page
-        ]
+        page_fields = [f for f in fields.values() if f.get("page", 1) == page]
 
         if page_fields:
             summary_lines.append(f"**Fields on page {page}:**")
@@ -349,10 +308,7 @@ async def handle_get_form_visual_summary(arguments: dict[str, Any]) -> CallToolR
 
         return CallToolResult(
             content=[
-                TextContent(
-                    type="text",
-                    text="\n".join(summary_lines)
-                ),
+                TextContent(type="text", text="\n".join(summary_lines)),
                 ImageContent(
                     type="image",
                     data=image_b64,
@@ -362,12 +318,7 @@ async def handle_get_form_visual_summary(arguments: dict[str, Any]) -> CallToolR
         )
 
     except Exception as e:
-        return CallToolResult(
-            content=[TextContent(
-                type="text",
-                text=f"Error: {str(e)}"
-            )]
-        )
+        return CallToolResult(content=[TextContent(type="text", text=f"Error: {str(e)}")])
 
 
 async def handle_get_next_unfilled_field(arguments: dict[str, Any]) -> CallToolResult:
@@ -389,21 +340,11 @@ async def handle_get_next_unfilled_field(arguments: dict[str, Any]) -> CallToolR
     skip_optional = arguments.get("skip_optional", False)
 
     if not form_id:
-        return CallToolResult(
-            content=[TextContent(
-                type="text",
-                text="Error: form_id is required"
-            )]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="Error: form_id is required")])
 
     session = await get_current_session()
     if not session:
-        return CallToolResult(
-            content=[TextContent(
-                type="text",
-                text="Error: No active session"
-            )]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="Error: No active session")])
 
     storage = MCPStorage()
 
@@ -411,10 +352,7 @@ async def handle_get_next_unfilled_field(arguments: dict[str, Any]) -> CallToolR
         form = await storage.get_form(session["id"], form_id)
         if not form:
             return CallToolResult(
-                content=[TextContent(
-                    type="text",
-                    text=f"Error: Form not found: {form_id}"
-                )]
+                content=[TextContent(type="text", text=f"Error: Form not found: {form_id}")]
             )
 
         fields = form.get("fields", {})
@@ -444,24 +382,23 @@ async def handle_get_next_unfilled_field(arguments: dict[str, Any]) -> CallToolR
             # All fields are filled
             filled_count = len(fields)
             return CallToolResult(
-                content=[TextContent(
-                    type="text",
-                    text=f"All {'required ' if skip_optional else ''}fields are filled! "
-                         f"({filled_count} total fields)\n\n"
-                         f"Ready to export the form."
-                )]
+                content=[
+                    TextContent(
+                        type="text",
+                        text=f"All {'required ' if skip_optional else ''}fields are filled! "
+                        f"({filled_count} total fields)\n\n"
+                        f"Ready to export the form.",
+                    )
+                ]
             )
 
         # Build response using visual_edit_field logic
-        return await handle_visual_edit_field({
-            "form_id": form_id,
-            "field_id": next_field_id,
-        })
+        return await handle_visual_edit_field(
+            {
+                "form_id": form_id,
+                "field_id": next_field_id,
+            }
+        )
 
     except Exception as e:
-        return CallToolResult(
-            content=[TextContent(
-                type="text",
-                text=f"Error: {str(e)}"
-            )]
-        )
+        return CallToolResult(content=[TextContent(type="text", text=f"Error: {str(e)}")])

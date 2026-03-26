@@ -12,9 +12,7 @@ class ComponentHealth(BaseModel):
     status: Literal["healthy", "degraded", "unhealthy"] = Field(
         ..., description="Component health status"
     )
-    latency_ms: float | None = Field(
-        None, description="Response latency in milliseconds"
-    )
+    latency_ms: float | None = Field(None, description="Response latency in milliseconds")
     message: str | None = Field(None, description="Additional status message")
 
     model_config = {"frozen": True}

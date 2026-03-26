@@ -4,16 +4,9 @@ Tests the Agent Chat UI conversation API endpoints.
 """
 
 import io
-from datetime import datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
-
-from app.models.conversation import (
-    ConversationStatus,
-    ErrorCode,
-    MessageRole,
-)
 
 
 class TestCreateConversation:
@@ -188,9 +181,7 @@ class TestSendMessage:
         assert data["success"] is False
         assert "content or files" in data["error"]["message"].lower()
 
-    def test_send_message_with_file(
-        self, client: TestClient, sample_pdf_content: bytes
-    ) -> None:
+    def test_send_message_with_file(self, client: TestClient, sample_pdf_content: bytes) -> None:
         """Test sending message with file upload."""
         create_response = client.post("/api/v2/conversations")
         conv_id = create_response.json()["id"]
@@ -275,9 +266,7 @@ class TestSendMessage:
         data = response.json()
         assert data["success"] is False
 
-    def test_send_message_supported_image_types(
-        self, client: TestClient
-    ) -> None:
+    def test_send_message_supported_image_types(self, client: TestClient) -> None:
         """Test sending message with supported image types."""
         create_response = client.post("/api/v2/conversations")
         conv_id = create_response.json()["id"]
@@ -375,7 +364,9 @@ class TestStreamUpdates:
         # This test is skipped because SSE streaming hangs in TestClient
         pass
 
-    @pytest.mark.skip(reason="SSE streaming requires async client setup that differs between httpx versions")
+    @pytest.mark.skip(
+        reason="SSE streaming requires async client setup that differs between httpx versions"
+    )
     def test_stream_endpoint_exists(self, client: TestClient) -> None:
         """Test that stream endpoint is reachable (without full streaming).
 

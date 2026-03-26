@@ -7,7 +7,6 @@ Uses OCR if needed, LLM for ambiguity resolution.
 from fastapi import APIRouter, HTTPException, status
 
 from app.adapters.dto.extract import (
-    ExtractedValueDTO,
     ExtractRequestDTO,
     ExtractResponseDTO,
 )

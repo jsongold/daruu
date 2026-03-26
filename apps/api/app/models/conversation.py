@@ -106,7 +106,9 @@ class Message(BaseModel):
     thinking: str | None = Field(None, description="Agent's internal reasoning")
     preview_ref: str | None = Field(None, description="Preview image URL")
     approval_required: bool = Field(default=False, description="Whether approval is needed")
-    approval_status: ApprovalStatus | None = Field(None, description="Approval status if applicable")
+    approval_status: ApprovalStatus | None = Field(
+        None, description="Approval status if applicable"
+    )
     attachments: list[Attachment] = Field(default_factory=list, description="Message attachments")
     metadata: dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
     created_at: datetime = Field(..., description="Creation timestamp")
@@ -227,7 +229,9 @@ class SSEApprovalData(BaseModel):
     """Data for 'approval' event."""
 
     message_id: str = Field(..., description="Approval message ID")
-    fields_to_approve: list[str] = Field(default_factory=list, description="Field IDs needing approval")
+    fields_to_approve: list[str] = Field(
+        default_factory=list, description="Field IDs needing approval"
+    )
 
     model_config = {"frozen": True}
 
@@ -331,11 +335,15 @@ class AgentState(BaseModel):
     """
 
     conversation_id: str = Field(..., description="Conversation ID")
-    current_stage: AgentStage = Field(default=AgentStage.IDLE, description="Current processing stage")
+    current_stage: AgentStage = Field(
+        default=AgentStage.IDLE, description="Current processing stage"
+    )
     detected_documents: list[DetectedDocument] = Field(
         default_factory=list, description="Documents detected"
     )
-    form_fields: list[dict[str, Any]] = Field(default_factory=list, description="Detected form fields")
+    form_fields: list[dict[str, Any]] = Field(
+        default_factory=list, description="Detected form fields"
+    )
     extracted_values: list[dict[str, Any]] = Field(
         default_factory=list, description="Extracted field values"
     )

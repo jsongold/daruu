@@ -10,26 +10,26 @@ All exports are re-exported from app.orchestrator.
 
 # Re-export all from new location for backward compatibility
 from app.orchestrator import (
+    # Application - use cases
+    DecideNextUseCase,
     # Core
     DecisionEngine,
+    # Infrastructure
+    HttpServiceClient,
     Orchestrator,
     PipelineExecutor,
+    RedisJobStore,
+    RunPipelineUseCase,
     ServiceClient,
+    # Application - ports
+    ServiceGateway,
+    TaskQueue,
     # Domain
     TerminationAction,
     TerminationCondition,
     calculate_improvement_rate,
     calculate_issue_score,
     check_termination,
-    # Application - ports
-    ServiceGateway,
-    TaskQueue,
-    # Application - use cases
-    DecideNextUseCase,
-    RunPipelineUseCase,
-    # Infrastructure
-    HttpServiceClient,
-    RedisJobStore,
 )
 
 __all__ = [

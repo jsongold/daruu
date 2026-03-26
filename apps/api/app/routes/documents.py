@@ -70,7 +70,7 @@ async def upload_document(
         is_jpeg = content.startswith(b"\xff\xd8\xff")
         is_tiff = content.startswith(b"II*\x00") or content.startswith(b"MM\x00*")
         is_webp = content[0:4] == b"RIFF" and content[8:12] == b"WEBP"
-        
+
         if not (is_pdf or is_png or is_jpeg or is_tiff or is_webp):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -285,3 +285,48 @@ async def get_acroform_fields(document_id: str) -> ApiResponse[AcroFormFieldsRes
     )
 
     return ApiResponse(success=True, data=result)
+
+
+@router.get(
+    "/{document_id}/text-blocks",
+)
+async def get_text_blocks(
+    document_id: str,
+    page: int | None = None,
+) -> ApiResponse:
+    """Extract text blocks (labels) from a PDF document.
+
+    Returns text spans with bounding boxes in PDF coordinates.
+    Each block has: id, text, page, bbox [x, y, width, height],
+    font_name, font_size.
+
+    Query params:
+        page: Optional 1-indexed page number to filter by.
+    """
+    logger.info(
+        "Text blocks request",
+        request_type="get_text_blocks",
+        document_id=document_id,
+        page=page,
+    )
+
+    service = get_document_service()
+
+    document = service.get_document(document_id)
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document not found: {document_id}",
+        )
+
+    pages_filter = [page] if page is not None else None
+    blocks = service.extract_text_blocks(document_id, pages=pages_filter)
+
+    logger.info(
+        "Text blocks extracted",
+        request_type="get_text_blocks",
+        document_id=document_id,
+        total_blocks=len(blocks),
+    )
+
+    return ApiResponse(success=True, data={"blocks": blocks})

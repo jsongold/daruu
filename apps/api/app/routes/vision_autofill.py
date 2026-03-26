@@ -11,12 +11,12 @@ from typing import Any
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, Field
 
+from app.config import DEFAULT_MODEL
 from app.infrastructure.repositories import (
     get_data_source_repository,
     get_document_repository,
     get_file_repository,
 )
-from app.config import DEFAULT_MODEL
 from app.models.common import ApiResponse
 from app.repositories import DataSourceRepository, DocumentRepository, FileRepository
 from app.services.document_service import DocumentService
@@ -27,7 +27,6 @@ from app.services.vision_autofill import (
     VisionAutofillService,
 )
 
-
 # ============================================================================
 # OpenAI Client Wrapper
 # ============================================================================
@@ -36,6 +35,7 @@ from app.services.vision_autofill import (
 @dataclass
 class LLMResponse:
     """Simple LLM response wrapper."""
+
     content: str
 
 
@@ -46,6 +46,7 @@ class OpenAIClient:
         """Initialize OpenAI client."""
         try:
             from openai import AsyncOpenAI
+
             api_key = os.getenv("DARU_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
             base_url = os.getenv("DARU_OPENAI_BASE_URL", "https://api.openai.com/v1")
             self._model = os.getenv("DARU_OPENAI_MODEL", DEFAULT_MODEL)
@@ -94,6 +95,7 @@ def get_openai_client() -> OpenAIClient | None:
         _openai_client = OpenAIClient()
     return _openai_client if _openai_client.is_available else None
 
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/vision-autofill", tags=["vision-autofill"])
@@ -126,18 +128,10 @@ class VisionAutofillRequestDTO(BaseModel):
     """Request body for vision autofill."""
 
     document_id: str = Field(..., min_length=1, description="Target document ID")
-    conversation_id: str = Field(
-        ..., min_length=1, description="Conversation ID with data sources"
-    )
-    fields: list[FieldInfoDTO] = Field(
-        ..., min_length=1, description="Fields to fill"
-    )
-    rules: list[str] | None = Field(
-        None, description="Optional rules for field filling"
-    )
-    system_prompt: str | None = Field(
-        None, description="Optional system prompt override for LLM"
-    )
+    conversation_id: str = Field(..., min_length=1, description="Conversation ID with data sources")
+    fields: list[FieldInfoDTO] = Field(..., min_length=1, description="Fields to fill")
+    rules: list[str] | None = Field(None, description="Optional rules for field filling")
+    system_prompt: str | None = Field(None, description="Optional system prompt override for LLM")
 
     model_config = {"frozen": True}
 
@@ -163,12 +157,8 @@ class VisionAutofillResponseDTO(BaseModel):
     unfilled_fields: list[str] = Field(
         default_factory=list, description="Fields that couldn't be filled"
     )
-    warnings: list[str] = Field(
-        default_factory=list, description="Warnings about data"
-    )
-    processing_time_ms: int = Field(
-        default=0, ge=0, description="Processing time in ms"
-    )
+    warnings: list[str] = Field(default_factory=list, description="Warnings about data")
+    processing_time_ms: int = Field(default=0, ge=0, description="Processing time in ms")
     error: str | None = Field(None, description="Error message if failed")
 
     model_config = {"frozen": True}
@@ -420,9 +410,7 @@ async def preview_prompt(
         system_prompt=result["system_prompt"],
         user_prompt=result["user_prompt"],
         data_source_count=result["data_source_count"],
-        extractions_summary=[
-            ExtractionSummaryDTO(**s) for s in result["extractions_summary"]
-        ],
+        extractions_summary=[ExtractionSummaryDTO(**s) for s in result["extractions_summary"]],
     )
 
     return ApiResponse(

@@ -6,10 +6,8 @@ Phase 3: Edit & Adjust feature.
 """
 
 from datetime import datetime, timezone
-from typing import Any
 
 import pytest
-
 from app.models.edit import (
     EditHistory,
     FieldEdit,

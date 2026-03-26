@@ -19,7 +19,6 @@ Service Architecture (per PRD):
 """
 
 from datetime import datetime, timezone
-from typing import Any
 from uuid import uuid4
 
 from app.config import (
@@ -29,12 +28,11 @@ from app.config import (
     get_mapping_config,
     get_service_client_config,
 )
+from app.infrastructure.repositories import get_file_repository
 from app.models import (
     Activity,
     ActivityAction,
     BBox,
-    Evidence,
-    Extraction,
     FieldModel,
     FieldType,
     Issue,
@@ -42,12 +40,9 @@ from app.models import (
     IssueType,
     JobContext,
     JobMode,
-    Mapping,
 )
-from app.models.extract.models import ExtractField, ExtractRequest, PageArtifact
+from app.models.extract.models import ExtractField, ExtractRequest
 from app.models.orchestrator import PipelineStage, StageResult
-from app.infrastructure.repositories import get_file_repository
-from app.services.document_service import DocumentService
 from app.orchestrator.application.ports.pipeline_services import (
     AdjustServicePort,
     ExtractServicePort,
@@ -174,7 +169,9 @@ class ServiceClient:
             # Get document file path
             file_repository = get_file_repository()
             document_path = file_repository.get_path(job.target_document.id)
-            document_ref = str(document_path) if document_path else getattr(job.target_document, 'ref', '')
+            document_ref = (
+                str(document_path) if document_path else getattr(job.target_document, "ref", "")
+            )
 
             ingest_config = get_ingest_config()
             request = IngestRequest(
@@ -277,26 +274,32 @@ class ServiceClient:
             label_map: dict[str, str] = {}  # Maps AcroForm field_name to linked label
             if self._structure_labelling_service is not None:
                 from app.models.structure_labelling.models import (
-                    StructureLabellingRequest,
-                    PageImageInput,
-                    TextBlockInput,
                     BoxCandidateInput,
+                    PageImageInput,
+                    StructureLabellingRequest,
+                    TextBlockInput,
                 )
 
                 file_repository = get_file_repository()
                 document_path = file_repository.get_path(job.target_document.id)
-                document_ref = str(document_path) if document_path else getattr(job.target_document, 'ref', '')
+                document_ref = (
+                    str(document_path) if document_path else getattr(job.target_document, "ref", "")
+                )
 
                 # Get page images
                 page_images: list[PageImageInput] = []
                 page_count = job.target_document.meta.page_count if job.target_document.meta else 1
                 for page_num in range(1, page_count + 1):
-                    preview_path = file_repository.get_preview_path(job.target_document.id, page_num)
+                    preview_path = file_repository.get_preview_path(
+                        job.target_document.id, page_num
+                    )
                     if preview_path:
-                        page_images.append(PageImageInput(
-                            page=page_num,
-                            image_ref=str(preview_path),
-                        ))
+                        page_images.append(
+                            PageImageInput(
+                                page=page_num,
+                                image_ref=str(preview_path),
+                            )
+                        )
 
                 # Extract text blocks for label linking
                 document_service = DocumentService()
@@ -321,25 +324,34 @@ class ServiceClient:
 
                 native_text_blocks: list[TextBlockInput] = []
                 for tb in text_block_dicts:
-                    native_text_blocks.append(TextBlockInput(
-                        id=tb["id"],
-                        text=tb["text"],
-                        page=tb["page"],
-                        bbox=tb["bbox"],
-                        font_name=tb.get("font_name"),
-                        font_size=tb.get("font_size"),
-                    ))
+                    native_text_blocks.append(
+                        TextBlockInput(
+                            id=tb["id"],
+                            text=tb["text"],
+                            page=tb["page"],
+                            bbox=tb["bbox"],
+                            font_name=tb.get("font_name"),
+                            font_size=tb.get("font_size"),
+                        )
+                    )
 
                 # Convert AcroForm fields to box candidates for structure labelling
                 box_candidates: list[BoxCandidateInput] = []
                 for acro_field in acroform_result.fields:
-                    box_candidates.append(BoxCandidateInput(
-                        id=acro_field.field_name,  # Use field_name as ID for mapping back
-                        page=acro_field.bbox.page,
-                        bbox=[acro_field.bbox.x, acro_field.bbox.y, acro_field.bbox.width, acro_field.bbox.height],
-                        box_type=acro_field.field_type,
-                        confidence=1.0,
-                    ))
+                    box_candidates.append(
+                        BoxCandidateInput(
+                            id=acro_field.field_name,  # Use field_name as ID for mapping back
+                            page=acro_field.bbox.page,
+                            bbox=[
+                                acro_field.bbox.x,
+                                acro_field.bbox.y,
+                                acro_field.bbox.width,
+                                acro_field.bbox.height,
+                            ],
+                            box_type=acro_field.field_type,
+                            confidence=1.0,
+                        )
+                    )
 
                 if page_images and native_text_blocks:
                     logger.info(
@@ -442,15 +454,17 @@ class ServiceClient:
         # Step 2: No AcroForm fields - try StructureLabellingService if available
         if self._structure_labelling_service is not None:
             from app.models.structure_labelling.models import (
-                StructureLabellingRequest,
                 PageImageInput,
+                StructureLabellingRequest,
                 TextBlockInput,
             )
 
             # Get document file path and page images
             file_repository = get_file_repository()
             document_path = file_repository.get_path(job.target_document.id)
-            document_ref = str(document_path) if document_path else getattr(job.target_document, 'ref', '')
+            document_ref = (
+                str(document_path) if document_path else getattr(job.target_document, "ref", "")
+            )
 
             # Get page images from ingest stage artifacts (if available)
             page_images: list[PageImageInput] = []
@@ -458,24 +472,28 @@ class ServiceClient:
             for page_num in range(1, page_count + 1):
                 preview_path = file_repository.get_preview_path(job.target_document.id, page_num)
                 if preview_path:
-                    page_images.append(PageImageInput(
-                        page=page_num,
-                        image_ref=str(preview_path),
-                    ))
+                    page_images.append(
+                        PageImageInput(
+                            page=page_num,
+                            image_ref=str(preview_path),
+                        )
+                    )
 
             # Extract native text blocks from PDF for label detection
             document_service = DocumentService()
             text_block_dicts = document_service.extract_text_blocks(job.target_document.id)
             native_text_blocks: list[TextBlockInput] = []
             for tb in text_block_dicts:
-                native_text_blocks.append(TextBlockInput(
-                    id=tb["id"],
-                    text=tb["text"],
-                    page=tb["page"],
-                    bbox=tb["bbox"],
-                    font_name=tb.get("font_name"),
-                    font_size=tb.get("font_size"),
-                ))
+                native_text_blocks.append(
+                    TextBlockInput(
+                        id=tb["id"],
+                        text=tb["text"],
+                        page=tb["page"],
+                        bbox=tb["bbox"],
+                        font_name=tb.get("font_name"),
+                        font_size=tb.get("font_size"),
+                    )
+                )
 
             logger.info(
                 "Extracted text blocks for labelling",
@@ -514,7 +532,9 @@ class ServiceClient:
                     field = FieldModel(
                         id=field_output.id,
                         name=field_output.name,
-                        field_type=FieldType(field_output.field_type) if field_output.field_type in [ft.value for ft in FieldType] else FieldType.TEXT,
+                        field_type=FieldType(field_output.field_type)
+                        if field_output.field_type in [ft.value for ft in FieldType]
+                        else FieldType.TEXT,
                         value=None,
                         confidence=field_output.confidence,
                         bbox=BBox(
@@ -523,7 +543,9 @@ class ServiceClient:
                             width=field_output.bbox[2],
                             height=field_output.bbox[3],
                             page=field_output.page,
-                        ) if field_output.bbox else None,
+                        )
+                        if field_output.bbox
+                        else None,
                         document_id=job.target_document.id,
                         page=field_output.page,
                         is_required=False,
@@ -623,7 +645,7 @@ class ServiceClient:
         """
         # Use real service if available
         if self._mapping_service is not None:
-            from app.models.mapping.models import MappingRequest, FieldInfo
+            from app.models.mapping.models import FieldInfo, MappingRequest
 
             if job.mode != JobMode.TRANSFER or job.source_document is None:
                 # Scratch mode - no mapping needed
@@ -678,7 +700,9 @@ class ServiceClient:
             issues: list[Issue] = []
             extract_config = get_extract_config()
             for mapping in result.mappings:
-                if mapping.confidence < extract_config.low_confidence_warning_threshold or (hasattr(mapping, 'is_ambiguous') and mapping.is_ambiguous):
+                if mapping.confidence < extract_config.low_confidence_warning_threshold or (
+                    hasattr(mapping, "is_ambiguous") and mapping.is_ambiguous
+                ):
                     issues.append(
                         Issue(
                             id=str(uuid4()),
@@ -846,10 +870,10 @@ class ServiceClient:
         # Get document file path
         file_repository = get_file_repository()
         document_path = file_repository.get_path(job.target_document.id)
-        
+
         if document_path is None:
             # Fallback to document ref if available
-            document_ref = getattr(job.target_document, 'ref', None)
+            document_ref = getattr(job.target_document, "ref", None)
             if document_ref is None:
                 # If no path available, return error
                 return StageResult(
@@ -866,7 +890,7 @@ class ServiceClient:
 
         # Get target fields to extract
         target_fields = [f for f in job.fields if f.document_id == job.target_document.id]
-        
+
         if not target_fields:
             return StageResult(
                 stage=PipelineStage.EXTRACT,
@@ -881,7 +905,9 @@ class ServiceClient:
             ExtractField(
                 field_id=field.id,
                 name=field.name,
-                field_type=field.field_type.value if isinstance(field.field_type, FieldType) else str(field.field_type),
+                field_type=field.field_type.value
+                if isinstance(field.field_type, FieldType)
+                else str(field.field_type),
                 page=field.page,
                 bbox=field.bbox,
                 validation_pattern=None,  # Could be added to FieldModel if needed
@@ -989,7 +1015,9 @@ class ServiceClient:
                 details={
                     "stage": "extract",
                     "fields_extracted": len(extract_result.extractions),
-                    "low_confidence_count": len([i for i in issues if i.issue_type == IssueType.LOW_CONFIDENCE]),
+                    "low_confidence_count": len(
+                        [i for i in issues if i.issue_type == IssueType.LOW_CONFIDENCE]
+                    ),
                     "errors_count": len(extract_result.errors),
                 },
             )
@@ -1014,12 +1042,17 @@ class ServiceClient:
 
             # Get target fields with bboxes
             target_fields = tuple(
-                f for f in job.fields
+                f
+                for f in job.fields
                 if f.document_id == job.target_document.id and f.bbox is not None
             )
 
             # Get page metadata from document
-            page_metas = job.target_document.meta.pages if job.target_document.meta and job.target_document.meta.pages else ()
+            page_metas = (
+                job.target_document.meta.pages
+                if job.target_document.meta and job.target_document.meta.pages
+                else ()
+            )
             page_meta_inputs = tuple(
                 PageMetaInput(
                     page=pm.page_number,
@@ -1053,8 +1086,7 @@ class ServiceClient:
             if not page_meta_inputs:
                 # Create default page meta if none available
                 page_meta_inputs = tuple(
-                    PageMetaInput(page=1, width=612.0, height=792.0)
-                    for _ in range(1)
+                    PageMetaInput(page=1, width=612.0, height=792.0) for _ in range(1)
                 )
 
             request = AdjustRequest(
@@ -1143,16 +1175,19 @@ class ServiceClient:
         """
         # Use real service if available
         if self._fill_service is not None:
-            from app.models.fill.models import FillRequest, FillValue, FillBBox
+            from app.models.fill.models import FillBBox, FillRequest, FillValue
 
             # Get document file path
             file_repository = get_file_repository()
             document_path = file_repository.get_path(job.target_document.id)
-            document_ref = str(document_path) if document_path else getattr(job.target_document, 'ref', '')
+            document_ref = (
+                str(document_path) if document_path else getattr(job.target_document, "ref", "")
+            )
 
             # Get target fields with values
             target_fields = [
-                f for f in job.fields
+                f
+                for f in job.fields
                 if f.document_id == job.target_document.id and f.value is not None
             ]
 
@@ -1167,7 +1202,9 @@ class ServiceClient:
                         width=f.bbox.width,
                         height=f.bbox.height,
                         page=f.bbox.page,
-                    ) if f.bbox else None,
+                    )
+                    if f.bbox
+                    else None,
                 )
                 for f in target_fields
             )
@@ -1248,7 +1285,9 @@ class ServiceClient:
             # Get document file path - use filled document if available
             file_repository = get_file_repository()
             document_path = file_repository.get_path(job.target_document.id)
-            document_ref = str(document_path) if document_path else getattr(job.target_document, 'ref', '')
+            document_ref = (
+                str(document_path) if document_path else getattr(job.target_document, "ref", "")
+            )
 
             # Check if we have a filled document from the fill stage
             filled_document_ref = document_ref
@@ -1277,9 +1316,13 @@ class ServiceClient:
                     Issue(
                         id=issue.id,
                         field_id=issue.field_id,
-                        issue_type=IssueType(issue.issue_type.value) if hasattr(issue.issue_type, 'value') else issue.issue_type,
+                        issue_type=IssueType(issue.issue_type.value)
+                        if hasattr(issue.issue_type, "value")
+                        else issue.issue_type,
                         message=issue.message,
-                        severity=IssueSeverity(issue.severity.value) if hasattr(issue.severity, 'value') else issue.severity,
+                        severity=IssueSeverity(issue.severity.value)
+                        if hasattr(issue.severity, "value")
+                        else issue.severity,
                         suggested_action=issue.suggested_action,
                     )
                 )
@@ -1288,7 +1331,9 @@ class ServiceClient:
                 Activity(
                     id=str(uuid4()),
                     timestamp=datetime.now(timezone.utc),
-                    action=ActivityAction.JOB_COMPLETED if result.critical_issues == 0 else ActivityAction.QUESTION_ASKED,
+                    action=ActivityAction.JOB_COMPLETED
+                    if result.critical_issues == 0
+                    else ActivityAction.QUESTION_ASKED,
                     details={
                         "stage": "review",
                         "issues": result.total_issues,
@@ -1328,7 +1373,9 @@ class ServiceClient:
             Activity(
                 id=str(uuid4()),
                 timestamp=datetime.now(timezone.utc),
-                action=ActivityAction.JOB_COMPLETED if not issues else ActivityAction.QUESTION_ASKED,
+                action=ActivityAction.JOB_COMPLETED
+                if not issues
+                else ActivityAction.QUESTION_ASKED,
                 details={
                     "stage": "review",
                     "issues": len(issues),
@@ -1387,10 +1434,7 @@ class ServiceClient:
         if job.source_document is None:
             return []
 
-        existing_source_fields = [
-            f for f in job.fields
-            if f.document_id == job.source_document.id
-        ]
+        existing_source_fields = [f for f in job.fields if f.document_id == job.source_document.id]
         if existing_source_fields:
             return []
 

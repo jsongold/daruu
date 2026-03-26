@@ -20,7 +20,6 @@ Output example (JSON in production):
      "user_id":"user-456"}
 """
 
-from datetime import datetime, timezone
 from typing import Any
 
 from app.infrastructure.observability.logging import get_logger

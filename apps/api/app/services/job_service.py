@@ -4,6 +4,11 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
+from app.infrastructure.repositories import (
+    get_document_repository,
+    get_event_publisher,
+    get_job_repository,
+)
 from app.models import (
     Activity,
     ActivityAction,
@@ -28,14 +33,9 @@ from app.models import (
     ReviewResponse,
     RunMode,
 )
-from app.models.orchestrator import NextAction, OrchestratorConfig
-from app.repositories import DocumentRepository, EventPublisher, JobRepository
-from app.infrastructure.repositories import (
-    get_document_repository,
-    get_event_publisher,
-    get_job_repository,
-)
+from app.models.orchestrator import NextAction
 from app.orchestrator import Orchestrator
+from app.repositories import DocumentRepository, EventPublisher, JobRepository
 
 
 class JobService:
@@ -74,11 +74,14 @@ class JobService:
         )
 
         # Publish event
-        self._event_publisher.publish_sync(job.id, {
-            "event": "job_created",
-            "job_id": job.id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        })
+        self._event_publisher.publish_sync(
+            job.id,
+            {
+                "event": "job_created",
+                "job_id": job.id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            },
+        )
 
         return job
 
@@ -213,8 +216,7 @@ class JobService:
         # Create mock mappings between source and target fields
         target_fields = [f for f in job.fields if f.document_id == job.target_document.id]
         source_fields = [
-            f for f in job.fields
-            if job.source_document and f.document_id == job.source_document.id
+            f for f in job.fields if job.source_document and f.document_id == job.source_document.id
         ]
 
         for i, target in enumerate(target_fields):
@@ -356,12 +358,15 @@ class JobService:
         data: dict[str, Any],
     ) -> None:
         """Publish an event to subscribers."""
-        await self._event_publisher.publish(job_id, {
-            "event": event_type,
-            "job_id": job_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            **data,
-        })
+        await self._event_publisher.publish(
+            job_id,
+            {
+                "event": event_type,
+                "job_id": job_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                **data,
+            },
+        )
 
     def submit_answers(
         self,

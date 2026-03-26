@@ -36,14 +36,23 @@ class FillPlannerProtocol(Protocol):
         """
         ...
 
-    async def plan_turn(
+    def set_specialized_prompt(self, prompt: str | None) -> None:
+        """Set a form-specific prompt for field identification context."""
+        ...
+
+    async def plan_with_answers(
         self,
         context: FormContext,
-        conversation_history: list[dict[str, Any]] | None = None,
-        just_fill: bool = False,
-    ) -> Any:
-        """Execute a single turn in detailed mode.
+        answers: list[dict[str, Any]],
+    ) -> FillPlan:
+        """Re-fill with user answers as high-confidence overrides.
 
-        Returns either a question or a fill plan.
+        Args:
+            context: FormContext containing fields, data sources,
+                     and mapping candidates.
+            answers: User-provided answers from the question phase.
+
+        Returns:
+            FillPlan with updated actions incorporating user answers.
         """
         ...

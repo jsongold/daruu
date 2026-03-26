@@ -8,6 +8,7 @@
  *   /admin      - Admin dashboard (legacy job management)
  *   /admin?jobId=x - View specific job
  *   /prompt_tuning  - Prompt tuning for vision autofill
+ *   /ann            - Label & Bbox Annotation Tool
  */
 
 import { useState, useCallback, useEffect } from 'react';
@@ -15,9 +16,10 @@ import { AdminPage } from './pages/AdminPage';
 import { ChatPage } from './pages/ChatPage';
 import { SinglePage } from './pages/SinglePage';
 import { PromptingPage } from './pages/PromptingPage';
+import { AnnotationPage } from './pages/AnnotationPage';
 import './App.css';
 
-type AppRoute = 'chat' | 'single' | 'admin' | 'prompt_tuning';
+type AppRoute = 'chat' | 'single' | 'admin' | 'prompt_tuning' | 'ann';
 
 /**
  * Determine current route from URL path.
@@ -32,6 +34,9 @@ function getCurrentRoute(): AppRoute {
   }
   if (path === '/prompt_tuning' || path === '/prompt_tuning/') {
     return 'prompt_tuning';
+  }
+  if (path === '/ann' || path === '/ann/') {
+    return 'ann';
   }
   // Default to chat for /, /chat, or any other path
   return 'chat';
@@ -89,6 +94,7 @@ function App() {
       single: '/single',
       admin: '/admin',
       prompt_tuning: '/prompt_tuning',
+      ann: '/ann',
     };
     window.history.pushState({}, '', pathMap[newRoute]);
     setRoute(newRoute);
@@ -118,6 +124,10 @@ function App() {
 
   if (route === 'prompt_tuning') {
     return <PromptingPage />;
+  }
+
+  if (route === 'ann') {
+    return <AnnotationPage />;
   }
 
   // Default: Chat page

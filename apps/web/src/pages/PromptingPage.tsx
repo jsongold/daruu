@@ -28,7 +28,7 @@ import type { VisionAutofillResponse, PromptPreviewResponse } from '../api/autof
 import { autofillPipeline, autofillTurn } from '../api/autofillPipelineClient';
 import type {
   AutofillMode,
-  ConversationTurn,
+  AnswerItem,
   QuestionItem,
   PipelineStepLog,
 } from '../api/autofillPipelineClient';
@@ -163,8 +163,7 @@ export function PromptingPage() {
   // Pipeline step logs state
   const [pipelineStepLogs, setPipelineStepLogs] = useState<PipelineStepLog[]>([]);
 
-  // Detailed mode Q&A state
-  const [detailedConversation, setDetailedConversation] = useState<ConversationTurn[]>([]);
+  // Detailed mode Q&A state (fill-first: draft fill → questions → final fill)
   const [currentQuestions, setCurrentQuestions] = useState<QuestionItem[] | null>(null);
   const [isDetailedTurnLoading, setIsDetailedTurnLoading] = useState(false);
 
@@ -419,7 +418,6 @@ export function PromptingPage() {
     setPreviewedPrompt(null);
     setConfidenceMap({});
     setPipelineStepLogs([]);
-    setDetailedConversation([]);
     setCurrentQuestions(null);
     setSelectedPages([]);
     setPageSelectionPhase(false);
@@ -523,8 +521,7 @@ export function PromptingPage() {
   }, [buildRequestFields]);
 
   const executeDetailedTurn = useCallback(async (
-    conversation: ConversationTurn[],
-    justFill: boolean = false,
+    answers?: AnswerItem[],
     pages?: number[],
   ) => {
     if (!activeDocument || !conversationId) return;
@@ -537,37 +534,41 @@ export function PromptingPage() {
         conversation_id: conversationId,
         fields: buildPipelineFields(pages),
         rules: customRules.length > 0 ? customRules : undefined,
-        conversation,
-        just_fill: justFill,
+        answers: answers ?? null,
       });
 
       if (turnResponse.step_logs) {
         setPipelineStepLogs(prev => [...prev, ...turnResponse.step_logs!]);
       }
 
-      if (turnResponse.type === 'questions' && turnResponse.questions && turnResponse.questions.length > 0) {
-        setCurrentQuestions(turnResponse.questions);
-      } else {
-        // Fill plan response — apply results
-        setCurrentQuestions(null);
-        setDetailedConversation([]);
+      // Always apply filled fields (draft on turn 1, final on turn 2)
+      if (turnResponse.filled_fields && turnResponse.filled_fields.length > 0) {
+        const newConfidenceMap: Record<string, number> = {};
+        setFields(prev => prev.map(field => {
+          const filled = turnResponse.filled_fields.find(f => f.field_id === field.field_id);
+          if (filled) {
+            newConfidenceMap[field.field_id] = filled.confidence;
+            return { ...field, value: filled.value };
+          }
+          return field;
+        }));
+        setConfidenceMap(newConfidenceMap);
+      }
 
-        if (turnResponse.filled_fields && turnResponse.filled_fields.length > 0) {
-          const newConfidenceMap: Record<string, number> = {};
-          setFields(prev => prev.map(field => {
-            const filled = turnResponse.filled_fields!.find(f => f.field_id === field.field_id);
-            if (filled) {
-              newConfidenceMap[field.field_id] = filled.confidence;
-              return { ...field, value: filled.value };
-            }
-            return field;
-          }));
-          setConfidenceMap(newConfidenceMap);
+      if (turnResponse.is_draft && turnResponse.questions.length > 0) {
+        // Draft fill — show questions for user review
+        setCurrentQuestions(turnResponse.questions);
+        addActivity('info',
+          `Draft fill: ${turnResponse.filled_fields.length} fields filled, ${turnResponse.questions.length} question(s)`
+        );
+      } else {
+        // Final fill — done
+        setCurrentQuestions(null);
+        if (turnResponse.filled_fields.length > 0) {
           addActivity('info', `Auto-filled ${turnResponse.filled_fields.length} fields (detailed mode)`);
         } else {
           addActivity('error', 'Detailed auto-fill found no matches');
         }
-
         setIsAutofilling(false);
         if (conversationId) {
           loadHistory(conversationId);
@@ -591,15 +592,14 @@ export function PromptingPage() {
     setIsAutofilling(true);
     setActiveTab('results');
     setPipelineStepLogs([]);
-    setDetailedConversation([]);
     setCurrentQuestions(null);
     setPageSelectionPhase(false);
     addActivity('info', `Running AI auto-fill (${autofillMode} mode) on ${pages.length} page(s)...`);
 
-    // Detailed mode: start Q&A flow
+    // Detailed mode: start fill-first flow (no answers on first turn)
     if (autofillMode === 'detailed') {
       setActiveTab('pipeline');
-      executeDetailedTurn([], false, pages);
+      executeDetailedTurn(undefined, pages);
       return;
     }
 
@@ -747,43 +747,31 @@ export function PromptingPage() {
   const handleQuestionSubmit = useCallback((answers: Record<string, { selectedOptionIds: string[]; freeText?: string }>) => {
     if (!currentQuestions) return;
 
-    // Build conversation turns: one question + one answer per question
-    const newTurns: ConversationTurn[] = [];
-    for (const q of currentQuestions) {
-      const answer = answers[q.id];
-      if (!answer) continue;
-
-      newTurns.push({
-        role: 'assistant',
-        type: 'question',
+    // Build AnswerItem[] from the modal answers
+    const answerItems: AnswerItem[] = currentQuestions
+      .filter(q => answers[q.id])
+      .map(q => ({
         question_id: q.id,
-        question: q.question,
-        question_type: q.question_type,
-        options: q.options,
-        context: q.context,
-      });
+        question_text: q.question,
+        selected_option_ids: answers[q.id].selectedOptionIds,
+        free_text: answers[q.id].freeText || null,
+      }));
 
-      newTurns.push({
-        role: 'user',
-        type: 'answer',
-        question_id: q.id,
-        selected_option_ids: answer.selectedOptionIds,
-        free_text: answer.freeText,
-      });
-    }
-
-    const updatedConversation = [...detailedConversation, ...newTurns];
-    setDetailedConversation(updatedConversation);
     setCurrentQuestions(null);
 
-    // Execute next turn with updated conversation
-    executeDetailedTurn(updatedConversation);
-  }, [currentQuestions, detailedConversation, executeDetailedTurn]);
+    // Execute turn 2 with user answers
+    executeDetailedTurn(answerItems);
+  }, [currentQuestions, executeDetailedTurn]);
 
   const handleJustFill = useCallback(() => {
+    // Accept draft fill as-is — draft values are already applied
     setCurrentQuestions(null);
-    executeDetailedTurn(detailedConversation, true);
-  }, [detailedConversation, executeDetailedTurn]);
+    setIsAutofilling(false);
+    addActivity('info', 'Accepted draft fill without answering questions');
+    if (conversationId) {
+      loadHistory(conversationId);
+    }
+  }, [conversationId, addActivity, loadHistory]);
 
   // ---- Rule management ----
 

@@ -238,9 +238,7 @@ class PdfPlumberTextAdapter:
         with pdfplumber.open(document_ref) as pdf:
             # Validate page range
             if page > len(pdf.pages):
-                raise ValueError(
-                    f"Page {page} out of range (document has {len(pdf.pages)} pages)"
-                )
+                raise ValueError(f"Page {page} out of range (document has {len(pdf.pages)} pages)")
 
             pdf_page = pdf.pages[page - 1]  # pdfplumber uses 0-indexed pages
 
@@ -485,12 +483,8 @@ class PaddleOcrAdapter:
                     show_log=False,
                 )
             except ImportError:
-                logger.warning(
-                    "PaddleOCR not installed. Install with: pip install paddleocr"
-                )
-                raise RuntimeError(
-                    "PaddleOCR not available. Install with: pip install paddleocr"
-                )
+                logger.warning("PaddleOCR not installed. Install with: pip install paddleocr")
+                raise RuntimeError("PaddleOCR not available. Install with: pip install paddleocr")
 
     async def recognize(
         self,

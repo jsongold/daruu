@@ -4,46 +4,46 @@ Tests all conversation-related models from app.models.conversation module.
 Validates serialization, deserialization, enum values, and frozen behavior.
 """
 
-import pytest
 from datetime import datetime, timezone
-from pydantic import ValidationError
 
+import pytest
 from app.models.conversation import (
-    # Enums
-    ConversationStatus,
-    MessageRole,
-    ApprovalStatus,
+    ERROR_MESSAGES,
     AgentStage,
-    SSEEventType,
-    ErrorCode,
-    # Request models
-    CreateConversationRequest,
-    SendMessageRequest,
+    AgentState,
+    ApprovalStatus,
     ApprovePreviewRequest,
     # Response models
     Attachment,
-    Message,
     Conversation,
+    ConversationListResponse,
+    # Enums
+    ConversationStatus,
     ConversationSummary,
     ConversationWithMessages,
-    ConversationListResponse,
-    MessageListResponse,
-    # SSE models
-    SSEConnectedData,
-    SSEThinkingData,
-    SSEMessageData,
-    SSEPreviewData,
-    SSEApprovalData,
-    SSEStageChangeData,
-    SSEErrorData,
+    # Request models
+    CreateConversationRequest,
+    # Agent state models
+    DetectedDocument,
+    ErrorCode,
     # Error models
     ErrorDetail,
     ErrorResponse,
-    ERROR_MESSAGES,
-    # Agent state models
-    DetectedDocument,
-    AgentState,
+    Message,
+    MessageListResponse,
+    MessageRole,
+    SendMessageRequest,
+    SSEApprovalData,
+    # SSE models
+    SSEConnectedData,
+    SSEErrorData,
+    SSEEventType,
+    SSEMessageData,
+    SSEPreviewData,
+    SSEStageChangeData,
+    SSEThinkingData,
 )
+from pydantic import ValidationError
 
 
 class TestConversationStatusEnum:

@@ -12,7 +12,6 @@ Service vs Agent:
 """
 
 import uuid
-from typing import Callable
 
 from app.models.fill import (
     FieldFillResult,
@@ -29,11 +28,8 @@ from app.models.fill import (
     RenderParams,
 )
 from app.services.fill.domain.models import (
-    AcroFormField,
     BoundingBox,
-    FieldSpec,
     FontConfig,
-    OverlaySpec,
 )
 from app.services.fill.domain.rules import (
     detect_overlap,
@@ -307,9 +303,7 @@ class FillService:
 
             # Check if borders should be rendered
             render_borders = (
-                request.options.get("render_borders", False)
-                if request.options
-                else False
+                request.options.get("render_borders", False) if request.options else False
             )
 
             for fill_value in fields:
@@ -345,11 +339,13 @@ class FillService:
             self._overlay_renderer.save_overlay(overlay_path)
             overlay_paths[page_num] = overlay_path
 
-            artifacts.append(RenderArtifact(
-                artifact_type="overlay",
-                artifact_ref=overlay_path,
-                page_number=page_num,
-            ))
+            artifacts.append(
+                RenderArtifact(
+                    artifact_type="overlay",
+                    artifact_ref=overlay_path,
+                    page_number=page_num,
+                )
+            )
 
         # Detect overlapping fields
         overlap_issues = self._check_overlaps(bboxes, request.fields)
@@ -501,19 +497,23 @@ class FillService:
         # Track issues
         issues: list[FillIssue] = []
         if text_block.overflow:
-            issues.append(FillIssue(
-                field_id=fill_value.field_id,
-                issue_type=IssueType.OVERFLOW,
-                severity=IssueSeverity.WARNING,
-                message=f"Text overflows bounding box for field: {fill_value.field_id}",
-            ))
+            issues.append(
+                FillIssue(
+                    field_id=fill_value.field_id,
+                    issue_type=IssueType.OVERFLOW,
+                    severity=IssueSeverity.WARNING,
+                    message=f"Text overflows bounding box for field: {fill_value.field_id}",
+                )
+            )
         if text_block.truncated:
-            issues.append(FillIssue(
-                field_id=fill_value.field_id,
-                issue_type=IssueType.TRUNCATED,
-                severity=IssueSeverity.WARNING,
-                message=f"Text was truncated for field: {fill_value.field_id}",
-            ))
+            issues.append(
+                FillIssue(
+                    field_id=fill_value.field_id,
+                    issue_type=IssueType.TRUNCATED,
+                    severity=IssueSeverity.WARNING,
+                    message=f"Text was truncated for field: {fill_value.field_id}",
+                )
+            )
 
         # Draw the text block
         success = self._overlay_renderer.draw_text_block(text_block, font_config)
@@ -549,13 +549,15 @@ class FillService:
             field1_id = fields[i].field_id if i < len(fields) else "unknown"
             field2_id = fields[j].field_id if j < len(fields) else "unknown"
 
-            issues.append(FillIssue(
-                field_id=field1_id,
-                issue_type=IssueType.OVERLAP,
-                severity=IssueSeverity.WARNING,
-                message=f"Field '{field1_id}' overlaps with '{field2_id}'",
-                details={"overlapping_field": field2_id},
-            ))
+            issues.append(
+                FillIssue(
+                    field_id=field1_id,
+                    issue_type=IssueType.OVERLAP,
+                    severity=IssueSeverity.WARNING,
+                    message=f"Field '{field1_id}' overlaps with '{field2_id}'",
+                    details={"overlapping_field": field2_id},
+                )
+            )
 
         return issues
 

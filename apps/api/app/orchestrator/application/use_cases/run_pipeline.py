@@ -6,16 +6,15 @@ the execution loop based on the run mode.
 """
 
 from dataclasses import dataclass
-from typing import Sequence
 
 from app.models import Issue, JobContext, JobStatus, RunMode
-from app.models.orchestrator import NextAction, OrchestratorConfig, PipelineStage, StageResult
-from app.repositories import JobRepository
+from app.models.orchestrator import OrchestratorConfig, PipelineStage, StageResult
 from app.orchestrator.application.ports.service_gateway import ServiceGateway
 from app.orchestrator.domain.rules import (
     TerminationAction,
     check_termination,
 )
+from app.repositories import JobRepository
 
 
 @dataclass(frozen=True)
@@ -162,6 +161,7 @@ class RunPipelineUseCase:
     def _get_next_stage(self, current_stage: PipelineStage | None) -> PipelineStage | None:
         """Get the next stage in the pipeline."""
         from app.models.orchestrator import get_next_stage
+
         return get_next_stage(current_stage)
 
     async def _execute_stage(

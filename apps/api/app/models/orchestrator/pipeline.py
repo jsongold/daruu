@@ -5,13 +5,12 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.models.field import FieldModel
-from app.models.job import Activity, Issue
-
 # Re-export OrchestratorConfig from config for backward compatibility
 # This allows existing imports like `from app.models.orchestrator import OrchestratorConfig`
 # to continue working while centralizing the definition in config.py
 from app.config import OrchestratorConfig as OrchestratorConfig  # noqa: F401
+from app.models.field import FieldModel
+from app.models.job import Activity, Issue
 
 
 class PipelineStage(str, Enum):
@@ -94,9 +93,7 @@ class StageResult(BaseModel):
     updated_fields: list[FieldModel] = Field(
         default_factory=list, description="Fields updated by this stage"
     )
-    error_message: str | None = Field(
-        None, description="Error message if stage failed"
-    )
+    error_message: str | None = Field(None, description="Error message if stage failed")
 
     model_config = {"frozen": True}
 

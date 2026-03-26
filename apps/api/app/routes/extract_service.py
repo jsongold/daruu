@@ -13,23 +13,23 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
 
+from app.agents.extract import LangChainValueExtractionAgent
 from app.models import ApiResponse
 from app.models.common import BBox
 from app.models.extract import (
     ExtractField,
     ExtractRequest,
-    ExtractResult,
     PageArtifact,
 )
 from app.services.extract.adapters import PaddleOcrAdapter, PdfPlumberTextAdapter
-from app.agents.extract import LangChainValueExtractionAgent
 from app.services.extract.service import ExtractService
 
 router = APIRouter(tags=["extract-service"])
 
 
 # Request/Response DTOs for the API
-from pydantic import BaseModel, Field as PydanticField
+from pydantic import BaseModel
+from pydantic import Field as PydanticField
 
 
 class ExtractFieldInput(BaseModel):
@@ -48,9 +48,7 @@ class ExtractFieldInput(BaseModel):
         max_length=5,
         description="Bounding box [x, y, width, height, page] or [x, y, width, height]",
     )
-    validation_pattern: str | None = PydanticField(
-        None, description="Regex pattern for validation"
-    )
+    validation_pattern: str | None = PydanticField(None, description="Regex pattern for validation")
 
     model_config = {"frozen": True}
 
@@ -69,9 +67,7 @@ class PageArtifactInput(BaseModel):
 class ExtractServiceRequest(BaseModel):
     """Request body for POST /api/v1/extract-service."""
 
-    document_ref: str = PydanticField(
-        ..., description="Reference/path to the document"
-    )
+    document_ref: str = PydanticField(..., description="Reference/path to the document")
     fields: list[ExtractFieldInput] = PydanticField(
         ..., min_length=1, description="Fields to extract"
     )
@@ -81,9 +77,7 @@ class ExtractServiceRequest(BaseModel):
     user_rules: dict[str, Any] | None = PydanticField(
         None, description="User-defined extraction rules"
     )
-    use_ocr: bool = PydanticField(
-        default=True, description="Whether to use OCR"
-    )
+    use_ocr: bool = PydanticField(default=True, description="Whether to use OCR")
     use_llm: bool = PydanticField(
         default=True, description="Whether to use LLM for ambiguity resolution"
     )
@@ -115,17 +109,13 @@ class ExtractionOutput(BaseModel):
 
     field_id: str = PydanticField(..., description="Field identifier")
     value: str = PydanticField(..., description="Extracted value")
-    normalized_value: str | None = PydanticField(
-        None, description="Normalized value"
-    )
+    normalized_value: str | None = PydanticField(None, description="Normalized value")
     confidence: float = PydanticField(..., description="Confidence score")
     source: str = PydanticField(..., description="Source of extraction")
     evidence: list[EvidenceOutput] = PydanticField(
         default_factory=list, description="Supporting evidence"
     )
-    needs_review: bool = PydanticField(
-        default=False, description="Whether review is needed"
-    )
+    needs_review: bool = PydanticField(default=False, description="Whether review is needed")
     conflict_detected: bool = PydanticField(
         default=False, description="Whether conflicts were detected"
     )
@@ -149,9 +139,7 @@ class FollowupQuestionOutput(BaseModel):
 
     field_id: str = PydanticField(..., description="Field ID")
     question: str = PydanticField(..., description="Question text")
-    candidates: list[str] = PydanticField(
-        default_factory=list, description="Possible answers"
-    )
+    candidates: list[str] = PydanticField(default_factory=list, description="Possible answers")
     reason: str = PydanticField(..., description="Reason for question")
 
     model_config = {"frozen": True}
@@ -175,9 +163,7 @@ class ExtractServiceResponse(BaseModel):
     extractions: list[ExtractionOutput] = PydanticField(
         default_factory=list, description="Extracted values"
     )
-    evidence: list[EvidenceOutput] = PydanticField(
-        default_factory=list, description="All evidence"
-    )
+    evidence: list[EvidenceOutput] = PydanticField(default_factory=list, description="All evidence")
     ocr_requests: list[OcrRequestOutput] = PydanticField(
         default_factory=list, description="OCR requests"
     )

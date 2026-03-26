@@ -13,9 +13,7 @@ class LabelCandidate(BaseModel):
     """A detected label candidate from the PDF form."""
 
     text: str = Field(..., description="Detected label text")
-    confidence: float = Field(
-        ..., ge=0.0, le=1.0, description="Detection confidence"
-    )
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Detection confidence")
     page: int | None = Field(None, ge=1, description="Page number (1-indexed)")
 
     model_config = {"frozen": True}
@@ -28,9 +26,7 @@ class MappingCandidate(BaseModel):
     source_key: str = Field(..., description="Key from the data source")
     source_value: str = Field(..., description="Value from the data source")
     source_name: str = Field(..., description="Name of the originating data source")
-    score: float = Field(
-        ..., ge=0.0, le=1.0, description="Fuzzy match score"
-    )
+    score: float = Field(..., ge=0.0, le=1.0, description="Fuzzy match score")
 
     model_config = {"frozen": True}
 
@@ -47,9 +43,7 @@ class DataSourceEntry(BaseModel):
     raw_text: str | None = Field(
         None, description="Raw text content (used when no structured fields exist)"
     )
-    confidence: float = Field(
-        default=0.5, ge=0.0, le=1.0, description="Extraction confidence"
-    )
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0, description="Extraction confidence")
 
     model_config = {"frozen": True}
 
@@ -93,8 +87,6 @@ class FormContext(BaseModel):
     mapping_candidates: tuple[MappingCandidate, ...] = Field(
         default=(), description="Pre-computed fuzzy mapping candidates"
     )
-    rules: tuple[str, ...] = Field(
-        default=(), description="User-provided filling rules"
-    )
+    rules: tuple[str, ...] = Field(default=(), description="User-provided filling rules")
 
     model_config = {"frozen": True}

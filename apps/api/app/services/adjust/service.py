@@ -24,7 +24,7 @@ from app.models.adjust import (
 from app.models.common import BBox
 from app.models.field import FieldEdit, FieldModel
 from app.models.job import Issue, IssueType
-from app.services.adjust.domain.models import BboxAdjustment, BboxValues
+from app.services.adjust.domain.models import BboxValues
 from app.services.adjust.domain.rules import (
     bbox_from_dict,
     calculate_adjustment_confidence_impact,
@@ -106,10 +106,7 @@ class AdjustService:
         errors: list[AdjustError] = []
 
         # Group issues by type for systematic processing
-        layout_issues = [
-            i for i in request.issues
-            if i.issue_type == IssueType.LAYOUT_ISSUE
-        ]
+        layout_issues = [i for i in request.issues if i.issue_type == IssueType.LAYOUT_ISSUE]
 
         # Process layout issues (overflow, overlap)
         for issue in layout_issues:
@@ -278,9 +275,7 @@ class AdjustService:
             )
             if not adjustment.is_identity:
                 new_bbox = compute_adjusted_bbox(bbox, adjustment)
-                confidence_impact = calculate_adjustment_confidence_impact(
-                    adjustment, bbox
-                )
+                confidence_impact = calculate_adjustment_confidence_impact(adjustment, bbox)
 
                 return FieldPatch(
                     field_id=field.id,
@@ -356,9 +351,7 @@ class AdjustService:
 
             if not adjustment.is_identity:
                 new_bbox = compute_adjusted_bbox(bbox, adjustment)
-                confidence_impact = calculate_adjustment_confidence_impact(
-                    adjustment, bbox
-                )
+                confidence_impact = calculate_adjustment_confidence_impact(adjustment, bbox)
 
                 return FieldPatch(
                     field_id=field.id,

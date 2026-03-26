@@ -15,7 +15,6 @@ Service vs Agent:
 from typing import Sequence
 from uuid import uuid4
 
-from app.models.common import BBox
 from app.models.field import FieldModel
 from app.models.job import Issue, IssueSeverity, IssueType
 from app.models.review import (
@@ -143,10 +142,7 @@ class ReviewService:
                 )
 
             # Count fields on this page
-            fields_on_page = [
-                f for f in request.fields
-                if f.page == page_num
-            ]
+            fields_on_page = [f for f in request.fields if f.page == page_num]
 
             preview = PreviewArtifact(
                 page=page_num,
@@ -174,8 +170,7 @@ class ReviewService:
             confidence_updates=tuple(confidence_updates),
             total_issues=len(issues),
             critical_issues=sum(
-                1 for i in issues
-                if i.severity in (IssueSeverity.CRITICAL, IssueSeverity.HIGH)
+                1 for i in issues if i.severity in (IssueSeverity.CRITICAL, IssueSeverity.HIGH)
             ),
         )
 
@@ -240,7 +235,7 @@ class ReviewService:
         for i, field1 in enumerate(fields):
             if not field1.bbox:
                 continue
-            for field2 in fields[i + 1:]:
+            for field2 in fields[i + 1 :]:
                 if not field2.bbox:
                     continue
 

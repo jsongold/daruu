@@ -9,9 +9,8 @@ These tests document the exact shape of API interactions the frontend relies on.
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
-from typing import Any, Callable
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -160,9 +159,7 @@ class TestDocumentInteractions:
                     "data": {
                         "id": ContractMatcher.uuid(),
                         "ref": ContractMatcher.like("uploads/test.pdf"),
-                        "document_type": ContractMatcher.regex(
-                            "^(source|target)$", "source"
-                        ),
+                        "document_type": ContractMatcher.regex("^(source|target)$", "source"),
                         "meta": {
                             "page_count": ContractMatcher.like(1),
                             "file_size": ContractMatcher.like(1024),
@@ -192,9 +189,7 @@ class TestJobInteractions:
     def document_ids(self) -> tuple[str, str]:
         return str(uuid4()), str(uuid4())
 
-    def test_create_transfer_job_interaction(
-        self, document_ids: tuple[str, str]
-    ) -> None:
+    def test_create_transfer_job_interaction(self, document_ids: tuple[str, str]) -> None:
         """Consumer expects to create a transfer mode job."""
         source_id, target_id = document_ids
 
@@ -235,9 +230,7 @@ class TestJobInteractions:
         assert "job_id" in response_body["data"]
         assert response_body["meta"]["mode"] == "transfer"
 
-    def test_create_scratch_job_interaction(
-        self, document_ids: tuple[str, str]
-    ) -> None:
+    def test_create_scratch_job_interaction(self, document_ids: tuple[str, str]) -> None:
         """Consumer expects to create a scratch mode job."""
         _, target_id = document_ids
 
@@ -288,9 +281,7 @@ class TestJobInteractions:
                     "success": True,
                     "data": {
                         "id": ContractMatcher.uuid(),
-                        "mode": ContractMatcher.regex(
-                            "^(transfer|scratch)$", "transfer"
-                        ),
+                        "mode": ContractMatcher.regex("^(transfer|scratch)$", "transfer"),
                         "status": ContractMatcher.regex(
                             "^(created|running|blocked|awaiting_input|done|failed)$",
                             "created",

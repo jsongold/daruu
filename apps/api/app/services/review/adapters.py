@@ -92,9 +92,7 @@ class PyMuPdfRenderer:
 
         try:
             if page_number > len(doc):
-                raise ValueError(
-                    f"Page {page_number} out of range. PDF has {len(doc)} pages."
-                )
+                raise ValueError(f"Page {page_number} out of range. PDF has {len(doc)} pages.")
 
             # Get the page (0-indexed internally)
             page = doc[page_number - 1]
@@ -255,8 +253,7 @@ class OpenCVDiffGenerator:
         # Verify dimensions match
         if orig.shape != filled.shape:
             raise ValueError(
-                f"Image dimensions do not match: "
-                f"original {orig.shape} vs filled {filled.shape}"
+                f"Image dimensions do not match: original {orig.shape} vs filled {filled.shape}"
             )
 
         # Calculate absolute difference
@@ -266,14 +263,10 @@ class OpenCVDiffGenerator:
         gray_diff = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
 
         # Apply threshold to find significant differences
-        _, thresh = cv2.threshold(
-            gray_diff, self.DEFAULT_DIFF_THRESHOLD, 255, cv2.THRESH_BINARY
-        )
+        _, thresh = cv2.threshold(gray_diff, self.DEFAULT_DIFF_THRESHOLD, 255, cv2.THRESH_BINARY)
 
         # Find contours of changed regions
-        contours, _ = cv2.findContours(
-            thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        )
+        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         # Build list of change regions
         change_regions: list[ChangeRegion] = []
@@ -365,8 +358,7 @@ class OpenCVDiffGenerator:
         # Verify dimensions match
         if base.shape != overlay.shape:
             raise ValueError(
-                f"Image dimensions do not match: "
-                f"base {base.shape} vs overlay {overlay.shape}"
+                f"Image dimensions do not match: base {base.shape} vs overlay {overlay.shape}"
             )
 
         # Blend images using weighted addition

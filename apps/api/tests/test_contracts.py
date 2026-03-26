@@ -18,8 +18,6 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
-from jsonschema import Draft7Validator, ValidationError
-
 from app.models import (
     Activity,
     ActivityAction,
@@ -54,6 +52,7 @@ from app.models import (
     RunRequest,
     RunResponse,
 )
+from jsonschema import Draft7Validator
 
 
 def generate_json_schema(model_class: type) -> dict[str, Any]:

@@ -7,9 +7,10 @@ Tests mock EmbeddingGateway:
 - Consistent dimensions
 """
 
-import pytest
 import math
 from unittest.mock import AsyncMock
+
+import pytest
 
 
 class TestMockEmbeddingGateway:
@@ -26,20 +27,41 @@ class TestMockEmbeddingGateway:
     def sample_image_bytes(self) -> bytes:
         """Create sample image bytes for testing."""
         # Minimal PNG header bytes
-        return bytes([
-            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
-            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
-            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-        ])
+        return bytes(
+            [
+                0x89,
+                0x50,
+                0x4E,
+                0x47,
+                0x0D,
+                0x0A,
+                0x1A,
+                0x0A,
+                0x00,
+                0x00,
+                0x00,
+                0x0D,
+                0x49,
+                0x48,
+                0x44,
+                0x52,
+                0x00,
+                0x00,
+                0x00,
+                0x01,
+                0x00,
+                0x00,
+                0x00,
+                0x01,
+            ]
+        )
 
     # =========================================================================
     # embed_image Tests
     # =========================================================================
 
     @pytest.mark.asyncio
-    async def test_embed_image_returns_vector(
-        self, embedding_gateway, sample_image_bytes
-    ) -> None:
+    async def test_embed_image_returns_vector(self, embedding_gateway, sample_image_bytes) -> None:
         """Test that embed_image returns a vector."""
         result = await embedding_gateway.embed_image(sample_image_bytes)
 
@@ -68,9 +90,7 @@ class TestMockEmbeddingGateway:
         assert len(result) in [384, 768, 1024, 1536, 3072]
 
     @pytest.mark.asyncio
-    async def test_embed_image_normalized(
-        self, embedding_gateway, sample_image_bytes
-    ) -> None:
+    async def test_embed_image_normalized(self, embedding_gateway, sample_image_bytes) -> None:
         """Test that embedding is normalized (unit vector)."""
         result = await embedding_gateway.embed_image(sample_image_bytes)
 
@@ -79,9 +99,7 @@ class TestMockEmbeddingGateway:
         assert 0.99 <= magnitude <= 1.01 or magnitude > 0  # Or at least non-zero
 
     @pytest.mark.asyncio
-    async def test_embed_image_different_images_different_vectors(
-        self, embedding_gateway
-    ) -> None:
+    async def test_embed_image_different_images_different_vectors(self, embedding_gateway) -> None:
         """Test that different images produce different embeddings."""
         image1 = b"image_content_1_unique_pattern"
         image2 = b"image_content_2_different_pattern"
@@ -348,7 +366,7 @@ class TestEmbeddingGatewayEdgeCases:
     @pytest.mark.asyncio
     async def test_special_characters_in_text(self, embedding_gateway) -> None:
         """Test handling of special characters."""
-        special_text = "Special chars: !@#$%^&*()_+-={}[]|\\:\";<>?,./"
+        special_text = 'Special chars: !@#$%^&*()_+-={}[]|\\:";<>?,./'
 
         result = await embedding_gateway.embed_text(special_text)
 
@@ -372,7 +390,7 @@ class TestOpenAIEmbeddingGateway:
     @pytest.fixture
     def mock_openai_client(self):
         """Create a mock OpenAI client."""
-        from unittest.mock import MagicMock, AsyncMock
+        from unittest.mock import AsyncMock, MagicMock
 
         mock = MagicMock()
 
@@ -414,9 +432,7 @@ class TestOpenAIEmbeddingGateway:
         """Test OpenAI gateway handles API errors gracefully."""
         from app.infrastructure.gateways.embedding import OpenAIEmbeddingGateway
 
-        mock_openai_client.embeddings.create = AsyncMock(
-            side_effect=Exception("API Error")
-        )
+        mock_openai_client.embeddings.create = AsyncMock(side_effect=Exception("API Error"))
 
         gateway = OpenAIEmbeddingGateway(client=mock_openai_client)
 

@@ -33,6 +33,8 @@ from app.infrastructure.supabase.config import is_supabase_configured
 def _is_test_mode() -> bool:
     """Check if running in test mode (use memory repositories)."""
     return os.environ.get("DARU_REPOSITORY_MODE", "").lower() == "memory"
+
+
 from app.repositories import (
     ConversationRepository,
     CorrectionRepository,
@@ -97,6 +99,7 @@ def _get_memory_document_repository() -> DocumentRepository:
         from app.infrastructure.repositories.memory_repository import (
             MemoryDocumentRepository,
         )
+
         _memory_doc_repo = MemoryDocumentRepository()
     return _memory_doc_repo
 
@@ -108,6 +111,7 @@ def _get_memory_job_repository() -> JobRepository:
         from app.infrastructure.repositories.memory_repository import (
             MemoryJobRepository,
         )
+
         _memory_job_repo = MemoryJobRepository()
     return _memory_job_repo
 
@@ -119,6 +123,7 @@ def _get_memory_file_repository() -> FileRepository:
         from app.infrastructure.repositories.memory_repository import (
             MemoryFileRepository,
         )
+
         _memory_file_repo = MemoryFileRepository()
     return _memory_file_repo
 
@@ -130,6 +135,7 @@ def _get_memory_event_publisher() -> EventPublisher:
         from app.infrastructure.repositories.memory_repository import (
             MemoryEventPublisher,
         )
+
         _memory_event_pub = MemoryEventPublisher()
     return _memory_event_pub
 
@@ -150,6 +156,7 @@ def _get_supabase_document_repository() -> DocumentRepository:
     _ensure_supabase_configured()
     if _supabase_doc_repo is None:
         from app.repositories.supabase import SupabaseDocumentRepository
+
         _supabase_doc_repo = SupabaseDocumentRepository()
         logger.debug("Initialized Supabase document repository")
     return _supabase_doc_repo
@@ -161,6 +168,7 @@ def _get_supabase_job_repository() -> JobRepository:
     _ensure_supabase_configured()
     if _supabase_job_repo is None:
         from app.repositories.supabase import SupabaseJobRepository
+
         _supabase_job_repo = SupabaseJobRepository()
         logger.debug("Initialized Supabase job repository")
     return _supabase_job_repo
@@ -172,6 +180,7 @@ def _get_supabase_file_repository() -> FileRepository:
     _ensure_supabase_configured()
     if _supabase_file_repo is None:
         from app.repositories.supabase import SupabaseFileRepository
+
         _supabase_file_repo = SupabaseFileRepository()
         logger.debug("Initialized Supabase file repository")
     return _supabase_file_repo
@@ -274,6 +283,7 @@ def get_conversation_repository(
         from app.infrastructure.repositories.memory_conversation_repository import (
             MemoryConversationRepository,
         )
+
         _memory_conv_repo = MemoryConversationRepository()
         logger.debug("Initialized memory conversation repository")
     return _memory_conv_repo
@@ -298,6 +308,7 @@ def get_message_repository(
         from app.infrastructure.repositories.memory_message_repository import (
             MemoryMessageRepository,
         )
+
         _memory_msg_repo = MemoryMessageRepository()
         logger.debug("Initialized memory message repository")
     return _memory_msg_repo
@@ -322,6 +333,7 @@ def get_template_repository(
         from app.infrastructure.repositories.memory_template_repository import (
             MemoryTemplateRepository,
         )
+
         _memory_template_repo = MemoryTemplateRepository()
         logger.debug("Initialized memory template repository")
     return _memory_template_repo
@@ -346,6 +358,7 @@ def get_edit_repository(
         from app.infrastructure.repositories.memory_edit_repository import (
             MemoryEditRepository,
         )
+
         _memory_edit_repo = MemoryEditRepository()
         logger.debug("Initialized memory edit repository")
     return _memory_edit_repo
@@ -357,6 +370,7 @@ def _get_supabase_data_source_repository() -> DataSourceRepository:
     _ensure_supabase_configured()
     if _supabase_data_source_repo is None:
         from app.repositories.supabase import SupabaseDataSourceRepository
+
         _supabase_data_source_repo = SupabaseDataSourceRepository()
         logger.debug("Initialized Supabase data source repository")
     return _supabase_data_source_repo
@@ -389,6 +403,7 @@ def _get_supabase_prompt_attempt_repository() -> PromptAttemptRepository:
     _ensure_supabase_configured()
     if _supabase_prompt_attempt_repo is None:
         from app.repositories.supabase import SupabasePromptAttemptRepository
+
         _supabase_prompt_attempt_repo = SupabasePromptAttemptRepository()
         logger.debug("Initialized Supabase prompt attempt repository")
     return _supabase_prompt_attempt_repo
@@ -420,6 +435,7 @@ def _get_memory_correction_repository() -> CorrectionRepository:
         from app.infrastructure.repositories.memory_correction_repository import (
             MemoryCorrectionRepository,
         )
+
         _memory_correction_repo = MemoryCorrectionRepository()
     return _memory_correction_repo
 
@@ -430,6 +446,7 @@ def _get_supabase_correction_repository() -> CorrectionRepository:
     _ensure_supabase_configured()
     if _supabase_correction_repo is None:
         from app.repositories.supabase import SupabaseCorrectionRepository
+
         _supabase_correction_repo = SupabaseCorrectionRepository()
         logger.debug("Initialized Supabase correction repository")
     return _supabase_correction_repo
@@ -460,6 +477,7 @@ def _get_memory_rule_snippet_repository() -> RuleSnippetRepository:
         from app.infrastructure.repositories.memory_rule_snippet_repository import (
             MemoryRuleSnippetRepository,
         )
+
         _memory_rule_snippet_repo = MemoryRuleSnippetRepository()
     return _memory_rule_snippet_repo
 
@@ -470,6 +488,7 @@ def _get_supabase_rule_snippet_repository() -> RuleSnippetRepository:
     _ensure_supabase_configured()
     if _supabase_rule_snippet_repo is None:
         from app.repositories.supabase import SupabaseRuleSnippetRepository
+
         _supabase_rule_snippet_repo = SupabaseRuleSnippetRepository()
         logger.debug("Initialized Supabase rule snippet repository")
     return _supabase_rule_snippet_repo

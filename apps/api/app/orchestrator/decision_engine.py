@@ -140,9 +140,7 @@ class DecisionEngine:
 
         # 5.5 Check improvement rate (stagnation detection for infinite loop prevention)
         if issues_for_comparison is not None and job.iteration_count > 0:
-            improvement_result = self._check_improvement_rate(
-                job, issues_for_comparison
-            )
+            improvement_result = self._check_improvement_rate(job, issues_for_comparison)
             if improvement_result is not None:
                 return improvement_result
 
@@ -199,8 +197,7 @@ class DecisionEngine:
         active_issues = job.issues
         if self._job_has_acroform(job):
             active_issues = [
-                issue for issue in job.issues
-                if issue.issue_type != IssueType.LAYOUT_ISSUE
+                issue for issue in job.issues if issue.issue_type != IssueType.LAYOUT_ISSUE
             ]
 
         if active_issues:
@@ -209,9 +206,8 @@ class DecisionEngine:
         # Check confidence threshold for all fields
         # Skip confidence check only for SCRATCH + AcroForm (no extraction happens)
         from app.models.job import JobMode
-        skip_confidence_check = (
-            self._job_has_acroform(job) and job.mode == JobMode.SCRATCH
-        )
+
+        skip_confidence_check = self._job_has_acroform(job) and job.mode == JobMode.SCRATCH
         if not skip_confidence_check:
             if not self._all_fields_meet_confidence(job):
                 return None
@@ -266,7 +262,8 @@ class DecisionEngine:
 
         # Find issues with severity >= high (including CRITICAL, HIGH, ERROR)
         high_severity_issues = [
-            issue for issue in job.issues
+            issue
+            for issue in job.issues
             if issue.severity in (IssueSeverity.CRITICAL, IssueSeverity.HIGH, IssueSeverity.ERROR)
         ]
 
@@ -360,8 +357,7 @@ class DecisionEngine:
             return None
 
         layout_issues = [
-            issue for issue in job.issues
-            if issue.issue_type == IssueType.LAYOUT_ISSUE
+            issue for issue in job.issues if issue.issue_type == IssueType.LAYOUT_ISSUE
         ]
 
         if not layout_issues:
@@ -394,8 +390,7 @@ class DecisionEngine:
         Per PRD: mapping_ambiguous -> Re-run Mapping/Extract (with additional evidence/OCR)
         """
         mapping_issues = [
-            issue for issue in job.issues
-            if issue.issue_type == IssueType.MAPPING_AMBIGUOUS
+            issue for issue in job.issues if issue.issue_type == IssueType.MAPPING_AMBIGUOUS
         ]
 
         if not mapping_issues:

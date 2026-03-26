@@ -3,11 +3,15 @@
 from datetime import datetime
 
 import pytest
-
+from app.infrastructure.repositories.memory_repository import (
+    MemoryDocumentRepository,
+    MemoryEventPublisher,
+    MemoryFileRepository,
+    MemoryJobRepository,
+)
 from app.models import (
     Activity,
     ActivityAction,
-    BBox,
     DocumentMeta,
     DocumentType,
     Evidence,
@@ -20,12 +24,6 @@ from app.models import (
     JobMode,
     JobStatus,
     Mapping,
-)
-from app.infrastructure.repositories.memory_repository import (
-    MemoryDocumentRepository,
-    MemoryEventPublisher,
-    MemoryFileRepository,
-    MemoryJobRepository,
 )
 
 

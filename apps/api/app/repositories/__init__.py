@@ -33,6 +33,7 @@ Directory structure:
         redis/             # Redis cache (future)
 """
 
+from app.repositories.annotation_pair_repository import AnnotationPairRepository
 from app.repositories.conversation_repository import ConversationRepository
 from app.repositories.correction_repository import CorrectionRepository
 from app.repositories.data_source_repository import DataSourceRepository
@@ -47,6 +48,7 @@ from app.repositories.rule_snippet_repository import RuleSnippetRepository
 from app.repositories.template_repository import TemplateRepository
 
 __all__ = [
+    "AnnotationPairRepository",
     "ConversationRepository",
     "CorrectionRepository",
     "DataSourceRepository",

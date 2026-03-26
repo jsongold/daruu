@@ -4,13 +4,11 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi.testclient import TestClient
-
 from app.infrastructure.repositories.memory_rule_snippet_repository import (
     MemoryRuleSnippetRepository,
 )
 from app.services.rule_analyzer.schemas import ChunkAnalysisResult, ExtractedRule
-
+from fastapi.testclient import TestClient
 
 # ============================================================================
 # Helpers
@@ -22,13 +20,9 @@ def _make_llm_client(rules: list[dict] | None = None) -> AsyncMock:
     if rules is None:
         rules = []
     client = AsyncMock()
-    chunk_result = ChunkAnalysisResult(
-        rules=[ExtractedRule(**r) for r in rules]
-    )
+    chunk_result = ChunkAnalysisResult(rules=[ExtractedRule(**r) for r in rules])
     client.create = AsyncMock(return_value=chunk_result)
-    client.complete = AsyncMock(
-        return_value=MagicMock(content=json.dumps({"rules": rules}))
-    )
+    client.complete = AsyncMock(return_value=MagicMock(content=json.dumps({"rules": rules})))
     return client
 
 
