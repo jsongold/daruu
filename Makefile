@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 .PHONY: setup lint type test check test-api lint-api type-api check-api \
         setup-contracts test-contracts lint-contracts check-contracts generate-models \
-        export-env
+        export-env run-docker stop-docker
 
 setup: setup-api setup-contracts setup-ui
 	@echo "Setup: done"
@@ -37,8 +37,16 @@ run-ui:
 			source .env; \
 			set +a; \
 		fi; \
-		cd apps/web && pnpm dev \
+		cd apps/web && pnpm dev --port $${PORT:-5173} --host \
 	'
+
+run-docker:
+	@echo "Run Docker: starting dev containers"
+	@cd infra/docker-compose && docker compose -f docker-compose.dev.yml up --build
+
+stop-docker:
+	@echo "Stop Docker: stopping dev containers"
+	@cd infra/docker-compose && docker compose -f docker-compose.dev.yml down
 
 export-env:
 	@if [ ! -f .env ]; then \

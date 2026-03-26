@@ -15,14 +15,11 @@ import json
 import logging
 import math
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import Any, Protocol
 
 from app.domain.models.form_context import FormFieldSpec, LabelCandidate
 from app.models.common import BBox
 from app.services.document_service import DocumentService
-
-if TYPE_CHECKING:
-    from app.services.form_context.structural_resolver import StructuralResolverResult
 
 logger = logging.getLogger(__name__)
 
@@ -220,25 +217,6 @@ class DirectionalFieldEnricher:
                 enriched.append(field)
 
         return tuple(enriched)
-
-
-def apply_resolved_labels(
-    fields: tuple[FormFieldSpec, ...],
-    resolver_result: StructuralResolverResult,
-) -> tuple[FormFieldSpec, ...]:
-    """Set semantic labels on fields from StructuralResolver results.
-
-    For resolved fields, updates the label to the semantic label.
-    For unresolved fields, returns as-is.
-    """
-    result: list[FormFieldSpec] = []
-    for field in fields:
-        semantic_label = resolver_result.field_labels.get(field.field_id)
-        if semantic_label:
-            result.append(field.model_copy(update={"label": semantic_label}))
-        else:
-            result.append(field)
-    return tuple(result)
 
 
 class LLMFieldEnricher:

@@ -185,9 +185,9 @@ Search Security (Redis + OpenAI):
 
 ```javascript
 // ❌ CRITICAL: Hardcoded secrets
-const apiKey = "sk-proj-xxxxx"
-const password = "admin123"
-const token = "ghp_xxxxxxxxxxxx"
+const apiKey = "HARDCODED_SECRET_HERE"
+const password = "HARDCODED_SECRET_HERE"
+const token = "HARDCODED_SECRET_HERE"
 
 // ✅ CORRECT: Environment variables
 const apiKey = process.env.OPENAI_API_KEY

@@ -16,7 +16,7 @@ Before ANY commit:
 
 ```typescript
 // NEVER: Hardcoded secrets
-const apiKey = "sk-proj-xxxxx"
+const apiKey = "HARDCODED_SECRET_HERE"
 
 // ALWAYS: Environment variables
 const apiKey = process.env.OPENAI_API_KEY
