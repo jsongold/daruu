@@ -5,8 +5,7 @@ Validates request/response contracts, status codes, and error handling.
 Phase 3: Edit & Adjust feature.
 """
 
-from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi import FastAPI
@@ -18,7 +17,7 @@ def create_test_app() -> FastAPI:
     """Create a test FastAPI app with edit routes."""
     from typing import List
 
-    from fastapi import APIRouter, HTTPException, Body
+    from fastapi import APIRouter, Body, HTTPException
     from pydantic import BaseModel
 
     class BatchEditItem(BaseModel):
@@ -124,9 +123,7 @@ def mock_service(app: FastAPI) -> MagicMock:
 class TestUpdateSingleField:
     """Tests for PATCH /fields/{field_id} endpoint."""
 
-    def test_update_field_success(
-        self, client: TestClient, mock_service: MagicMock
-    ) -> None:
+    def test_update_field_success(self, client: TestClient, mock_service: MagicMock) -> None:
         """Test successful field update returns 200."""
         mock_service.apply_edit.return_value = {
             "success": True,
@@ -149,9 +146,7 @@ class TestUpdateSingleField:
         assert data["field_id"] == "name"
         assert data["new_value"] == "New"
 
-    def test_update_field_not_found(
-        self, client: TestClient, mock_service: MagicMock
-    ) -> None:
+    def test_update_field_not_found(self, client: TestClient, mock_service: MagicMock) -> None:
         """Test update non-existent field returns 404."""
         mock_service.apply_edit.return_value = {
             "success": False,
@@ -166,9 +161,7 @@ class TestUpdateSingleField:
 
         assert response.status_code == 404
 
-    def test_update_field_not_editable(
-        self, client: TestClient, mock_service: MagicMock
-    ) -> None:
+    def test_update_field_not_editable(self, client: TestClient, mock_service: MagicMock) -> None:
         """Test update read-only field returns 422."""
         mock_service.apply_edit.return_value = {
             "success": False,
@@ -204,9 +197,7 @@ class TestUpdateSingleField:
 class TestBatchUpdate:
     """Tests for PATCH /fields endpoint (batch update)."""
 
-    def test_batch_update_success(
-        self, client: TestClient, mock_service: MagicMock
-    ) -> None:
+    def test_batch_update_success(self, client: TestClient, mock_service: MagicMock) -> None:
         """Test successful batch update returns 200."""
         mock_service.apply_batch_edits.return_value = {
             "success": True,
@@ -281,9 +272,7 @@ class TestBatchUpdate:
 class TestUndo:
     """Tests for POST /undo endpoint."""
 
-    def test_undo_success(
-        self, client: TestClient, mock_service: MagicMock
-    ) -> None:
+    def test_undo_success(self, client: TestClient, mock_service: MagicMock) -> None:
         """Test successful undo returns 200."""
         mock_service.undo.return_value = {
             "success": True,
@@ -300,9 +289,7 @@ class TestUndo:
         assert data["success"] is True
         assert data["action"] == "undo"
 
-    def test_undo_nothing_to_undo(
-        self, client: TestClient, mock_service: MagicMock
-    ) -> None:
+    def test_undo_nothing_to_undo(self, client: TestClient, mock_service: MagicMock) -> None:
         """Test undo with empty history returns 400."""
         mock_service.undo.return_value = {
             "success": False,
@@ -314,9 +301,7 @@ class TestUndo:
 
         assert response.status_code == 400
 
-    def test_undo_conversation_not_found(
-        self, client: TestClient, mock_service: MagicMock
-    ) -> None:
+    def test_undo_conversation_not_found(self, client: TestClient, mock_service: MagicMock) -> None:
         """Test undo with non-existent conversation returns 404."""
         mock_service.undo.return_value = {
             "success": False,
@@ -332,9 +317,7 @@ class TestUndo:
 class TestRedo:
     """Tests for POST /redo endpoint."""
 
-    def test_redo_success(
-        self, client: TestClient, mock_service: MagicMock
-    ) -> None:
+    def test_redo_success(self, client: TestClient, mock_service: MagicMock) -> None:
         """Test successful redo returns 200."""
         mock_service.redo.return_value = {
             "success": True,
@@ -351,9 +334,7 @@ class TestRedo:
         assert data["success"] is True
         assert data["action"] == "redo"
 
-    def test_redo_nothing_to_redo(
-        self, client: TestClient, mock_service: MagicMock
-    ) -> None:
+    def test_redo_nothing_to_redo(self, client: TestClient, mock_service: MagicMock) -> None:
         """Test redo at end of history returns 400."""
         mock_service.redo.return_value = {
             "success": False,
@@ -365,9 +346,7 @@ class TestRedo:
 
         assert response.status_code == 400
 
-    def test_redo_conversation_not_found(
-        self, client: TestClient, mock_service: MagicMock
-    ) -> None:
+    def test_redo_conversation_not_found(self, client: TestClient, mock_service: MagicMock) -> None:
         """Test redo with non-existent conversation returns 404."""
         mock_service.redo.return_value = {
             "success": False,
@@ -383,9 +362,7 @@ class TestRedo:
 class TestGetAllFields:
     """Tests for GET /fields endpoint."""
 
-    def test_get_all_fields_success(
-        self, client: TestClient, mock_service: MagicMock
-    ) -> None:
+    def test_get_all_fields_success(self, client: TestClient, mock_service: MagicMock) -> None:
         """Test getting all fields returns 200."""
         mock_service.get_all_field_values.return_value = {
             "success": True,
@@ -405,9 +382,7 @@ class TestGetAllFields:
         assert data["success"] is True
         assert len(data["fields"]) == 2
 
-    def test_get_all_fields_empty(
-        self, client: TestClient, mock_service: MagicMock
-    ) -> None:
+    def test_get_all_fields_empty(self, client: TestClient, mock_service: MagicMock) -> None:
         """Test getting fields when none exist returns empty list."""
         mock_service.get_all_field_values.return_value = {
             "success": True,
@@ -441,9 +416,7 @@ class TestGetAllFields:
 class TestGetEditHistory:
     """Tests for GET /edit-history endpoint."""
 
-    def test_get_edit_history_success(
-        self, client: TestClient, mock_service: MagicMock
-    ) -> None:
+    def test_get_edit_history_success(self, client: TestClient, mock_service: MagicMock) -> None:
         """Test getting edit history returns 200."""
         mock_service.get_edit_history.return_value = {
             "success": True,
@@ -465,9 +438,7 @@ class TestGetEditHistory:
         assert data["success"] is True
         assert data["total_edits"] == 2
 
-    def test_get_edit_history_empty(
-        self, client: TestClient, mock_service: MagicMock
-    ) -> None:
+    def test_get_edit_history_empty(self, client: TestClient, mock_service: MagicMock) -> None:
         """Test getting empty history returns empty list."""
         mock_service.get_edit_history.return_value = {
             "success": True,

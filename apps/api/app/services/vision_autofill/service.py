@@ -73,9 +73,7 @@ class VisionAutofillService:
 
         try:
             # Step 1: Get all data sources for the conversation
-            data_sources = self._data_source_repo.list_by_conversation(
-                request.conversation_id
-            )
+            data_sources = self._data_source_repo.list_by_conversation(request.conversation_id)
 
             if not data_sources:
                 return VisionAutofillResponse(
@@ -133,28 +131,30 @@ class VisionAutofillService:
         for source in data_sources:
             # Use cached extraction if available
             if source.extracted_data:
-                extractions.append({
-                    "source_name": source.name,
-                    "source_type": source.type.value,
-                    "extracted_fields": source.extracted_data,
-                    "raw_text": source.text_content or source.content_preview,
-                })
+                extractions.append(
+                    {
+                        "source_name": source.name,
+                        "source_type": source.type.value,
+                        "extracted_fields": source.extracted_data,
+                        "raw_text": source.text_content or source.content_preview,
+                    }
+                )
             else:
                 # Extract fresh data
                 result = self._extraction_service.extract_from_data_source(source)
-                extractions.append({
-                    "source_name": source.name,
-                    "source_type": source.type.value,
-                    "extracted_fields": result.extracted_fields,
-                    "raw_text": result.raw_text,
-                    "confidence": result.confidence,
-                })
+                extractions.append(
+                    {
+                        "source_name": source.name,
+                        "source_type": source.type.value,
+                        "extracted_fields": result.extracted_fields,
+                        "raw_text": result.raw_text,
+                        "confidence": result.confidence,
+                    }
+                )
 
                 # Cache the extraction
                 if result.extracted_fields:
-                    self._data_source_repo.update_extracted_data(
-                        source.id, result.extracted_fields
-                    )
+                    self._data_source_repo.update_extracted_data(source.id, result.extracted_fields)
 
         return extractions
 
@@ -174,9 +174,7 @@ class VisionAutofillService:
             Dict with system_prompt, user_prompt, data_source_count,
             and extractions_summary.
         """
-        data_sources = self._data_source_repo.list_by_conversation(
-            request.conversation_id
-        )
+        data_sources = self._data_source_repo.list_by_conversation(request.conversation_id)
 
         extractions: list[dict[str, Any]] = []
         if data_sources:
@@ -263,14 +261,10 @@ class VisionAutofillService:
             )
 
             raw_response = response.content
-            processing_time_ms = int((time.time() - start_time) * 1000)
-
             # Parse response
             result = json.loads(raw_response)
 
-            filled_fields = [
-                FilledField(**f) for f in result.get("filled_fields", [])
-            ]
+            filled_fields = [FilledField(**f) for f in result.get("filled_fields", [])]
             unfilled_fields = result.get("unfilled_fields", [])
             warnings = result.get("warnings", [])
 

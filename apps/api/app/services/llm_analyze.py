@@ -13,20 +13,19 @@ StrategyType = Literal["auto", "hybrid", "vision_low_res", "acroform_only", "vis
 
 
 async def analyze_template(
-    pages: list[RenderedPage], 
-    strategy_type: StrategyType = "hybrid"
+    pages: list[RenderedPage], strategy_type: StrategyType = "hybrid"
 ) -> DraftTemplate:
     """
     Analyze the rendered PDF pages using the specified strategy.
     """
     logger.info("Analyzing template with strategy: %s", strategy_type)
-    
+
     # Simple Factory
     strategies = {
         "hybrid": HybridStrategy(),
         "vision_low_res": VisionLowResStrategy(),
     }
-    
+
     strategy = strategies.get(strategy_type)
     if not strategy:
         # Fallback or strict error
@@ -34,9 +33,10 @@ async def analyze_template(
         strategy = strategies["hybrid"]
 
     schema = DraftTemplate.model_json_schema()
-    
+
     # Execute strategy
     return await strategy.analyze(pages, schema)
+
 
 # Wait, `asyncio.run` inside an async loop (route) will fail.
 # It's better to make `analyze_template` async and await it in the route.

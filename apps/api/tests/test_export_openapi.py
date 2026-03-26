@@ -12,9 +12,6 @@ from __future__ import annotations
 import json
 import tempfile
 from pathlib import Path
-from typing import Any
-
-import pytest
 
 
 def test_openapi_can_be_generated() -> None:

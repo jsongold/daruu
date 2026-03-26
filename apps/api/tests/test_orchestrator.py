@@ -1,10 +1,12 @@
 """Tests for the orchestrator."""
 
-from datetime import datetime
 from uuid import uuid4
 
 import pytest
-
+from app.infrastructure.repositories import (
+    get_document_repository,
+    get_job_repository,
+)
 from app.models import (
     Document,
     DocumentMeta,
@@ -20,16 +22,11 @@ from app.models import (
     RunMode,
 )
 from app.models.common import BBox
-from app.models.orchestrator import OrchestratorConfig, PipelineStage, StageResult
+from app.models.orchestrator import OrchestratorConfig, PipelineStage
 from app.services.orchestrator import (
-    DecisionEngine,
     Orchestrator,
     PipelineExecutor,
     ServiceClient,
-)
-from app.infrastructure.repositories import (
-    get_document_repository,
-    get_job_repository,
 )
 
 
@@ -156,7 +153,12 @@ class TestOrchestratorUntilBlocked:
         result = await orchestrator.run(scratch_job.id, RunMode.UNTIL_BLOCKED)
 
         # Should complete, be blocked, or awaiting input
-        assert result.status in (JobStatus.BLOCKED, JobStatus.DONE, JobStatus.RUNNING, JobStatus.AWAITING_INPUT)
+        assert result.status in (
+            JobStatus.BLOCKED,
+            JobStatus.DONE,
+            JobStatus.RUNNING,
+            JobStatus.AWAITING_INPUT,
+        )
 
     @pytest.mark.asyncio
     async def test_stops_on_low_confidence(self, scratch_job: JobContext) -> None:
@@ -173,8 +175,7 @@ class TestOrchestratorUntilBlocked:
         # Should be blocked due to low confidence fields
         if result.issues:
             assert any(
-                issue.issue_type == IssueType.LOW_CONFIDENCE
-                for issue in result.issues
+                issue.issue_type == IssueType.LOW_CONFIDENCE for issue in result.issues
             ) or result.status in (JobStatus.BLOCKED, JobStatus.DONE)
 
 
@@ -236,7 +237,12 @@ class TestOrchestratorMaxSteps:
         result = await orchestrator.run(scratch_job.id, RunMode.UNTIL_BLOCKED, max_steps=2)
 
         # Should stop after limited steps
-        assert result.status in (JobStatus.RUNNING, JobStatus.BLOCKED, JobStatus.DONE, JobStatus.AWAITING_INPUT)
+        assert result.status in (
+            JobStatus.RUNNING,
+            JobStatus.BLOCKED,
+            JobStatus.DONE,
+            JobStatus.AWAITING_INPUT,
+        )
 
 
 class TestOrchestratorConvenience:
@@ -258,7 +264,12 @@ class TestOrchestratorConvenience:
 
         result = await orchestrator.run_until_blocked(scratch_job.id)
 
-        assert result.status in (JobStatus.RUNNING, JobStatus.BLOCKED, JobStatus.DONE, JobStatus.AWAITING_INPUT)
+        assert result.status in (
+            JobStatus.RUNNING,
+            JobStatus.BLOCKED,
+            JobStatus.DONE,
+            JobStatus.AWAITING_INPUT,
+        )
 
     def test_get_next_actions(self, scratch_job: JobContext) -> None:
         """Test get_next_actions returns available actions."""

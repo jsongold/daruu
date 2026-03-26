@@ -19,6 +19,7 @@ def _get_redis_client() -> Any:
     """Get Redis client."""
     try:
         import redis
+
         redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/2")
         client = redis.from_url(redis_url, decode_responses=True)
         client.ping()
@@ -70,9 +71,7 @@ async def handle_add_fields(arguments: dict[str, Any]) -> CallToolResult:
     new_fields = arguments.get("fields", [])
 
     if not form_id:
-        return CallToolResult(
-            content=[TextContent(type="text", text="Error: form_id is required")]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="Error: form_id is required")])
 
     if not new_fields:
         return CallToolResult(
@@ -81,15 +80,11 @@ async def handle_add_fields(arguments: dict[str, Any]) -> CallToolResult:
 
     session = await get_current_session()
     if not session:
-        return CallToolResult(
-            content=[TextContent(type="text", text="Error: No active session")]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="Error: No active session")])
 
     form_data = await _get_form(session["id"], form_id)
     if not form_data:
-        return CallToolResult(
-            content=[TextContent(type="text", text="Error: Form not found")]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="Error: Form not found")])
 
     existing_fields = form_data.get("fields", {})
 
@@ -99,7 +94,7 @@ async def handle_add_fields(arguments: dict[str, Any]) -> CallToolResult:
         field_id = field.get("id") or str(uuid4())
         existing_fields[field_id] = {
             "id": field_id,
-            "name": field.get("name", f"field_{len(existing_fields)+1}"),
+            "name": field.get("name", f"field_{len(existing_fields) + 1}"),
             "label": field.get("label") or field.get("name"),
             "type": field.get("type", "text"),
             "page": field.get("page", 1),
@@ -121,9 +116,7 @@ async def handle_add_fields(arguments: dict[str, Any]) -> CallToolResult:
         f"or `get_form_summary` to see all fields."
     )
 
-    return CallToolResult(
-        content=[TextContent(type="text", text=response_text)]
-    )
+    return CallToolResult(content=[TextContent(type="text", text=response_text)])
 
 
 async def handle_update_fields(arguments: dict[str, Any]) -> CallToolResult:
@@ -142,9 +135,7 @@ async def handle_update_fields(arguments: dict[str, Any]) -> CallToolResult:
     values = arguments.get("values", {})
 
     if not form_id:
-        return CallToolResult(
-            content=[TextContent(type="text", text="Error: form_id is required")]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="Error: form_id is required")])
 
     if not values:
         return CallToolResult(
@@ -153,15 +144,11 @@ async def handle_update_fields(arguments: dict[str, Any]) -> CallToolResult:
 
     session = await get_current_session()
     if not session:
-        return CallToolResult(
-            content=[TextContent(type="text", text="Error: No active session")]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="Error: No active session")])
 
     form_data = await _get_form(session["id"], form_id)
     if not form_data:
-        return CallToolResult(
-            content=[TextContent(type="text", text="Error: Form not found")]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="Error: Form not found")])
 
     fields = form_data.get("fields", {})
     updated = []
@@ -199,9 +186,7 @@ async def handle_update_fields(arguments: dict[str, Any]) -> CallToolResult:
     total_count = len(fields)
     response_text += f"\n\nProgress: {filled_count}/{total_count} fields filled"
 
-    return CallToolResult(
-        content=[TextContent(type="text", text=response_text)]
-    )
+    return CallToolResult(content=[TextContent(type="text", text=response_text)])
 
 
 async def handle_get_form_summary(arguments: dict[str, Any]) -> CallToolResult:
@@ -220,21 +205,15 @@ async def handle_get_form_summary(arguments: dict[str, Any]) -> CallToolResult:
     show_empty_only = arguments.get("show_empty_only", False)
 
     if not form_id:
-        return CallToolResult(
-            content=[TextContent(type="text", text="Error: form_id is required")]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="Error: form_id is required")])
 
     session = await get_current_session()
     if not session:
-        return CallToolResult(
-            content=[TextContent(type="text", text="Error: No active session")]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="Error: No active session")])
 
     form_data = await _get_form(session["id"], form_id)
     if not form_data:
-        return CallToolResult(
-            content=[TextContent(type="text", text="Error: Form not found")]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="Error: Form not found")])
 
     fields = form_data.get("fields", {})
     form_type = form_data.get("form_type", "Unknown")
@@ -288,9 +267,7 @@ async def handle_get_form_summary(arguments: dict[str, Any]) -> CallToolResult:
     if filled_count == total:
         response_text += "\n✅ All fields filled! Ready to export."
 
-    return CallToolResult(
-        content=[TextContent(type="text", text=response_text)]
-    )
+    return CallToolResult(content=[TextContent(type="text", text=response_text)])
 
 
 async def handle_list_forms(arguments: dict[str, Any]) -> CallToolResult:
@@ -302,15 +279,11 @@ async def handle_list_forms(arguments: dict[str, Any]) -> CallToolResult:
     """
     session = await get_current_session()
     if not session:
-        return CallToolResult(
-            content=[TextContent(type="text", text="Error: No active session")]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="Error: No active session")])
 
     client = _get_redis_client()
     if not client:
-        return CallToolResult(
-            content=[TextContent(type="text", text="Error: Storage unavailable")]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="Error: Storage unavailable")])
 
     # Find all forms for this session
     pattern = f"{FORM_PREFIX}{session['id']}:*"
@@ -325,21 +298,24 @@ async def handle_list_forms(arguments: dict[str, Any]) -> CallToolResult:
                 form = json.loads(data)
                 fields = form.get("fields", {})
                 filled = sum(1 for f in fields.values() if f.get("value") is not None)
-                forms.append({
-                    "id": form["id"],
-                    "type": form.get("form_type", "Unknown"),
-                    "filled": filled,
-                    "total": len(fields),
-                })
+                forms.append(
+                    {
+                        "id": form["id"],
+                        "type": form.get("form_type", "Unknown"),
+                        "filled": filled,
+                        "total": len(fields),
+                    }
+                )
         if cursor == 0:
             break
 
     if not forms:
         return CallToolResult(
-            content=[TextContent(
-                type="text",
-                text="No forms registered yet. Attach a PDF and I'll analyze it."
-            )]
+            content=[
+                TextContent(
+                    type="text", text="No forms registered yet. Attach a PDF and I'll analyze it."
+                )
+            ]
         )
 
     response_text = "**Registered forms:**\n\n"
@@ -350,6 +326,4 @@ async def handle_list_forms(arguments: dict[str, Any]) -> CallToolResult:
             f"  Progress: {form['filled']}/{form['total']} ({pct}%)\n"
         )
 
-    return CallToolResult(
-        content=[TextContent(type="text", text=response_text)]
-    )
+    return CallToolResult(content=[TextContent(type="text", text=response_text)])

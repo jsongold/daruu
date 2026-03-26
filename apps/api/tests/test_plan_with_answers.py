@@ -2,23 +2,18 @@
 
 from __future__ import annotations
 
-import json
-from dataclasses import dataclass
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from app.domain.models.fill_plan import FillActionType, FillPlan
 from app.domain.models.form_context import (
     DataSourceEntry,
     FormContext,
     FormFieldSpec,
-    LabelCandidate,
     MappingCandidate,
 )
 from app.services.fill_planner.planner import FillPlanner
 from app.services.fill_planner.schemas import LLMFilledField, LLMFillResponse
-
 
 # ── Fixtures ──
 
@@ -77,21 +72,29 @@ def _make_instructor_client(
 @pytest.mark.asyncio
 async def test_answers_override_skipped() -> None:
     """User answers should fill fields that were previously skipped."""
-    context = _make_context(data_sources=(
-        DataSourceEntry(
-            source_name="resume.pdf",
-            source_type="pdf",
-            extracted_fields={"氏名": "山田太郎"},
-        ),
-    ))
+    context = _make_context(
+        data_sources=(
+            DataSourceEntry(
+                source_name="resume.pdf",
+                source_type="pdf",
+                extracted_fields={"氏名": "山田太郎"},
+            ),
+        )
+    )
 
     # Simulate: LLM fills Text1 (name) and Text3 (date) with answers,
     # Text2 (address) comes from user answer
     fill_response = LLMFillResponse(
         filled_fields=[
-            LLMFilledField(field_id="Text1", value="山田太郎", confidence=0.95, source="resume.pdf"),
-            LLMFilledField(field_id="Text2", value="東京都新宿区", confidence=0.95, source="user_answer"),
-            LLMFilledField(field_id="Text3", value="1990-01-15", confidence=0.95, source="user_answer"),
+            LLMFilledField(
+                field_id="Text1", value="山田太郎", confidence=0.95, source="resume.pdf"
+            ),
+            LLMFilledField(
+                field_id="Text2", value="東京都新宿区", confidence=0.95, source="user_answer"
+            ),
+            LLMFilledField(
+                field_id="Text3", value="1990-01-15", confidence=0.95, source="user_answer"
+            ),
         ],
     )
 
@@ -138,19 +141,25 @@ async def test_answers_override_skipped() -> None:
 @pytest.mark.asyncio
 async def test_answers_combined_with_sources() -> None:
     """Answers should be combined with data source values in the prompt."""
-    context = _make_context(data_sources=(
-        DataSourceEntry(
-            source_name="id_card.jpg",
-            source_type="image",
-            extracted_fields={"氏名": "佐藤花子", "住所": "大阪府"},
-        ),
-    ))
+    context = _make_context(
+        data_sources=(
+            DataSourceEntry(
+                source_name="id_card.jpg",
+                source_type="image",
+                extracted_fields={"氏名": "佐藤花子", "住所": "大阪府"},
+            ),
+        )
+    )
 
     fill_response = LLMFillResponse(
         filled_fields=[
-            LLMFilledField(field_id="Text1", value="佐藤花子", confidence=0.95, source="id_card.jpg"),
+            LLMFilledField(
+                field_id="Text1", value="佐藤花子", confidence=0.95, source="id_card.jpg"
+            ),
             LLMFilledField(field_id="Text2", value="大阪府", confidence=0.9, source="id_card.jpg"),
-            LLMFilledField(field_id="Text3", value="1985-03-20", confidence=0.95, source="user_answer"),
+            LLMFilledField(
+                field_id="Text3", value="1985-03-20", confidence=0.95, source="user_answer"
+            ),
         ],
     )
 

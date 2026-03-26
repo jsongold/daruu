@@ -8,7 +8,6 @@ import functools
 import inspect
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from typing import Any, TypeVar
 
 from langchain_core.messages import BaseMessage
@@ -26,6 +25,7 @@ T = TypeVar("T")
 # ---------------------------------------------------------------------------
 # Debug-logging decorator
 # ---------------------------------------------------------------------------
+
 
 def log_llm_io(func):
     """Decorator: logs full LLM prompts and responses at DEBUG level."""
@@ -57,7 +57,9 @@ def log_llm_io(func):
             resp_str = str(result.content)
         elif isinstance(result, tuple) and len(result) >= 1:
             resp = result[0]
-            resp_str = resp.model_dump_json(indent=2) if hasattr(resp, "model_dump_json") else str(resp)
+            resp_str = (
+                resp.model_dump_json(indent=2) if hasattr(resp, "model_dump_json") else str(resp)
+            )
         elif hasattr(result, "model_dump_json"):
             resp_str = result.model_dump_json(indent=2)
         elif hasattr(result, "content"):
@@ -74,6 +76,7 @@ def log_llm_io(func):
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class LLMResult:

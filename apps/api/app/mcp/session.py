@@ -20,17 +20,15 @@ import hashlib
 import json
 import os
 import secrets
+from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from contextvars import ContextVar
 
 from app.config import get_settings
 from app.mcp.logging import session_logger
 
 # Context variable to store current session ID for tool handlers
-_current_session_id: ContextVar[str | None] = ContextVar(
-    "current_session_id", default=None
-)
+_current_session_id: ContextVar[str | None] = ContextVar("current_session_id", default=None)
 
 # Redis client singleton
 _redis_client: Any = None
@@ -53,6 +51,7 @@ def _get_redis_client() -> Any:
 
     try:
         import redis
+
         redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/2")
         _redis_client = redis.from_url(redis_url, decode_responses=True)
         # Test connection

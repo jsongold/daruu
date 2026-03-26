@@ -5,7 +5,6 @@ and integration with hybrid services.
 """
 
 import pytest
-
 from app.models.processing_strategy import (
     DEFAULT_STRATEGY,
     FAST_LOCAL_STRATEGY,
@@ -31,7 +30,10 @@ class TestProcessingStrategyEnum:
         assert ProcessingStrategy("local_only") == ProcessingStrategy.LOCAL_ONLY
         assert ProcessingStrategy("llm_only") == ProcessingStrategy.LLM_ONLY
         assert ProcessingStrategy("hybrid") == ProcessingStrategy.HYBRID
-        assert ProcessingStrategy("llm_with_local_fallback") == ProcessingStrategy.LLM_WITH_LOCAL_FALLBACK
+        assert (
+            ProcessingStrategy("llm_with_local_fallback")
+            == ProcessingStrategy.LLM_WITH_LOCAL_FALLBACK
+        )
 
     def test_invalid_string_raises_error(self):
         """Test that invalid string raises ValueError."""

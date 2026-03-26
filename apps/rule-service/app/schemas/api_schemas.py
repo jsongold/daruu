@@ -53,9 +53,7 @@ class AnalyzeRulesRequest(BaseModel):
         max_chars = 500_000
         for i, doc in enumerate(v):
             if len(doc) > max_chars:
-                raise ValueError(
-                    f"rule_docs[{i}] exceeds maximum length of {max_chars} characters"
-                )
+                raise ValueError(f"rule_docs[{i}] exceeds maximum length of {max_chars} characters")
         return v
 
 

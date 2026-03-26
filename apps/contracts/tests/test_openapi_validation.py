@@ -52,9 +52,7 @@ class TestOpenAPIValidity:
         spec = load_yaml(spec_file)
 
         assert "openapi" in spec, f"Spec {spec_file.name} missing openapi version"
-        assert spec["openapi"].startswith("3."), (
-            f"Spec {spec_file.name} should be OpenAPI 3.x"
-        )
+        assert spec["openapi"].startswith("3."), f"Spec {spec_file.name} should be OpenAPI 3.x"
 
         info = spec.get("info", {})
         assert "title" in info, f"Spec {spec_file.name} missing info.title"
@@ -87,7 +85,8 @@ class TestAPIEndpoints:
 
         for path, path_item in paths.items():
             operations = [
-                method for method in ["get", "post", "put", "patch", "delete"]
+                method
+                for method in ["get", "post", "put", "patch", "delete"]
                 if method in path_item
             ]
             assert len(operations) > 0, f"Path {path} has no operations defined"
@@ -121,9 +120,7 @@ class TestAPIEndpoints:
                     )
 
                     op_id = operation["operationId"]
-                    assert op_id not in operation_ids, (
-                        f"Duplicate operationId: {op_id}"
-                    )
+                    assert op_id not in operation_ids, f"Duplicate operationId: {op_id}"
                     operation_ids.add(op_id)
 
     def test_all_operations_have_tags(self, api_spec: dict[str, Any]) -> None:
@@ -134,9 +131,7 @@ class TestAPIEndpoints:
             for method in ["get", "post", "put", "patch", "delete"]:
                 if method in path_item:
                     operation = path_item[method]
-                    assert "tags" in operation, (
-                        f"Operation {method.upper()} {path} missing tags"
-                    )
+                    assert "tags" in operation, f"Operation {method.upper()} {path} missing tags"
                     assert len(operation["tags"]) > 0, (
                         f"Operation {method.upper()} {path} has no tags"
                     )
@@ -171,9 +166,7 @@ class TestRequiredEndpoints:
         assert "post" in paths["/documents"], "Missing POST method for /documents"
 
         # GET /documents/{document_id}
-        assert "/documents/{document_id}" in paths, (
-            "Missing GET /documents/{document_id} endpoint"
-        )
+        assert "/documents/{document_id}" in paths, "Missing GET /documents/{document_id} endpoint"
         assert "get" in paths["/documents/{document_id}"], (
             "Missing GET method for /documents/{document_id}"
         )
@@ -193,44 +186,30 @@ class TestRequiredEndpoints:
 
         # GET /jobs/{job_id}
         assert "/jobs/{job_id}" in paths, "Missing GET /jobs/{job_id} endpoint"
-        assert "get" in paths["/jobs/{job_id}"], (
-            "Missing GET method for /jobs/{job_id}"
-        )
+        assert "get" in paths["/jobs/{job_id}"], "Missing GET method for /jobs/{job_id}"
 
         # POST /jobs/{job_id}/run
         assert "/jobs/{job_id}/run" in paths, "Missing POST /jobs/{job_id}/run endpoint"
-        assert "post" in paths["/jobs/{job_id}/run"], (
-            "Missing POST method for /jobs/{job_id}/run"
-        )
+        assert "post" in paths["/jobs/{job_id}/run"], "Missing POST method for /jobs/{job_id}/run"
 
         # POST /jobs/{job_id}/answers
-        assert "/jobs/{job_id}/answers" in paths, (
-            "Missing POST /jobs/{job_id}/answers endpoint"
-        )
+        assert "/jobs/{job_id}/answers" in paths, "Missing POST /jobs/{job_id}/answers endpoint"
 
         # POST /jobs/{job_id}/edits
-        assert "/jobs/{job_id}/edits" in paths, (
-            "Missing POST /jobs/{job_id}/edits endpoint"
-        )
+        assert "/jobs/{job_id}/edits" in paths, "Missing POST /jobs/{job_id}/edits endpoint"
 
     def test_review_endpoints_exist(self, api_spec: dict[str, Any]) -> None:
         """Verify review-related endpoints exist."""
         paths = api_spec.get("paths", {})
 
         # GET /jobs/{job_id}/review
-        assert "/jobs/{job_id}/review" in paths, (
-            "Missing GET /jobs/{job_id}/review endpoint"
-        )
+        assert "/jobs/{job_id}/review" in paths, "Missing GET /jobs/{job_id}/review endpoint"
 
         # GET /jobs/{job_id}/activity
-        assert "/jobs/{job_id}/activity" in paths, (
-            "Missing GET /jobs/{job_id}/activity endpoint"
-        )
+        assert "/jobs/{job_id}/activity" in paths, "Missing GET /jobs/{job_id}/activity endpoint"
 
         # GET /jobs/{job_id}/evidence
-        assert "/jobs/{job_id}/evidence" in paths, (
-            "Missing GET /jobs/{job_id}/evidence endpoint"
-        )
+        assert "/jobs/{job_id}/evidence" in paths, "Missing GET /jobs/{job_id}/evidence endpoint"
 
     def test_output_endpoints_exist(self, api_spec: dict[str, Any]) -> None:
         """Verify output-related endpoints exist."""
@@ -264,9 +243,7 @@ class TestErrorResponses:
         for error in required_errors:
             assert error in responses, f"Missing error response: {error}"
 
-    def test_error_response_schema_is_consistent(
-        self, api_spec: dict[str, Any]
-    ) -> None:
+    def test_error_response_schema_is_consistent(self, api_spec: dict[str, Any]) -> None:
         """Verify error responses use consistent schema."""
         schemas = api_spec.get("components", {}).get("schemas", {})
 
@@ -279,9 +256,7 @@ class TestErrorResponses:
         assert "success" in props, "ErrorResponse missing success field"
         assert "error" in props, "ErrorResponse missing error field"
 
-    def test_all_endpoints_have_error_responses(
-        self, api_spec: dict[str, Any]
-    ) -> None:
+    def test_all_endpoints_have_error_responses(self, api_spec: dict[str, Any]) -> None:
         """Verify all endpoints handle common errors."""
         paths = api_spec.get("paths", {})
 
@@ -292,10 +267,7 @@ class TestErrorResponses:
                     responses = operation.get("responses", {})
 
                     # Check that at least one success response exists
-                    success_codes = [
-                        code for code in responses.keys()
-                        if code.startswith("2")
-                    ]
+                    success_codes = [code for code in responses.keys() if code.startswith("2")]
                     assert len(success_codes) > 0, (
                         f"{method.upper()} {path} has no success response"
                     )
@@ -399,9 +371,7 @@ class TestParameterDefinitions:
         for param in required_params:
             assert param in parameters, f"Missing parameter: {param}"
 
-    def test_path_parameters_have_uuid_format(
-        self, api_spec: dict[str, Any]
-    ) -> None:
+    def test_path_parameters_have_uuid_format(self, api_spec: dict[str, Any]) -> None:
         """Verify ID path parameters use UUID format."""
         parameters = api_spec.get("components", {}).get("parameters", {})
 

@@ -41,7 +41,8 @@ logger = logging.getLogger(__name__)
 
 
 # Pydantic models for structured LLM output
-from pydantic import BaseModel, Field as PydanticField
+from pydantic import BaseModel
+from pydantic import Field as PydanticField
 
 
 class FieldLinkage(BaseModel):
@@ -364,19 +365,21 @@ class LangChainFieldLabellingAgent:
         formatted = []
         for label in labels:
             nearby_boxes = self._compute_nearby_boxes(label, boxes)
-            formatted.append({
-                "id": label.id,
-                "text": label.text,
-                "position": {
-                    "x": label.bbox.x,
-                    "y": label.bbox.y,
-                    "width": label.bbox.width,
-                    "height": label.bbox.height,
-                },
-                "semantic_hints": label.semantic_hints,
-                "confidence": label.confidence,
-                "nearby_boxes": nearby_boxes,
-            })
+            formatted.append(
+                {
+                    "id": label.id,
+                    "text": label.text,
+                    "position": {
+                        "x": label.bbox.x,
+                        "y": label.bbox.y,
+                        "width": label.bbox.width,
+                        "height": label.bbox.height,
+                    },
+                    "semantic_hints": label.semantic_hints,
+                    "confidence": label.confidence,
+                    "nearby_boxes": nearby_boxes,
+                }
+            )
         return json.dumps(formatted, indent=2, ensure_ascii=False)
 
     def _format_boxes_for_prompt(
@@ -397,20 +400,22 @@ class LangChainFieldLabellingAgent:
         formatted = []
         for box in boxes:
             nearby_labels = self._compute_nearby_labels(box, labels)
-            formatted.append({
-                "id": box.id,
-                "type": box.box_type,
-                "position": {
-                    "x": box.bbox.x,
-                    "y": box.bbox.y,
-                    "width": box.bbox.width,
-                    "height": box.bbox.height,
-                },
-                "has_border": box.has_border,
-                "neighboring_text": box.neighboring_text,
-                "confidence": box.confidence,
-                "nearby_labels": nearby_labels,
-            })
+            formatted.append(
+                {
+                    "id": box.id,
+                    "type": box.box_type,
+                    "position": {
+                        "x": box.bbox.x,
+                        "y": box.bbox.y,
+                        "width": box.bbox.width,
+                        "height": box.bbox.height,
+                    },
+                    "has_border": box.has_border,
+                    "neighboring_text": box.neighboring_text,
+                    "confidence": box.confidence,
+                    "nearby_labels": nearby_labels,
+                }
+            )
         return json.dumps(formatted, indent=2, ensure_ascii=False)
 
     def _compute_nearby_boxes(
@@ -443,15 +448,23 @@ class LangChainFieldLabellingAgent:
                 box_center_y = box_bbox.y + box_bbox.height / 2
 
                 direction = self._compute_direction(
-                    label_center_x, label_center_y, label_right, label_bottom,
-                    box_center_x, box_center_y, box_bbox.x, box_bbox.y
+                    label_center_x,
+                    label_center_y,
+                    label_right,
+                    label_bottom,
+                    box_center_x,
+                    box_center_y,
+                    box_bbox.x,
+                    box_bbox.y,
                 )
 
-                nearby.append({
-                    "box_id": box.id,
-                    "direction": direction,
-                    "distance_px": round(distance, 1),
-                })
+                nearby.append(
+                    {
+                        "box_id": box.id,
+                        "direction": direction,
+                        "distance_px": round(distance, 1),
+                    }
+                )
 
         # Sort by distance and limit to top 5 nearest
         nearby.sort(key=lambda x: x["distance_px"])
@@ -488,16 +501,24 @@ class LangChainFieldLabellingAgent:
 
                 # Invert direction since we want "where is label relative to box"
                 direction = self._compute_direction(
-                    box_center_x, box_center_y, box_right, box_bottom,
-                    label_center_x, label_center_y, label_bbox.x, label_bbox.y
+                    box_center_x,
+                    box_center_y,
+                    box_right,
+                    box_bottom,
+                    label_center_x,
+                    label_center_y,
+                    label_bbox.x,
+                    label_bbox.y,
                 )
 
-                nearby.append({
-                    "label_id": label.id,
-                    "label_text": label.text[:50],  # Truncate long text
-                    "direction": direction,
-                    "distance_px": round(distance, 1),
-                })
+                nearby.append(
+                    {
+                        "label_id": label.id,
+                        "label_text": label.text[:50],  # Truncate long text
+                        "direction": direction,
+                        "distance_px": round(distance, 1),
+                    }
+                )
 
         # Sort by distance and limit to top 5 nearest
         nearby.sort(key=lambda x: x["distance_px"])
@@ -571,21 +592,25 @@ class LangChainFieldLabellingAgent:
         # Combine all elements with their positions
         all_elements = []
         for label in labels:
-            all_elements.append({
-                "type": "label",
-                "id": label.id,
-                "y": label.bbox.y,
-                "height": label.bbox.height,
-                "x": label.bbox.x,
-            })
+            all_elements.append(
+                {
+                    "type": "label",
+                    "id": label.id,
+                    "y": label.bbox.y,
+                    "height": label.bbox.height,
+                    "x": label.bbox.x,
+                }
+            )
         for box in boxes:
-            all_elements.append({
-                "type": "box",
-                "id": box.id,
-                "y": box.bbox.y,
-                "height": box.bbox.height,
-                "x": box.bbox.x,
-            })
+            all_elements.append(
+                {
+                    "type": "box",
+                    "id": box.id,
+                    "y": box.bbox.y,
+                    "height": box.bbox.height,
+                    "x": box.bbox.x,
+                }
+            )
 
         if not all_elements:
             return "[]"
@@ -601,11 +626,13 @@ class LangChainFieldLabellingAgent:
             # If element is far below current cluster, start new cluster
             if current_cluster and elem["y"] > cluster_y_end + 50:
                 if len(current_cluster) > 1:  # Only include clusters with multiple elements
-                    clusters.append({
-                        "y_range": f"{current_cluster[0]['y']:.0f}-{cluster_y_end:.0f}",
-                        "labels": [e["id"] for e in current_cluster if e["type"] == "label"],
-                        "boxes": [e["id"] for e in current_cluster if e["type"] == "box"],
-                    })
+                    clusters.append(
+                        {
+                            "y_range": f"{current_cluster[0]['y']:.0f}-{cluster_y_end:.0f}",
+                            "labels": [e["id"] for e in current_cluster if e["type"] == "label"],
+                            "boxes": [e["id"] for e in current_cluster if e["type"] == "box"],
+                        }
+                    )
                 current_cluster = []
 
             current_cluster.append(elem)
@@ -613,11 +640,13 @@ class LangChainFieldLabellingAgent:
 
         # Add final cluster
         if len(current_cluster) > 1:
-            clusters.append({
-                "y_range": f"{current_cluster[0]['y']:.0f}-{cluster_y_end:.0f}",
-                "labels": [e["id"] for e in current_cluster if e["type"] == "label"],
-                "boxes": [e["id"] for e in current_cluster if e["type"] == "box"],
-            })
+            clusters.append(
+                {
+                    "y_range": f"{current_cluster[0]['y']:.0f}-{cluster_y_end:.0f}",
+                    "labels": [e["id"] for e in current_cluster if e["type"] == "label"],
+                    "boxes": [e["id"] for e in current_cluster if e["type"] == "box"],
+                }
+            )
 
         return json.dumps(clusters, indent=2, ensure_ascii=False)
 
@@ -738,9 +767,7 @@ class LangChainFieldLabellingAgent:
 
         limited_boxes = boxes[:MAX_BOXES]
         # Filter labels to only include relevant ones (near boxes)
-        filtered_labels = self._filter_relevant_labels(
-            limited_boxes, labels, max_labels=MAX_LABELS
-        )
+        filtered_labels = self._filter_relevant_labels(limited_boxes, labels, max_labels=MAX_LABELS)
 
         logger.info(
             f"LLM call with {len(filtered_labels)} labels (from {len(labels)}) "
@@ -820,9 +847,7 @@ class LangChainFieldLabellingAgent:
         # Try LLM-based linking first
         if self._initialized and label_candidates and box_candidates:
             try:
-                response = await self._call_llm(
-                    page, label_candidates, box_candidates, context
-                )
+                response = await self._call_llm(page, label_candidates, box_candidates, context)
 
                 # Build lookup maps
                 label_map = {l.id: l for l in label_candidates}
@@ -1190,8 +1215,9 @@ class LangChainFieldLabellingAgent:
         # Check for mismatch penalties
         has_checkbox_hint = "checkbox" in label.semantic_hints
         is_checkbox_box = box_type == "checkbox" or (
-            box.bbox.width < 40 and box.bbox.height < 40 and
-            0.7 < box.bbox.width / max(box.bbox.height, 1) < 1.5
+            box.bbox.width < 40
+            and box.bbox.height < 40
+            and 0.7 < box.bbox.width / max(box.bbox.height, 1) < 1.5
         )
 
         if has_checkbox_hint != is_checkbox_box:
@@ -1280,9 +1306,7 @@ class LangChainFieldLabellingAgent:
         # Euclidean distance
         return ((c1x - nearest_x) ** 2 + (c1y - nearest_y) ** 2) ** 0.5
 
-    def _calculate_confidence(
-        self, label: LabelCandidate, box: BoxCandidate
-    ) -> float:
+    def _calculate_confidence(self, label: LabelCandidate, box: BoxCandidate) -> float:
         """Calculate linking confidence score.
 
         Stub: Based on distance and source confidence.
@@ -1294,17 +1318,11 @@ class LangChainFieldLabellingAgent:
         distance_conf = max(0.3, 1.0 - distance / 200)
 
         # Combine with source confidences
-        combined = (
-            distance_conf * 0.5
-            + label.confidence * 0.3
-            + box.confidence * 0.2
-        )
+        combined = distance_conf * 0.5 + label.confidence * 0.3 + box.confidence * 0.2
 
         return round(min(1.0, max(0.0, combined)), 2)
 
-    def _infer_field_type(
-        self, label: LabelCandidate, box: BoxCandidate
-    ) -> str:
+    def _infer_field_type(self, label: LabelCandidate, box: BoxCandidate) -> str:
         """Infer field type from label and box characteristics.
 
         Stub: Uses simple heuristics.

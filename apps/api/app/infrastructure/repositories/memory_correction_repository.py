@@ -16,12 +16,8 @@ class MemoryCorrectionRepository:
         self._store.append(correction)
         return correction
 
-    def list_by_document(
-        self, document_id: str, limit: int = 100
-    ) -> list[CorrectionRecord]:
-        matches = [
-            c for c in self._store if c.document_id == document_id
-        ]
+    def list_by_document(self, document_id: str, limit: int = 100) -> list[CorrectionRecord]:
+        matches = [c for c in self._store if c.document_id == document_id]
         # Sort by timestamp descending
         matches.sort(key=lambda c: c.timestamp, reverse=True)
         return matches[:limit]

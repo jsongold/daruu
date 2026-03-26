@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
+from app.config import DEFAULT_MODEL
 from app.infrastructure.supabase.client import get_supabase_client
 from app.infrastructure.supabase.resilience import is_retryable_error, with_retry
 from app.models import (
@@ -24,15 +25,14 @@ from app.models import (
     FieldModel,
     FieldType,
     Issue,
-    IssueType,
     IssueSeverity,
+    IssueType,
     JobContext,
     JobMode,
     JobStatus,
     Mapping,
 )
-from app.config import DEFAULT_MODEL
-from app.models.common import BBox, CostSummaryModel, CostBreakdown
+from app.models.common import BBox, CostBreakdown, CostSummaryModel
 from app.repositories import JobRepository
 
 logger = logging.getLogger(__name__)
@@ -223,28 +223,19 @@ class SupabaseJobRepository:
         """Fetch all related data for a job."""
         # Fetch fields
         fields_result = (
-            self._client.table(self.TABLE_FIELDS)
-            .select("*")
-            .eq("job_id", job_id)
-            .execute()
+            self._client.table(self.TABLE_FIELDS).select("*").eq("job_id", job_id).execute()
         )
         fields = [self._to_field(row) for row in fields_result.data]
 
         # Fetch mappings
         mappings_result = (
-            self._client.table(self.TABLE_MAPPINGS)
-            .select("*")
-            .eq("job_id", job_id)
-            .execute()
+            self._client.table(self.TABLE_MAPPINGS).select("*").eq("job_id", job_id).execute()
         )
         mappings = [self._to_mapping(row) for row in mappings_result.data]
 
         # Fetch extractions
         extractions_result = (
-            self._client.table(self.TABLE_EXTRACTIONS)
-            .select("*")
-            .eq("job_id", job_id)
-            .execute()
+            self._client.table(self.TABLE_EXTRACTIONS).select("*").eq("job_id", job_id).execute()
         )
         extractions = [self._to_extraction(row) for row in extractions_result.data]
 
@@ -263,10 +254,7 @@ class SupabaseJobRepository:
 
         # Fetch issues
         issues_result = (
-            self._client.table(self.TABLE_ISSUES)
-            .select("*")
-            .eq("job_id", job_id)
-            .execute()
+            self._client.table(self.TABLE_ISSUES).select("*").eq("job_id", job_id).execute()
         )
         issues = [self._to_issue(row) for row in issues_result.data]
 
@@ -285,10 +273,7 @@ class SupabaseJobRepository:
     def _fetch_document(self, document_id: str) -> Document | None:
         """Fetch a document by ID."""
         result = (
-            self._client.table(self.TABLE_DOCUMENTS)
-            .select("*")
-            .eq("id", document_id)
-            .execute()
+            self._client.table(self.TABLE_DOCUMENTS).select("*").eq("id", document_id).execute()
         )
         if result.data and len(result.data) > 0:
             return self._to_document(result.data[0])
@@ -305,8 +290,8 @@ class SupabaseJobRepository:
             source_doc = self._fetch_document(str(row["source_document_id"]))
 
         # Fetch related data
-        fields, mappings, extractions, evidence, issues, activities = (
-            self._fetch_job_related_data(job_id)
+        fields, mappings, extractions, evidence, issues, activities = self._fetch_job_related_data(
+            job_id
         )
 
         # Parse next_actions
@@ -443,12 +428,7 @@ class SupabaseJobRepository:
     @with_retry(max_retries=3, base_delay=1.0)
     def _get_with_retry(self, job_id: str) -> JobContext | None:
         """Internal get with retry logic."""
-        result = (
-            self._client.table(self.TABLE_JOBS)
-            .select("*")
-            .eq("id", job_id)
-            .execute()
-        )
+        result = self._client.table(self.TABLE_JOBS).select("*").eq("id", job_id).execute()
         if result.data and len(result.data) > 0:
             return self._to_job_context(result.data[0])
         return None
@@ -479,7 +459,10 @@ class SupabaseJobRepository:
         update_data: dict[str, Any] = {}
 
         simple_fields = [
-            "status", "progress", "current_step", "current_stage",
+            "status",
+            "progress",
+            "current_step",
+            "current_stage",
             "iteration_count",
         ]
         for field in simple_fields:
@@ -503,9 +486,7 @@ class SupabaseJobRepository:
         if not update_data:
             return self.get(job_id)
 
-        self._client.table(self.TABLE_JOBS).update(update_data).eq(
-            "id", job_id
-        ).execute()
+        self._client.table(self.TABLE_JOBS).update(update_data).eq("id", job_id).execute()
 
         return self.get(job_id)
 
@@ -579,9 +560,7 @@ class SupabaseJobRepository:
             logger.error(f"Failed to add field to job {job_id}: {e}")
             return None
 
-    def update_field(
-        self, job_id: str, field_id: str, **updates: Any
-    ) -> JobContext | None:
+    def update_field(self, job_id: str, field_id: str, **updates: Any) -> JobContext | None:
         """Update a field in a job (immutable).
 
         Args:
@@ -612,9 +591,7 @@ class SupabaseJobRepository:
             if not update_data:
                 return self.get(job_id)
 
-            self._client.table(self.TABLE_FIELDS).update(update_data).eq(
-                "id", field_id
-            ).execute()
+            self._client.table(self.TABLE_FIELDS).update(update_data).eq("id", field_id).execute()
 
             return self.get(job_id)
         except Exception as e:
@@ -752,9 +729,7 @@ class SupabaseJobRepository:
             Updated JobContext if found, None otherwise.
         """
         try:
-            self._client.table(self.TABLE_ISSUES).delete().eq(
-                "job_id", job_id
-            ).execute()
+            self._client.table(self.TABLE_ISSUES).delete().eq("job_id", job_id).execute()
             return self.get(job_id)
         except Exception as e:
             logger.error(f"Failed to clear issues for job {job_id}: {e}")
@@ -771,9 +746,7 @@ class SupabaseJobRepository:
             Updated JobContext if found, None otherwise.
         """
         try:
-            self._client.table(self.TABLE_ISSUES).delete().eq(
-                "id", issue_id
-            ).execute()
+            self._client.table(self.TABLE_ISSUES).delete().eq("id", issue_id).execute()
             return self.get(job_id)
         except Exception as e:
             logger.error(f"Failed to remove issue {issue_id}: {e}")

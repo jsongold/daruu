@@ -9,7 +9,7 @@ Tests service layer with mocked dependencies:
 - Empty search results
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -56,8 +56,14 @@ class TestTemplateService:
         from app.models.template import Template, TemplateBbox, TemplateRule
 
         bbox = TemplateBbox(
-            x=10.0, y=20.0, width=100.0, height=30.0, page=1,
-            field_name="name", field_type="text", label="Full Name"
+            x=10.0,
+            y=20.0,
+            width=100.0,
+            height=30.0,
+            page=1,
+            field_name="name",
+            field_type="text",
+            label="Full Name",
         )
         rule = TemplateRule(
             id="rule-1",
@@ -77,9 +83,7 @@ class TestTemplateService:
         )
 
     @pytest.fixture
-    def template_service(
-        self, mock_template_repository, mock_vector_db, mock_embedding_gateway
-    ):
+    def template_service(self, mock_template_repository, mock_vector_db, mock_embedding_gateway):
         """Create a template service with mocked dependencies."""
         from app.services.template_service import TemplateService
 
@@ -106,9 +110,7 @@ class TestTemplateService:
         assert result.name == "Application Form"
         mock_template_repository.get.assert_called_once_with("tpl-001")
 
-    def test_get_template_not_found(
-        self, template_service, mock_template_repository
-    ) -> None:
+    def test_get_template_not_found(self, template_service, mock_template_repository) -> None:
         """Test getting a non-existent template returns None."""
         mock_template_repository.get.return_value = None
 
@@ -133,9 +135,7 @@ class TestTemplateService:
         assert result[0].id == "tpl-001"
         mock_template_repository.list_by_tenant.assert_called_once_with("tenant-123")
 
-    def test_list_templates_empty(
-        self, template_service, mock_template_repository
-    ) -> None:
+    def test_list_templates_empty(self, template_service, mock_template_repository) -> None:
         """Test listing templates when none exist."""
         mock_template_repository.list_by_tenant.return_value = []
 
@@ -157,11 +157,10 @@ class TestTemplateService:
         sample_template,
     ) -> None:
         """Test saving a new template."""
-        from app.models.template import TemplateCreate, TemplateBbox
+        from app.models.template import TemplateBbox, TemplateCreate
 
         bbox = TemplateBbox(
-            x=10.0, y=20.0, width=100.0, height=30.0, page=1,
-            field_name="name", field_type="text"
+            x=10.0, y=20.0, width=100.0, height=30.0, page=1, field_name="name", field_type="text"
         )
         create_request = TemplateCreate(
             name="New Form",
@@ -398,9 +397,7 @@ class TestTemplateService:
     # Get Rules Tests
     # =========================================================================
 
-    def test_get_rules(
-        self, template_service, mock_template_repository, sample_template
-    ) -> None:
+    def test_get_rules(self, template_service, mock_template_repository, sample_template) -> None:
         """Test getting rules for a template."""
         mock_template_repository.get.return_value = sample_template
 
@@ -410,9 +407,7 @@ class TestTemplateService:
         assert rules[0].id == "rule-1"
         assert rules[0].rule_type == "required"
 
-    def test_get_rules_template_not_found(
-        self, template_service, mock_template_repository
-    ) -> None:
+    def test_get_rules_template_not_found(self, template_service, mock_template_repository) -> None:
         """Test getting rules for non-existent template."""
         mock_template_repository.get.return_value = None
 
@@ -420,9 +415,7 @@ class TestTemplateService:
 
         assert rules is None
 
-    def test_get_rules_empty(
-        self, template_service, mock_template_repository
-    ) -> None:
+    def test_get_rules_empty(self, template_service, mock_template_repository) -> None:
         """Test getting rules when template has no rules."""
         from app.models.template import Template
 
@@ -444,9 +437,7 @@ class TestTemplateService:
     # Get Bboxes Tests
     # =========================================================================
 
-    def test_get_bboxes(
-        self, template_service, mock_template_repository, sample_template
-    ) -> None:
+    def test_get_bboxes(self, template_service, mock_template_repository, sample_template) -> None:
         """Test getting bboxes for a template."""
         mock_template_repository.get.return_value = sample_template
 
@@ -456,19 +447,15 @@ class TestTemplateService:
         assert bboxes[0].field_name == "name"
         assert bboxes[0].field_type == "text"
 
-    def test_get_bboxes_by_page(
-        self, template_service, mock_template_repository
-    ) -> None:
+    def test_get_bboxes_by_page(self, template_service, mock_template_repository) -> None:
         """Test getting bboxes filtered by page."""
         from app.models.template import Template, TemplateBbox
 
         bbox1 = TemplateBbox(
-            x=10.0, y=20.0, width=100.0, height=30.0, page=1,
-            field_name="field1", field_type="text"
+            x=10.0, y=20.0, width=100.0, height=30.0, page=1, field_name="field1", field_type="text"
         )
         bbox2 = TemplateBbox(
-            x=10.0, y=20.0, width=100.0, height=30.0, page=2,
-            field_name="field2", field_type="text"
+            x=10.0, y=20.0, width=100.0, height=30.0, page=2, field_name="field2", field_type="text"
         )
         template = Template(
             id="tpl-multi",
@@ -508,6 +495,7 @@ class TestTemplateServiceIntegration:
         from app.infrastructure.repositories.memory_template_repository import (
             MemoryTemplateRepository,
         )
+
         return MemoryTemplateRepository()
 
     @pytest.fixture
@@ -541,12 +529,11 @@ class TestTemplateServiceIntegration:
     @pytest.mark.asyncio
     async def test_full_template_lifecycle(self, service) -> None:
         """Test complete template CRUD lifecycle."""
-        from app.models.template import TemplateCreate, TemplateBbox
+        from app.models.template import TemplateBbox, TemplateCreate
 
         # Create
         bbox = TemplateBbox(
-            x=10.0, y=20.0, width=100.0, height=30.0, page=1,
-            field_name="name", field_type="text"
+            x=10.0, y=20.0, width=100.0, height=30.0, page=1, field_name="name", field_type="text"
         )
         create_request = TemplateCreate(
             name="Lifecycle Form",

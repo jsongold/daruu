@@ -30,9 +30,7 @@ class MockEmbeddingGateway:
         for i in range(self._dimension):
             idx = i % len(hash_bytes)
             value = (hash_bytes[idx] - 128) / 128.0
-            value += (hash_bytes[(idx + 1) % len(hash_bytes)] - 128) / 256.0 * (
-                i / self._dimension
-            )
+            value += (hash_bytes[(idx + 1) % len(hash_bytes)] - 128) / 256.0 * (i / self._dimension)
             embedding.append(value)
 
         magnitude = math.sqrt(sum(x * x for x in embedding))
@@ -79,6 +77,4 @@ class OpenAIEmbeddingGateway:
                     input=text,
                 )
                 return response.data[0].embedding
-            raise RuntimeError(
-                "Neither litellm nor a direct embedding client is available"
-            )
+            raise RuntimeError("Neither litellm nor a direct embedding client is available")

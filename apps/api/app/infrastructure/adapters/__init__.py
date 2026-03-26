@@ -14,8 +14,8 @@ Production implementations would include:
 - CLIPEmbedding: CLIP visual embeddings
 """
 
-from app.infrastructure.adapters.memory_vector_db import MemoryVectorDB
 from app.infrastructure.adapters.memory_embedding import MemoryEmbedding
+from app.infrastructure.adapters.memory_vector_db import MemoryVectorDB
 
 __all__ = [
     "MemoryVectorDB",

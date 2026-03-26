@@ -19,23 +19,27 @@ Tools:
 """
 
 import asyncio
-import sys
 from typing import Any
 from uuid import uuid4
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import (
-    Tool,
-    TextContent,
     CallToolResult,
+    TextContent,
+    Tool,
 )
 
-from app.mcp.tools import register_form, form_operations, export_pdf, render_preview
-from app.mcp.tools import visual_editing
-from app.mcp.tools import autofill_form
+from app.mcp.logging import log_tool_call, log_tool_result, server_logger
 from app.mcp.session import set_current_session
-from app.mcp.logging import server_logger, log_tool_call, log_tool_result
+from app.mcp.tools import (
+    autofill_form,
+    export_pdf,
+    form_operations,
+    register_form,
+    render_preview,
+    visual_editing,
+)
 
 
 def create_mcp_server() -> Server:
@@ -51,7 +55,9 @@ def create_mcp_server() -> Server:
     }
     set_current_session(session)
     server_logger.info(f"MCP Server started - Session: {session_id}")
-    server_logger.info("Available tools: register_form, add_fields, update_fields, get_form_summary, list_forms, export_pdf, render_preview, visual_edit_field, get_form_visual_summary, get_next_unfilled_field, autofill_form")
+    server_logger.info(
+        "Available tools: register_form, add_fields, update_fields, get_form_summary, list_forms, export_pdf, render_preview, visual_edit_field, get_form_visual_summary, get_next_unfilled_field, autofill_form"
+    )
 
     @server.list_tools()
     async def list_tools() -> list[Tool]:
@@ -77,12 +83,25 @@ def create_mcp_server() -> Server:
                                 "type": "object",
                                 "properties": {
                                     "name": {"type": "string", "description": "Field identifier"},
-                                    "label": {"type": "string", "description": "Human-readable label"},
+                                    "label": {
+                                        "type": "string",
+                                        "description": "Human-readable label",
+                                    },
                                     "type": {
                                         "type": "string",
-                                        "enum": ["text", "checkbox", "radio", "dropdown", "date", "signature"],
+                                        "enum": [
+                                            "text",
+                                            "checkbox",
+                                            "radio",
+                                            "dropdown",
+                                            "date",
+                                            "signature",
+                                        ],
                                     },
-                                    "page": {"type": "integer", "description": "Page number (1-indexed)"},
+                                    "page": {
+                                        "type": "integer",
+                                        "description": "Page number (1-indexed)",
+                                    },
                                     "required": {"type": "boolean"},
                                     "options": {
                                         "type": "array",
@@ -401,10 +420,8 @@ def create_mcp_server() -> Server:
 
         handler = handlers.get(name)
         if not handler:
-            log_tool_result(name, False, f"Unknown tool")
-            return CallToolResult(
-                content=[TextContent(type="text", text=f"Unknown tool: {name}")]
-            )
+            log_tool_result(name, False, "Unknown tool")
+            return CallToolResult(content=[TextContent(type="text", text=f"Unknown tool: {name}")])
 
         try:
             result = await handler(arguments)
@@ -421,11 +438,10 @@ def create_mcp_server() -> Server:
             return result
         except Exception as e:
             import traceback
+
             log_tool_result(name, False, str(e))
             server_logger.error(traceback.format_exc())
-            return CallToolResult(
-                content=[TextContent(type="text", text=f"Error: {str(e)}")]
-            )
+            return CallToolResult(content=[TextContent(type="text", text=f"Error: {str(e)}")])
 
     return server
 

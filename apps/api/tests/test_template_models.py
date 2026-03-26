@@ -10,11 +10,9 @@ Tests all Phase 2 template-related models including:
 """
 
 import json
-from datetime import datetime, timezone
 
 import pytest
 from pydantic import ValidationError
-
 
 # =============================================================================
 # Template Model Tests
@@ -26,7 +24,7 @@ class TestTemplateBbox:
 
     def test_valid_bbox(self) -> None:
         """Test creating a valid TemplateBbox."""
-        from app.models.template import TemplateBbox, FieldType
+        from app.models.template import FieldType, TemplateBbox
 
         bbox = TemplateBbox(
             id="field-1",
@@ -47,7 +45,7 @@ class TestTemplateBbox:
 
     def test_bbox_with_optional_label(self) -> None:
         """Test bbox with optional label."""
-        from app.models.template import TemplateBbox, FieldType
+        from app.models.template import FieldType, TemplateBbox
 
         bbox = TemplateBbox(
             id="dob-field",
@@ -63,7 +61,7 @@ class TestTemplateBbox:
 
     def test_bbox_negative_width_fails(self) -> None:
         """Test that negative width is rejected."""
-        from app.models.template import TemplateBbox, FieldType
+        from app.models.template import FieldType, TemplateBbox
 
         with pytest.raises(ValidationError):
             TemplateBbox(
@@ -78,7 +76,7 @@ class TestTemplateBbox:
 
     def test_bbox_negative_height_fails(self) -> None:
         """Test that negative height is rejected."""
-        from app.models.template import TemplateBbox, FieldType
+        from app.models.template import FieldType, TemplateBbox
 
         with pytest.raises(ValidationError):
             TemplateBbox(
@@ -93,7 +91,7 @@ class TestTemplateBbox:
 
     def test_bbox_zero_page_fails(self) -> None:
         """Test that page 0 is rejected (1-indexed)."""
-        from app.models.template import TemplateBbox, FieldType
+        from app.models.template import FieldType, TemplateBbox
 
         with pytest.raises(ValidationError):
             TemplateBbox(
@@ -108,7 +106,7 @@ class TestTemplateBbox:
 
     def test_bbox_is_frozen(self) -> None:
         """Test that TemplateBbox is immutable."""
-        from app.models.template import TemplateBbox, FieldType
+        from app.models.template import FieldType, TemplateBbox
 
         bbox = TemplateBbox(
             id="test",
@@ -124,9 +122,15 @@ class TestTemplateBbox:
 
     def test_bbox_field_types(self) -> None:
         """Test various valid field types."""
-        from app.models.template import TemplateBbox, FieldType
+        from app.models.template import FieldType, TemplateBbox
 
-        valid_types = [FieldType.TEXT, FieldType.DATE, FieldType.CHECKBOX, FieldType.SIGNATURE, FieldType.NUMBER]
+        valid_types = [
+            FieldType.TEXT,
+            FieldType.DATE,
+            FieldType.CHECKBOX,
+            FieldType.SIGNATURE,
+            FieldType.NUMBER,
+        ]
         for field_type in valid_types:
             bbox = TemplateBbox(
                 id="test_field",
@@ -141,7 +145,7 @@ class TestTemplateBbox:
 
     def test_bbox_serialization(self) -> None:
         """Test bbox can be serialized to dict/JSON."""
-        from app.models.template import TemplateBbox, FieldType
+        from app.models.template import FieldType, TemplateBbox
 
         bbox = TemplateBbox(
             id="test",
@@ -169,7 +173,7 @@ class TestTemplateRule:
 
     def test_valid_format_rule(self) -> None:
         """Test creating a valid format rule."""
-        from app.models.template import TemplateRule, RuleType
+        from app.models.template import RuleType, TemplateRule
 
         rule = TemplateRule(
             field_id="phone",
@@ -182,7 +186,7 @@ class TestTemplateRule:
 
     def test_valid_required_rule(self) -> None:
         """Test creating a valid required rule."""
-        from app.models.template import TemplateRule, RuleType
+        from app.models.template import RuleType, TemplateRule
 
         rule = TemplateRule(
             field_id="name",
@@ -193,7 +197,7 @@ class TestTemplateRule:
 
     def test_valid_range_rule(self) -> None:
         """Test creating a valid range rule."""
-        from app.models.template import TemplateRule, RuleType
+        from app.models.template import RuleType, TemplateRule
 
         rule = TemplateRule(
             field_id="age",
@@ -205,7 +209,7 @@ class TestTemplateRule:
 
     def test_valid_pattern_rule(self) -> None:
         """Test creating a valid pattern rule."""
-        from app.models.template import TemplateRule, RuleType
+        from app.models.template import RuleType, TemplateRule
 
         rule = TemplateRule(
             field_id="ssn",
@@ -216,7 +220,7 @@ class TestTemplateRule:
 
     def test_valid_dependency_rule(self) -> None:
         """Test creating a dependency rule."""
-        from app.models.template import TemplateRule, RuleType
+        from app.models.template import RuleType, TemplateRule
 
         rule = TemplateRule(
             field_id="spouse_name",
@@ -227,7 +231,7 @@ class TestTemplateRule:
 
     def test_rule_is_frozen(self) -> None:
         """Test that TemplateRule is immutable."""
-        from app.models.template import TemplateRule, RuleType
+        from app.models.template import RuleType, TemplateRule
 
         rule = TemplateRule(
             field_id="test",
@@ -239,7 +243,7 @@ class TestTemplateRule:
 
     def test_rule_with_empty_config(self) -> None:
         """Test rule with empty config is valid."""
-        from app.models.template import TemplateRule, RuleType
+        from app.models.template import RuleType, TemplateRule
 
         rule = TemplateRule(
             field_id="test",
@@ -250,7 +254,7 @@ class TestTemplateRule:
 
     def test_rule_serialization(self) -> None:
         """Test rule can be serialized to dict/JSON."""
-        from app.models.template import TemplateRule, RuleType
+        from app.models.template import RuleType, TemplateRule
 
         rule = TemplateRule(
             field_id="phone",
@@ -267,8 +271,9 @@ class TestTemplate:
 
     def test_valid_template_minimal(self) -> None:
         """Test creating a minimal valid template."""
-        from app.models.template import Template
         from datetime import datetime, timezone
+
+        from app.models.template import Template
 
         now = datetime.now(timezone.utc)
         template = Template(
@@ -287,17 +292,30 @@ class TestTemplate:
 
     def test_valid_template_with_bboxes(self) -> None:
         """Test creating a template with bboxes."""
-        from app.models.template import Template, TemplateBbox, FieldType
         from datetime import datetime, timezone
+
+        from app.models.template import FieldType, Template, TemplateBbox
 
         now = datetime.now(timezone.utc)
         bbox1 = TemplateBbox(
-            id="name", x=10.0, y=20.0, width=100.0, height=30.0, page=1,
-            field_type=FieldType.TEXT, label="Full Name"
+            id="name",
+            x=10.0,
+            y=20.0,
+            width=100.0,
+            height=30.0,
+            page=1,
+            field_type=FieldType.TEXT,
+            label="Full Name",
         )
         bbox2 = TemplateBbox(
-            id="dob", x=10.0, y=60.0, width=100.0, height=30.0, page=1,
-            field_type=FieldType.DATE, label="Date of Birth"
+            id="dob",
+            x=10.0,
+            y=60.0,
+            width=100.0,
+            height=30.0,
+            page=1,
+            field_type=FieldType.DATE,
+            label="Date of Birth",
         )
 
         template = Template(
@@ -314,8 +332,9 @@ class TestTemplate:
 
     def test_valid_template_with_rules(self) -> None:
         """Test creating a template with rules."""
-        from app.models.template import Template, TemplateRule, RuleType
         from datetime import datetime, timezone
+
+        from app.models.template import RuleType, Template, TemplateRule
 
         now = datetime.now(timezone.utc)
         rule1 = TemplateRule(
@@ -343,13 +362,20 @@ class TestTemplate:
 
     def test_valid_template_full(self) -> None:
         """Test creating a fully populated template."""
-        from app.models.template import Template, TemplateBbox, TemplateRule, FieldType, RuleType
         from datetime import datetime, timezone
+
+        from app.models.template import FieldType, RuleType, Template, TemplateBbox, TemplateRule
 
         now = datetime.now(timezone.utc)
         bbox = TemplateBbox(
-            id="ssn", x=10.0, y=20.0, width=100.0, height=30.0, page=1,
-            field_type=FieldType.TEXT, label="Social Security Number"
+            id="ssn",
+            x=10.0,
+            y=20.0,
+            width=100.0,
+            height=30.0,
+            page=1,
+            field_type=FieldType.TEXT,
+            label="Social Security Number",
         )
         rule = TemplateRule(
             field_id="ssn",
@@ -374,8 +400,9 @@ class TestTemplate:
 
     def test_template_empty_name_fails(self) -> None:
         """Test that empty name is rejected."""
-        from app.models.template import Template
         from datetime import datetime, timezone
+
+        from app.models.template import Template
 
         now = datetime.now(timezone.utc)
         with pytest.raises(ValidationError):
@@ -389,8 +416,9 @@ class TestTemplate:
 
     def test_template_is_frozen(self) -> None:
         """Test that Template is immutable."""
-        from app.models.template import Template
         from datetime import datetime, timezone
+
+        from app.models.template import Template
 
         now = datetime.now(timezone.utc)
         template = Template(
@@ -405,17 +433,15 @@ class TestTemplate:
 
     def test_template_serialization(self) -> None:
         """Test template can be serialized to dict/JSON."""
-        from app.models.template import Template, TemplateBbox, TemplateRule, FieldType, RuleType
         from datetime import datetime, timezone
+
+        from app.models.template import FieldType, RuleType, Template, TemplateBbox, TemplateRule
 
         now = datetime.now(timezone.utc)
         bbox = TemplateBbox(
-            id="test", x=10.0, y=20.0, width=100.0, height=30.0, page=1,
-            field_type=FieldType.TEXT
+            id="test", x=10.0, y=20.0, width=100.0, height=30.0, page=1, field_type=FieldType.TEXT
         )
-        rule = TemplateRule(
-            field_id="test", rule_type=RuleType.REQUIRED, rule_config={}
-        )
+        rule = TemplateRule(field_id="test", rule_type=RuleType.REQUIRED, rule_config={})
         template = Template(
             id="tpl-001",
             name="Test Form",
@@ -439,8 +465,9 @@ class TestTemplate:
 
     def test_template_deserialization(self) -> None:
         """Test template can be deserialized from dict."""
-        from app.models.template import Template
         from datetime import datetime, timezone
+
+        from app.models.template import Template
 
         now = datetime.now(timezone.utc)
         data = {
@@ -492,15 +519,18 @@ class TestTemplateCreate:
 
     def test_create_with_bboxes_and_rules(self) -> None:
         """Test create request with bboxes and rules."""
-        from app.models.template import TemplateCreate, TemplateBbox, TemplateRule, FieldType, RuleType
+        from app.models.template import (
+            FieldType,
+            RuleType,
+            TemplateBbox,
+            TemplateCreate,
+            TemplateRule,
+        )
 
         bbox = TemplateBbox(
-            id="field1", x=10.0, y=20.0, width=100.0, height=30.0, page=1,
-            field_type=FieldType.TEXT
+            id="field1", x=10.0, y=20.0, width=100.0, height=30.0, page=1, field_type=FieldType.TEXT
         )
-        rule = TemplateRule(
-            field_id="field1", rule_type=RuleType.REQUIRED, rule_config={}
-        )
+        rule = TemplateRule(field_id="field1", rule_type=RuleType.REQUIRED, rule_config={})
 
         request = TemplateCreate(
             name="Form with Fields",
@@ -556,8 +586,9 @@ class TestTemplateResponse:
 
     def test_valid_response(self) -> None:
         """Test creating a valid template response."""
-        from app.models.template import TemplateResponse
         from datetime import datetime, timezone
+
+        from app.models.template import TemplateResponse
 
         now = datetime.now(timezone.utc)
         response = TemplateResponse(
@@ -577,17 +608,26 @@ class TestTemplateListResponse:
 
     def test_valid_list_response(self) -> None:
         """Test creating a valid template list response."""
-        from app.models.template import TemplateListResponse, TemplateResponse
         from datetime import datetime, timezone
+
+        from app.models.template import TemplateListResponse, TemplateResponse
 
         now = datetime.now(timezone.utc)
         item1 = TemplateResponse(
-            id="tpl-001", name="Form 1", form_type="type1",
-            field_count=3, created_at=now, updated_at=now
+            id="tpl-001",
+            name="Form 1",
+            form_type="type1",
+            field_count=3,
+            created_at=now,
+            updated_at=now,
         )
         item2 = TemplateResponse(
-            id="tpl-002", name="Form 2", form_type="type2",
-            field_count=5, created_at=now, updated_at=now
+            id="tpl-002",
+            name="Form 2",
+            form_type="type2",
+            field_count=5,
+            created_at=now,
+            updated_at=now,
         )
 
         response = TemplateListResponse(

@@ -12,7 +12,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -214,37 +213,39 @@ def generate_types_from_openapi(spec: dict[str, Any]) -> str:
         lines.append("")
 
     # Add API response wrapper types
-    lines.extend([
-        "// API Response Wrappers",
-        "",
-        "export interface ApiResponse<T> {",
-        "  success: boolean;",
-        "  data?: T;",
-        "  error?: string;",
-        "  meta?: Record<string, unknown>;",
-        "}",
-        "",
-        "export interface ApiErrorResponse {",
-        "  success: false;",
-        "  error: {",
-        "    code: string;",
-        "    message: string;",
-        "    field?: string;",
-        "    trace_id?: string;",
-        "  };",
-        "}",
-        "",
-        "// Request/Response type helpers",
-        "",
-        "export type DocumentUploadRequest = FormData;",
-        "",
-        "export type CreateJobRequest = JobCreateRequest;",
-        "export type CreateJobResponse = ApiResponse<{ job_id: string }>;",
-        "",
-        "export type GetJobResponse = ApiResponse<JobContext>;",
-        "export type RunJobResponse = ApiResponse<JobRunResponse>;",
-        "",
-    ])
+    lines.extend(
+        [
+            "// API Response Wrappers",
+            "",
+            "export interface ApiResponse<T> {",
+            "  success: boolean;",
+            "  data?: T;",
+            "  error?: string;",
+            "  meta?: Record<string, unknown>;",
+            "}",
+            "",
+            "export interface ApiErrorResponse {",
+            "  success: false;",
+            "  error: {",
+            "    code: string;",
+            "    message: string;",
+            "    field?: string;",
+            "    trace_id?: string;",
+            "  };",
+            "}",
+            "",
+            "// Request/Response type helpers",
+            "",
+            "export type DocumentUploadRequest = FormData;",
+            "",
+            "export type CreateJobRequest = JobCreateRequest;",
+            "export type CreateJobResponse = ApiResponse<{ job_id: string }>;",
+            "",
+            "export type GetJobResponse = ApiResponse<JobContext>;",
+            "export type RunJobResponse = ApiResponse<JobRunResponse>;",
+            "",
+        ]
+    )
 
     return "\n".join(lines)
 

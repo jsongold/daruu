@@ -15,7 +15,6 @@ from typing import Any, Callable, Generator, TypeVar
 from app.config import get_cost_config
 from app.models.cost import CostTracker, LLMUsage
 
-
 # =============================================================================
 # Exceptions
 # =============================================================================
@@ -82,9 +81,7 @@ def check_budget(
     """
     config = get_cost_config()
     budget_limit = max_cost if max_cost is not None else config.max_cost_per_job
-    warning_threshold = (
-        warn_threshold if warn_threshold is not None else config.warn_cost_threshold
-    )
+    warning_threshold = warn_threshold if warn_threshold is not None else config.warn_cost_threshold
 
     current_cost = tracker.estimated_cost_usd
     warning_message: str | None = None
@@ -349,6 +346,7 @@ def track_llm_usage(
     Returns:
         Decorated function.
     """
+
     def decorator(func: F) -> F:
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -377,6 +375,7 @@ def track_llm_usage(
             return result
 
         return wrapper  # type: ignore
+
     return decorator
 
 

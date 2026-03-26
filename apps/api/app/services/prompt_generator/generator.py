@@ -64,9 +64,7 @@ class PromptGenerator:
         text_blocks = self._extract_text_blocks(document_id, context)
 
         # 2. Build user prompt
-        user_prompt = build_prompt_generation_user_prompt(
-            context, text_blocks, similar_prompts
-        )
+        user_prompt = build_prompt_generation_user_prompt(context, text_blocks, similar_prompts)
 
         # 3. Call LLM with meta-prompt requesting JSON output
         messages: list[dict[str, str]] = [
@@ -92,17 +90,14 @@ class PromptGenerator:
 
         elapsed_ms = int((time.perf_counter() - t0) * 1000)
         logger.info(
-            f"[prompt_generate] done in {elapsed_ms:,}ms | "
-            f"response_length={len(raw_content)} chars"
+            f"[prompt_generate] done in {elapsed_ms:,}ms | response_length={len(raw_content)} chars"
         )
 
         # 4. Parse JSON mapping
         try:
             mapping = json.loads(raw_content)
         except json.JSONDecodeError:
-            logger.warning(
-                "[prompt_generate] LLM returned non-JSON, falling back to raw text"
-            )
+            logger.warning("[prompt_generate] LLM returned non-JSON, falling back to raw text")
             # Fallback: treat raw text as a legacy prompt
             field_mapping = self._extract_field_mapping(context)
             return PromptGenerationResult(

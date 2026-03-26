@@ -10,9 +10,7 @@ from typing import Protocol
 from app.services.fill.domain.models import (
     AcroFormField,
     BoundingBox,
-    FieldSpec,
     FontConfig,
-    OverlaySpec,
     TextBlock,
 )
 

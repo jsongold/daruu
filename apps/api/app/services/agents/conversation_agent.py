@@ -18,7 +18,6 @@ For MVP, this provides stub implementations that simulate the agent behavior.
 
 import re
 from datetime import datetime, timezone
-from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -128,9 +127,7 @@ class ConversationAgent:
 
         # Process based on current stage
         if attachments and len(attachments) > 0:
-            return await self._handle_file_upload(
-                conversation_id, state, user_message, attachments
-            )
+            return await self._handle_file_upload(conversation_id, state, user_message, attachments)
 
         # Handle text-only messages based on stage
         stage_handlers = {
@@ -346,9 +343,7 @@ class ConversationAgent:
             "drop both a form and source document at once."
         )
 
-        return self._create_simple_response(
-            conversation_id, content, AgentStage.IDLE
-        )
+        return self._create_simple_response(conversation_id, content, AgentStage.IDLE)
 
     async def _handle_analyzing_message(
         self,
@@ -357,14 +352,9 @@ class ConversationAgent:
         user_message: Message,
     ) -> AgentResponse:
         """Handle messages in ANALYZING stage."""
-        content = (
-            "I'm still analyzing your documents. "
-            "This should only take a moment..."
-        )
+        content = "I'm still analyzing your documents. This should only take a moment..."
 
-        return self._create_simple_response(
-            conversation_id, content, AgentStage.ANALYZING
-        )
+        return self._create_simple_response(conversation_id, content, AgentStage.ANALYZING)
 
     async def _handle_confirming_message(
         self,
@@ -407,27 +397,21 @@ class ConversationAgent:
             )
             self._conversation_repo.save_agent_state(updated_state)
 
-            return self._create_simple_response(
-                conversation_id, content, AgentStage.FILLING
-            )
+            return self._create_simple_response(conversation_id, content, AgentStage.FILLING)
 
         elif "switch" in message_lower:
             content = (
                 "I've switched the document roles. "
                 "Please confirm the new assignment or describe what you'd like to change."
             )
-            return self._create_simple_response(
-                conversation_id, content, AgentStage.CONFIRMING
-            )
+            return self._create_simple_response(conversation_id, content, AgentStage.CONFIRMING)
 
         else:
             content = (
                 "Please confirm if the document roles are correct, "
                 "or let me know if you'd like to switch them."
             )
-            return self._create_simple_response(
-                conversation_id, content, AgentStage.CONFIRMING
-            )
+            return self._create_simple_response(conversation_id, content, AgentStage.CONFIRMING)
 
     async def _handle_mapping_message(
         self,
@@ -436,14 +420,9 @@ class ConversationAgent:
         user_message: Message,
     ) -> AgentResponse:
         """Handle messages in MAPPING stage."""
-        content = (
-            "I'm mapping the extracted data to form fields. "
-            "Almost done..."
-        )
+        content = "I'm mapping the extracted data to form fields. Almost done..."
 
-        return self._create_simple_response(
-            conversation_id, content, AgentStage.MAPPING
-        )
+        return self._create_simple_response(conversation_id, content, AgentStage.MAPPING)
 
     async def _handle_filling_message(
         self,
@@ -486,9 +465,7 @@ class ConversationAgent:
         )
         self._conversation_repo.save_agent_state(updated_state)
 
-        return self._create_approval_response(
-            conversation_id, content, AgentStage.REVIEWING
-        )
+        return self._create_approval_response(conversation_id, content, AgentStage.REVIEWING)
 
     async def _handle_reviewing_message(
         self,
@@ -533,16 +510,12 @@ class ConversationAgent:
                 message_count=None,
             )
 
-            return self._create_simple_response(
-                conversation_id, content, AgentStage.COMPLETE
-            )
+            return self._create_simple_response(conversation_id, content, AgentStage.COMPLETE)
 
         # Try to parse edit commands
         edit_result = self._parse_edit_command(user_message.content)
         if edit_result and self._edit_service:
-            return await self._handle_edit_command(
-                conversation_id, state, edit_result
-            )
+            return await self._handle_edit_command(conversation_id, state, edit_result)
 
         if "edit" in message_lower or "change" in message_lower:
             content = (
@@ -550,18 +523,14 @@ class ConversationAgent:
                 "You can say something like 'change [field name] to [value]' "
                 "or click on a field in the preview."
             )
-            return self._create_simple_response(
-                conversation_id, content, AgentStage.REVIEWING
-            )
+            return self._create_simple_response(conversation_id, content, AgentStage.REVIEWING)
 
         else:
             content = (
                 "Would you like to approve the form or make any changes? "
                 "Click [Approve] when ready or describe what you'd like to edit."
             )
-            return self._create_approval_response(
-                conversation_id, content, AgentStage.REVIEWING
-            )
+            return self._create_approval_response(conversation_id, content, AgentStage.REVIEWING)
 
     async def _handle_complete_message(
         self,
@@ -575,9 +544,7 @@ class ConversationAgent:
             "Would you like to fill another form or make changes to this one?"
         )
 
-        return self._create_simple_response(
-            conversation_id, content, AgentStage.COMPLETE
-        )
+        return self._create_simple_response(conversation_id, content, AgentStage.COMPLETE)
 
     async def _handle_error_message(
         self,
@@ -606,9 +573,7 @@ class ConversationAgent:
         )
         self._conversation_repo.save_agent_state(updated_state)
 
-        return self._create_simple_response(
-            conversation_id, content, AgentStage.IDLE
-        )
+        return self._create_simple_response(conversation_id, content, AgentStage.IDLE)
 
     async def _handle_default(
         self,
@@ -617,14 +582,9 @@ class ConversationAgent:
         user_message: Message,
     ) -> AgentResponse:
         """Default handler for unknown stages."""
-        content = (
-            "I'm not sure how to help with that. "
-            "Please upload a PDF form to get started."
-        )
+        content = "I'm not sure how to help with that. Please upload a PDF form to get started."
 
-        return self._create_simple_response(
-            conversation_id, content, AgentStage.IDLE
-        )
+        return self._create_simple_response(conversation_id, content, AgentStage.IDLE)
 
     def _parse_edit_command(
         self,
@@ -692,8 +652,7 @@ class ConversationAgent:
             )
 
         edit_requests = [
-            EditRequest(field_id=field_id, value=value, source="chat")
-            for field_id, value in edits
+            EditRequest(field_id=field_id, value=value, source="chat") for field_id, value in edits
         ]
 
         if len(edit_requests) == 1:
@@ -714,9 +673,7 @@ class ConversationAgent:
         # Build a more detailed response
         full_content = f"{content}\n\nThe preview has been updated. Would you like to make more changes or approve the form?"
 
-        return self._create_simple_response(
-            conversation_id, full_content, AgentStage.REVIEWING
-        )
+        return self._create_simple_response(conversation_id, full_content, AgentStage.REVIEWING)
 
     def _create_simple_response(
         self,

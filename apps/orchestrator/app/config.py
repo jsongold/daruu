@@ -50,9 +50,7 @@ class OrchestratorConfig(BaseSettings):
     extraction_service_url: str = Field(
         default="http://localhost:8003", description="Extraction service URL"
     )
-    fill_service_url: str = Field(
-        default="http://localhost:8004", description="Fill service URL"
-    )
+    fill_service_url: str = Field(default="http://localhost:8004", description="Fill service URL")
 
     # HTTP client settings
     service_timeout_seconds: float = Field(

@@ -20,18 +20,12 @@ class PipelineStepLog(BaseModel):
         ...,
         description="Step outcome: success, error, skipped",
     )
-    duration_ms: int = Field(
-        ..., ge=0, description="Time spent on this step in milliseconds"
-    )
-    summary: str = Field(
-        ..., description="Human-readable 1-line summary of what happened"
-    )
+    duration_ms: int = Field(..., ge=0, description="Time spent on this step in milliseconds")
+    summary: str = Field(..., description="Human-readable 1-line summary of what happened")
     details: dict[str, Any] = Field(
         default_factory=dict,
         description="Step-specific structured data for drill-down",
     )
-    error: str | None = Field(
-        None, description="Error message if status=error"
-    )
+    error: str | None = Field(None, description="Error message if status=error")
 
     model_config = {"frozen": True}

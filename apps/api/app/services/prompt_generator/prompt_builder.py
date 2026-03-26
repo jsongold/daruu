@@ -66,13 +66,11 @@ def build_specialized_prompt(mapping: dict) -> str:
                     x = bbox.get("x", "?")
                     y = bbox.get("y", "?")
                     bbox_str = f" (page {page}, x={x}, y={y})"
-                lines.append(
-                    f"- \"{source_key}\" → {field_id}: {label}{bbox_str}"
-                )
+                lines.append(f'- "{source_key}" → {field_id}: {label}{bbox_str}')
                 if reasoning:
                     lines.append(f"  Reason: {reasoning}")
             else:
-                lines.append(f"- \"{source_key}\" → (no matching field)")
+                lines.append(f'- "{source_key}" → (no matching field)')
                 if reasoning:
                     lines.append(f"  Reason: {reasoning}")
         lines.append("")

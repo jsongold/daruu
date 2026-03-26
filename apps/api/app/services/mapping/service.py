@@ -37,7 +37,6 @@ from app.models.processing_strategy import (
 from app.services.mapping.domain import (
     MappingCandidate,
     MappingReason,
-    MappingRule,
 )
 from app.services.mapping.ports import (
     MappingAgentPort,
@@ -177,7 +176,7 @@ class MappingService:
         """
         # Resolve effective strategy
         effective_strategy = self._resolve_strategy(
-            request.options if hasattr(request, 'options') else None,
+            request.options if hasattr(request, "options") else None,
             strategy_override,
         )
 
@@ -215,12 +214,8 @@ class MappingService:
                 mapped_target_ids.add(mapping.target_field_id)
 
         # Get remaining unmapped fields
-        unmapped_sources = tuple(
-            f for f in request.source_fields if f.id not in mapped_source_ids
-        )
-        available_targets = tuple(
-            f for f in request.target_fields if f.id not in mapped_target_ids
-        )
+        unmapped_sources = tuple(f for f in request.source_fields if f.id not in mapped_source_ids)
+        available_targets = tuple(f for f in request.target_fields if f.id not in mapped_target_ids)
 
         # Process based on strategy
         if effective_strategy.is_llm_first():
@@ -253,9 +248,7 @@ class MappingService:
             f.id for f in request.source_fields if f.id not in mapped_source_ids
         )
         final_unmapped_targets = tuple(
-            f.id
-            for f in request.target_fields
-            if f.id not in mapped_target_ids and f.is_required
+            f.id for f in request.target_fields if f.id not in mapped_target_ids and f.is_required
         )
 
         return MappingResult(
@@ -297,9 +290,7 @@ class MappingService:
                     strategy_enum = ProcessingStrategy(strategy_value)
                     return StrategyConfig(strategy=strategy_enum)
                 except ValueError:
-                    logger.warning(
-                        f"Unknown strategy '{strategy_value}', using default"
-                    )
+                    logger.warning(f"Unknown strategy '{strategy_value}', using default")
 
         return self._strategy
 
@@ -332,9 +323,7 @@ class MappingService:
                 break
 
             # Filter out already-mapped targets
-            current_targets = tuple(
-                t for t in available_targets if t.id not in mapped_target_ids
-            )
+            current_targets = tuple(t for t in available_targets if t.id not in mapped_target_ids)
             if not current_targets:
                 break
 
@@ -348,13 +337,9 @@ class MappingService:
 
             # Check for high-confidence single match
             best_candidate = candidates[0]
-            is_clear_winner = (
-                best_candidate.similarity_score >= request.confidence_threshold
-                and (
-                    len(candidates) == 1
-                    or candidates[1].similarity_score
-                    < best_candidate.similarity_score - 0.15
-                )
+            is_clear_winner = best_candidate.similarity_score >= request.confidence_threshold and (
+                len(candidates) == 1
+                or candidates[1].similarity_score < best_candidate.similarity_score - 0.15
             )
 
             if is_clear_winner:
@@ -493,15 +478,11 @@ class MappingService:
         for rule in user_rules:
             # Find matching source fields
             matching_sources = [
-                f
-                for f in source_fields
-                if self._pattern_matches(rule.source_pattern, f.name)
+                f for f in source_fields if self._pattern_matches(rule.source_pattern, f.name)
             ]
             # Find matching target fields
             matching_targets = [
-                f
-                for f in target_fields
-                if self._pattern_matches(rule.target_pattern, f.name)
+                f for f in target_fields if self._pattern_matches(rule.target_pattern, f.name)
             ]
 
             # Create mappings for matches
@@ -630,11 +611,7 @@ class MappingService:
         for target_name, score in matches:
             target_id = target_id_map.get(target_name)
             if target_id:
-                reason = (
-                    MappingReason.EXACT_MATCH
-                    if score >= 0.99
-                    else MappingReason.FUZZY_MATCH
-                )
+                reason = MappingReason.EXACT_MATCH if score >= 0.99 else MappingReason.FUZZY_MATCH
                 candidate = MappingCandidate(
                     source_field_id=source_field.id,
                     target_field_id=target_id,

@@ -6,9 +6,6 @@ ExtractServicePort interface expected by the orchestrator.
 
 from app.models.extract.models import ExtractRequest, ExtractResult
 from app.services.extract import ExtractService
-from app.orchestrator.application.ports.pipeline_services import (
-    ExtractServicePort,
-)
 
 
 class ExtractServiceAdapter:

@@ -3,7 +3,6 @@
 import time
 import traceback
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
 from typing import Any, AsyncGenerator
 from uuid import uuid4
 
@@ -14,6 +13,14 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import get_settings
+from app.infrastructure.observability import (
+    configure_logging,
+    get_logger,
+    get_metrics_handler,
+    init_logging,
+    init_tracing,
+    shutdown_tracing,
+)
 from app.models import ErrorDetail, ErrorResponse
 from app.routes import (
     adjust_router,
@@ -21,8 +28,8 @@ from app.routes import (
     annotations_router,
     auth_router,
     autofill_pipeline_router,
-    corrections_router,
     conversations_router,
+    corrections_router,
     data_sources_router,
     documents_router,
     edits_router,
@@ -41,14 +48,6 @@ from app.routes import (
     structure_labelling_router,
     templates_router,
     vision_autofill_router,
-)
-from app.infrastructure.observability import (
-    init_tracing,
-    init_logging,
-    shutdown_tracing,
-    get_metrics_handler,
-    get_logger,
-    configure_logging,
 )
 
 
@@ -249,9 +248,8 @@ All errors follow a consistent format with `success: false` and an `error` objec
             response.headers["Server-Timing"] = f"total;dur={elapsed_ms:.1f}"
 
             import logging
-            logging.getLogger("latency").info(
-                f"{method} {path} -> {code} | {elapsed_ms:.0f}ms"
-            )
+
+            logging.getLogger("latency").info(f"{method} {path} -> {code} | {elapsed_ms:.0f}ms")
             return response
 
     app.add_middleware(LatencyProfileMiddleware)

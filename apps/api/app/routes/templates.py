@@ -15,7 +15,7 @@ Endpoints:
 import base64
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.infrastructure.adapters import MemoryEmbedding, MemoryVectorDB
@@ -28,15 +28,12 @@ from app.models.template import (
     TemplateCreate,
     TemplateDetailResponse,
     TemplateListResponse,
-    TemplateMatch,
-    TemplateMatchRequest,
     TemplateMatchResponse,
     TemplateResponse,
     TemplateRule,
     TemplateUpdate,
 )
 from app.services.template import TemplateService
-
 
 logger = get_logger(__name__)
 
@@ -88,12 +85,8 @@ class CreateTemplateRequest(BaseModel):
 
     name: str = Field(..., min_length=1, max_length=200, description="Template name")
     form_type: str = Field(..., min_length=1, max_length=50, description="Form type")
-    bboxes: list[TemplateBbox] = Field(
-        default_factory=list, description="Field positions"
-    )
-    rules: list[TemplateRule] = Field(
-        default_factory=list, description="Validation rules"
-    )
+    bboxes: list[TemplateBbox] = Field(default_factory=list, description="Field positions")
+    rules: list[TemplateRule] = Field(default_factory=list, description="Validation rules")
     preview_url: str | None = Field(None, description="Preview image URL")
     tenant_id: str | None = Field(None, description="Tenant ID")
     page_image_base64: str | None = Field(
@@ -117,19 +110,11 @@ class UpdateTemplateRequest(BaseModel):
 class MatchTemplateRequest(BaseModel):
     """Request body for template matching."""
 
-    page_image_base64: str | None = Field(
-        None, description="Base64-encoded page image"
-    )
-    page_image_ref: str | None = Field(
-        None, description="Reference to stored page image"
-    )
-    page_text: str | None = Field(
-        None, description="Extracted text for hybrid matching"
-    )
+    page_image_base64: str | None = Field(None, description="Base64-encoded page image")
+    page_image_ref: str | None = Field(None, description="Reference to stored page image")
+    page_text: str | None = Field(None, description="Extracted text for hybrid matching")
     limit: int = Field(default=3, ge=1, le=10, description="Maximum matches")
-    threshold: float = Field(
-        default=0.8, ge=0.0, le=1.0, description="Minimum similarity"
-    )
+    threshold: float = Field(default=0.8, ge=0.0, le=1.0, description="Minimum similarity")
     tenant_id: str | None = Field(None, description="Filter by tenant")
 
 

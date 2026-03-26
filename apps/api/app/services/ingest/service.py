@@ -261,9 +261,7 @@ class IngestService:
             document_ref=request.document_ref,
             render_config=render_config,
             pages_to_render=(
-                tuple(request.render_pages)
-                if request.render_pages is not None
-                else None
+                tuple(request.render_pages) if request.render_pages is not None else None
             ),
         )
 

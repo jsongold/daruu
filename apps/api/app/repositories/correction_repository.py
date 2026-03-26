@@ -24,9 +24,7 @@ class CorrectionRepository(Protocol):
         """
         ...
 
-    def list_by_document(
-        self, document_id: str, limit: int = 100
-    ) -> list[CorrectionRecord]:
+    def list_by_document(self, document_id: str, limit: int = 100) -> list[CorrectionRecord]:
         """List corrections for a document.
 
         Args:

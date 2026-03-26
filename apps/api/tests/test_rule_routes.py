@@ -1,15 +1,15 @@
 """Tests for Rules REST endpoints."""
 
-import pytest
-from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock
 
+import pytest
 from app.domain.models.rule_snippet import RuleSnippet
 from app.infrastructure.repositories.memory_rule_snippet_repository import (
     MemoryRuleSnippetRepository,
 )
 from app.main import app
 from app.routes.rules import get_embedding_gateway, get_repo
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture
@@ -25,9 +25,7 @@ def mock_embedding_gw() -> AsyncMock:
 
 
 @pytest.fixture
-def client(
-    repo: MemoryRuleSnippetRepository, mock_embedding_gw: AsyncMock
-) -> TestClient:
+def client(repo: MemoryRuleSnippetRepository, mock_embedding_gw: AsyncMock) -> TestClient:
     app.dependency_overrides[get_repo] = lambda: repo
     app.dependency_overrides[get_embedding_gateway] = lambda: mock_embedding_gw
     yield TestClient(app)
@@ -57,9 +55,7 @@ class TestListRules:
         assert body["success"] is True
         assert body["data"] == []
 
-    def test_list_returns_rules(
-        self, client: TestClient, repo: MemoryRuleSnippetRepository
-    ):
+    def test_list_returns_rules(self, client: TestClient, repo: MemoryRuleSnippetRepository):
         _seed_snippet(repo, document_id="doc-1", rule_text="Rule A")
         _seed_snippet(repo, document_id="doc-1", rule_text="Rule B")
         _seed_snippet(repo, document_id="doc-2", rule_text="Rule C")
@@ -72,9 +68,7 @@ class TestListRules:
         texts = {r["rule_text"] for r in body["data"]}
         assert texts == {"Rule A", "Rule B"}
 
-    def test_list_respects_limit(
-        self, client: TestClient, repo: MemoryRuleSnippetRepository
-    ):
+    def test_list_respects_limit(self, client: TestClient, repo: MemoryRuleSnippetRepository):
         for i in range(5):
             _seed_snippet(repo, rule_text=f"Rule {i}")
 
@@ -89,9 +83,7 @@ class TestListRules:
 
 
 class TestDeleteRules:
-    def test_delete_existing(
-        self, client: TestClient, repo: MemoryRuleSnippetRepository
-    ):
+    def test_delete_existing(self, client: TestClient, repo: MemoryRuleSnippetRepository):
         _seed_snippet(repo, document_id="doc-1", rule_text="Rule A")
         _seed_snippet(repo, document_id="doc-1", rule_text="Rule B")
 

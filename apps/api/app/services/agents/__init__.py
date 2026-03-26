@@ -17,17 +17,17 @@ Utilities:
 
 # DEPRECATED: Import from app.agents instead
 # This redirect is provided for backward compatibility
-from app.agents.ports import (
-    FieldLabellingAgent,
-    MappingAgent,
-    ValueExtractionAgent,
-)
 from app.agents.llm_wrapper import (
     CostTrackingContext,
     LLMResult,
     extract_usage_from_response,
     invoke_structured_with_tracking,
     invoke_with_tracking,
+)
+from app.agents.ports import (
+    FieldLabellingAgent,
+    MappingAgent,
+    ValueExtractionAgent,
 )
 
 __all__ = [

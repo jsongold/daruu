@@ -1,6 +1,6 @@
 """Tests for health check endpoints."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -85,9 +85,7 @@ class TestReadinessEndpoint:
         assert response.status_code == 200
 
         data = response.json()
-        storage_component = next(
-            (c for c in data["components"] if c["name"] == "storage"), None
-        )
+        storage_component = next((c for c in data["components"] if c["name"] == "storage"), None)
 
         assert storage_component is not None
         # Storage should be healthy in test environment
@@ -117,13 +115,14 @@ class TestReadinessWithMocks:
         assert response.status_code == 200
 
         data = response.json()
-        db_component = next(
-            (c for c in data["components"] if c["name"] == "database"), None
-        )
+        db_component = next((c for c in data["components"] if c["name"] == "database"), None)
 
         assert db_component is not None
         assert db_component["status"] == "healthy"
-        assert "in-memory" in db_component["message"].lower() or "mock" in db_component["message"].lower()
+        assert (
+            "in-memory" in db_component["message"].lower()
+            or "mock" in db_component["message"].lower()
+        )
 
     def test_llm_degraded_without_api_key(self, client: TestClient) -> None:
         """Test LLM shows degraded when API key is not configured."""
@@ -149,9 +148,7 @@ class TestReadinessWithMocks:
             assert response.status_code == 200
 
             data = response.json()
-            llm_component = next(
-                (c for c in data["components"] if c["name"] == "llm"), None
-            )
+            llm_component = next((c for c in data["components"] if c["name"] == "llm"), None)
 
             assert llm_component is not None
             assert llm_component["status"] == "degraded"
@@ -181,9 +178,7 @@ class TestReadinessWithMocks:
             assert response.status_code == 200
 
             data = response.json()
-            llm_component = next(
-                (c for c in data["components"] if c["name"] == "llm"), None
-            )
+            llm_component = next((c for c in data["components"] if c["name"] == "llm"), None)
 
             assert llm_component is not None
             assert llm_component["status"] == "healthy"
@@ -202,10 +197,7 @@ class TestOverallStatusDetermination:
         data = response.json()
 
         # If all components are healthy, overall should be healthy
-        all_healthy = all(
-            c["status"] == "healthy"
-            for c in data["components"]
-        )
+        all_healthy = all(c["status"] == "healthy" for c in data["components"])
 
         if all_healthy:
             assert data["status"] == "healthy"

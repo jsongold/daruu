@@ -7,17 +7,15 @@ This endpoint is the entry point for the Structure/Labelling phase of document p
 It coordinates deterministic structure detection with LLM-based field labelling.
 """
 
-from typing import Any
-
 from fastapi import APIRouter, HTTPException, status
 
+from app.agents.structure_labelling import LangChainFieldLabellingAgent
 from app.config import get_settings
 from app.models.common import ApiResponse
 from app.models.structure_labelling import (
     StructureLabellingRequest,
     StructureLabellingResult,
 )
-from app.agents.structure_labelling import LangChainFieldLabellingAgent
 from app.services.structure_labelling import (
     LocalPageImageLoader,
     OpenCVStructureDetector,

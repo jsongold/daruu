@@ -23,10 +23,9 @@ from app.models.prompt_attempt import PromptAttempt
 from app.repositories import DataSourceRepository, DocumentRepository, FileRepository
 from app.repositories.prompt_attempt_repository import PromptAttemptRepository
 from app.routes.vision_autofill import (
-    OpenAIClient,
+    FilledFieldDTO,
     VisionAutofillRequestDTO,
     VisionAutofillResponseDTO,
-    FilledFieldDTO,
     get_openai_client,
 )
 from app.services.document_service import DocumentService

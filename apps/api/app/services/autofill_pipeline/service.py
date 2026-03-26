@@ -29,12 +29,10 @@ import asyncio
 import logging
 from typing import Any
 
-from app.infrastructure.observability.stopwatch import StopWatch
-
 from app.domain.models.fill_plan import (
+    FieldQuestion,
     FillActionType,
     FillPlan,
-    FieldQuestion,
 )
 from app.domain.models.form_context import FormContext, FormFieldSpec
 from app.domain.protocols.correction_tracker import CorrectionTrackerProtocol
@@ -42,6 +40,7 @@ from app.domain.protocols.fill_planner import FillPlannerProtocol
 from app.domain.protocols.form_context_builder import FormContextBuilderProtocol
 from app.domain.protocols.form_renderer import FormRendererProtocol
 from app.domain.protocols.rule_analyzer import RuleAnalyzerProtocol
+from app.infrastructure.observability.stopwatch import StopWatch
 from app.services.autofill_pipeline.models import AutofillPipelineResult
 from app.services.autofill_pipeline.step_log import PipelineStepLog
 from app.services.prompt_generator import PromptGenerator, PromptStore
@@ -125,43 +124,43 @@ class AutofillPipelineService:
             )
             context, rule_snippets = await asyncio.gather(context_task, rule_task)
 
-        step_logs.append(PipelineStepLog(
-            step_name="context_build",
-            status="success",
-            duration_ms=sw.laps["context_build"],
-            summary=f"{len(context.data_sources)} sources, {len(context.mapping_candidates)} candidates",
-            details={
-                "data_sources_count": len(context.data_sources),
-                "data_sources": [
-                    {
-                        "name": ds.source_name,
-                        "type": ds.source_type,
-                        "field_count": len(ds.extracted_fields),
-                    }
-                    for ds in context.data_sources
-                ],
-                "candidates_count": len(context.mapping_candidates),
-                "top_candidates": [
-                    {
-                        "field_id": mc.field_id,
-                        "source_key": mc.source_key,
-                        "score": mc.score,
-                    }
-                    for mc in sorted(
-                        context.mapping_candidates,
-                        key=lambda c: c.score,
-                        reverse=True,
-                    )[:10]
-                ],
-            },
-        ))
+        step_logs.append(
+            PipelineStepLog(
+                step_name="context_build",
+                status="success",
+                duration_ms=sw.laps["context_build"],
+                summary=f"{len(context.data_sources)} sources, {len(context.mapping_candidates)} candidates",
+                details={
+                    "data_sources_count": len(context.data_sources),
+                    "data_sources": [
+                        {
+                            "name": ds.source_name,
+                            "type": ds.source_type,
+                            "field_count": len(ds.extracted_fields),
+                        }
+                        for ds in context.data_sources
+                    ],
+                    "candidates_count": len(context.mapping_candidates),
+                    "top_candidates": [
+                        {
+                            "field_id": mc.field_id,
+                            "source_key": mc.source_key,
+                            "score": mc.score,
+                        }
+                        for mc in sorted(
+                            context.mapping_candidates,
+                            key=lambda c: c.score,
+                            reverse=True,
+                        )[:10]
+                    ],
+                },
+            )
+        )
 
         # Step 2: Merge rule snippets into context rules
         with sw.lap("rule_analyze"):
             if rule_snippets:
-                merged_rules = context.rules + tuple(
-                    snippet.rule_text for snippet in rule_snippets
-                )
+                merged_rules = context.rules + tuple(snippet.rule_text for snippet in rule_snippets)
                 context = FormContext(
                     document_id=context.document_id,
                     conversation_id=context.conversation_id,
@@ -172,16 +171,18 @@ class AutofillPipelineService:
                 )
 
         all_rules = list(context.rules) if context.rules else []
-        step_logs.append(PipelineStepLog(
-            step_name="rule_analyze",
-            status="success",
-            duration_ms=sw.laps["rule_analyze"],
-            summary=f"{len(all_rules)} rules",
-            details={
-                "rules_count": len(all_rules),
-                "rules": all_rules,
-            },
-        ))
+        step_logs.append(
+            PipelineStepLog(
+                step_name="rule_analyze",
+                status="success",
+                duration_ms=sw.laps["rule_analyze"],
+                summary=f"{len(all_rules)} rules",
+                details={
+                    "rules_count": len(all_rules),
+                    "rules": all_rules,
+                },
+            )
+        )
 
         # Step 3: Plan
         with sw.lap("fill_plan"):
@@ -189,43 +190,42 @@ class AutofillPipelineService:
 
         fill_count = sum(1 for a in plan.actions if a.action == FillActionType.FILL)
         skip_count = sum(1 for a in plan.actions if a.action == FillActionType.SKIP)
-        ask_user_count = sum(
-            1 for a in plan.actions if a.action == FillActionType.ASK_USER
-        )
+        ask_user_count = sum(1 for a in plan.actions if a.action == FillActionType.ASK_USER)
 
-        plan_prompt_chars = (
-            (len(plan.system_prompt) if plan.system_prompt else 0)
-            + (len(plan.user_prompt) if plan.user_prompt else 0)
+        plan_prompt_chars = (len(plan.system_prompt) if plan.system_prompt else 0) + (
+            len(plan.user_prompt) if plan.user_prompt else 0
         )
         plan_response_chars = len(plan.raw_llm_response) if plan.raw_llm_response else 0
-        step_logs.append(PipelineStepLog(
-            step_name="fill_plan",
-            status="success",
-            duration_ms=sw.laps["fill_plan"],
-            summary=f"{fill_count} fill, {skip_count} skip, {ask_user_count} ask_user",
-            details={
-                "model_used": plan.model_used,
-                "prompt_chars": plan_prompt_chars,
-                "prompt_tokens_est": plan_prompt_chars // 4,
-                "response_chars": plan_response_chars,
-                "system_prompt": plan.system_prompt,
-                "user_prompt": plan.user_prompt,
-                "raw_llm_response": plan.raw_llm_response,
-                "fill_count": fill_count,
-                "skip_count": skip_count,
-                "ask_user_count": ask_user_count,
-                "actions": [
-                    {
-                        "field_id": a.field_id,
-                        "action": a.action.value,
-                        "value": a.value,
-                        "confidence": a.confidence,
-                        "reason": a.reason,
-                    }
-                    for a in plan.actions
-                ],
-            },
-        ))
+        step_logs.append(
+            PipelineStepLog(
+                step_name="fill_plan",
+                status="success",
+                duration_ms=sw.laps["fill_plan"],
+                summary=f"{fill_count} fill, {skip_count} skip, {ask_user_count} ask_user",
+                details={
+                    "model_used": plan.model_used,
+                    "prompt_chars": plan_prompt_chars,
+                    "prompt_tokens_est": plan_prompt_chars // 4,
+                    "response_chars": plan_response_chars,
+                    "system_prompt": plan.system_prompt,
+                    "user_prompt": plan.user_prompt,
+                    "raw_llm_response": plan.raw_llm_response,
+                    "fill_count": fill_count,
+                    "skip_count": skip_count,
+                    "ask_user_count": ask_user_count,
+                    "actions": [
+                        {
+                            "field_id": a.field_id,
+                            "action": a.action.value,
+                            "value": a.value,
+                            "confidence": a.confidence,
+                            "reason": a.reason,
+                        }
+                        for a in plan.actions
+                    ],
+                },
+            )
+        )
 
         # Step 4: Render
         with sw.lap("render"):
@@ -234,25 +234,27 @@ class AutofillPipelineService:
                 target_document_ref=target_document_ref,
             )
 
-        step_logs.append(PipelineStepLog(
-            step_name="render",
-            status="success",
-            duration_ms=sw.laps["render"],
-            summary=f"{report.filled_count} filled, {report.failed_count} failed",
-            details={
-                "filled_count": report.filled_count,
-                "failed_count": report.failed_count,
-                "filled_document_ref": report.filled_document_ref,
-                "field_results": [
-                    {
-                        "field_id": fr.field_id,
-                        "status": fr.status.value,
-                        "value_written": fr.value_written,
-                    }
-                    for fr in report.field_results
-                ],
-            },
-        ))
+        step_logs.append(
+            PipelineStepLog(
+                step_name="render",
+                status="success",
+                duration_ms=sw.laps["render"],
+                summary=f"{report.filled_count} filled, {report.failed_count} failed",
+                details={
+                    "filled_count": report.filled_count,
+                    "failed_count": report.failed_count,
+                    "filled_document_ref": report.filled_document_ref,
+                    "field_results": [
+                        {
+                            "field_id": fr.field_id,
+                            "status": fr.status.value,
+                            "value_written": fr.value_written,
+                        }
+                        for fr in report.field_results
+                    ],
+                },
+            )
+        )
 
         return AutofillPipelineResult(
             context=context,
@@ -271,7 +273,12 @@ class AutofillPipelineService:
         user_rules: tuple[str, ...] = (),
         rule_docs: tuple[str, ...] = (),
         answers: list[dict[str, Any]] | None = None,
-    ) -> tuple[FillPlan, tuple[FieldQuestion, ...], AutofillPipelineResult | None, tuple[PipelineStepLog, ...]]:
+    ) -> tuple[
+        FillPlan,
+        tuple[FieldQuestion, ...],
+        AutofillPipelineResult | None,
+        tuple[PipelineStepLog, ...],
+    ]:
         """Execute a single turn in detailed autofill mode (fill-first).
 
         Turn 1 (answers=None): draft fill + questions.
@@ -289,13 +296,15 @@ class AutofillPipelineService:
 
         if cached_context is not None:
             context = cached_context
-            step_logs.append(PipelineStepLog(
-                step_name="context_build",
-                status="success",
-                duration_ms=0,
-                summary="cached",
-                details={"cached": True},
-            ))
+            step_logs.append(
+                PipelineStepLog(
+                    step_name="context_build",
+                    status="success",
+                    duration_ms=0,
+                    summary="cached",
+                    details={"cached": True},
+                )
+            )
         else:
             with sw.lap("context_build"):
                 context_task = self._context_builder.build(
@@ -311,22 +320,22 @@ class AutofillPipelineService:
                 )
                 context, rule_snippets = await asyncio.gather(context_task, rule_task)
 
-            step_logs.append(PipelineStepLog(
-                step_name="context_build",
-                status="success",
-                duration_ms=sw.laps["context_build"],
-                summary=f"{len(context.data_sources)} sources, {len(context.mapping_candidates)} candidates",
-                details={
-                    "data_sources_count": len(context.data_sources),
-                    "candidates_count": len(context.mapping_candidates),
-                },
-            ))
+            step_logs.append(
+                PipelineStepLog(
+                    step_name="context_build",
+                    status="success",
+                    duration_ms=sw.laps["context_build"],
+                    summary=f"{len(context.data_sources)} sources, {len(context.mapping_candidates)} candidates",
+                    details={
+                        "data_sources_count": len(context.data_sources),
+                        "candidates_count": len(context.mapping_candidates),
+                    },
+                )
+            )
 
             # Merge rules
             if rule_snippets:
-                merged_rules = context.rules + tuple(
-                    snippet.rule_text for snippet in rule_snippets
-                )
+                merged_rules = context.rules + tuple(snippet.rule_text for snippet in rule_snippets)
                 context = FormContext(
                     document_id=context.document_id,
                     conversation_id=context.conversation_id,
@@ -339,9 +348,7 @@ class AutofillPipelineService:
             self._turn_context_cache[cache_key] = context
 
             # ── Generate prompt (SYNC, blocking) ──
-            prompt = await self._generate_prompt_sync(
-                document_id, context, step_logs, sw
-            )
+            prompt = await self._generate_prompt_sync(document_id, context, step_logs, sw)
             if prompt:
                 self._fill_planner.set_specialized_prompt(prompt)
             self._turn_prompt_cache[cache_key] = prompt
@@ -358,9 +365,7 @@ class AutofillPipelineService:
             )
 
         # ── Turn 1: Draft fill + question generation ──
-        return await self._turn_draft_fill(
-            context, target_document_ref, sw, step_logs
-        )
+        return await self._turn_draft_fill(context, target_document_ref, sw, step_logs)
 
     async def _turn_draft_fill(
         self,
@@ -368,7 +373,12 @@ class AutofillPipelineService:
         target_document_ref: str,
         sw: StopWatch,
         step_logs: list[PipelineStepLog],
-    ) -> tuple[FillPlan, tuple[FieldQuestion, ...], AutofillPipelineResult | None, tuple[PipelineStepLog, ...]]:
+    ) -> tuple[
+        FillPlan,
+        tuple[FieldQuestion, ...],
+        AutofillPipelineResult | None,
+        tuple[PipelineStepLog, ...],
+    ]:
         """Turn 1: Draft fill, render, then generate questions."""
         # Step: Draft fill
         with sw.lap("fill_plan"):
@@ -383,18 +393,20 @@ class AutofillPipelineService:
                 target_document_ref=target_document_ref,
             )
 
-        step_logs.append(PipelineStepLog(
-            step_name="render",
-            status="success",
-            duration_ms=sw.laps["render"],
-            summary=f"{report.filled_count} filled, {report.failed_count} failed (draft)",
-            details={
-                "filled_count": report.filled_count,
-                "failed_count": report.failed_count,
-                "filled_document_ref": report.filled_document_ref,
-                "is_draft": True,
-            },
-        ))
+        step_logs.append(
+            PipelineStepLog(
+                step_name="render",
+                status="success",
+                duration_ms=sw.laps["render"],
+                summary=f"{report.filled_count} filled, {report.failed_count} failed (draft)",
+                details={
+                    "filled_count": report.filled_count,
+                    "failed_count": report.failed_count,
+                    "filled_document_ref": report.filled_document_ref,
+                    "is_draft": True,
+                },
+            )
+        )
 
         pipeline_result = AutofillPipelineResult(
             context=context,
@@ -410,19 +422,20 @@ class AutofillPipelineService:
             with sw.lap("question_gen"):
                 questions = await self._question_generator.generate(plan, context)
 
-            step_logs.append(PipelineStepLog(
-                step_name="question_gen",
-                status="success",
-                duration_ms=sw.laps["question_gen"],
-                summary=f"{len(questions)} questions generated",
-                details={
-                    "question_count": len(questions),
-                    "questions": [
-                        {"id": q.id, "text": q.text, "type": q.type.value}
-                        for q in questions
-                    ],
-                },
-            ))
+            step_logs.append(
+                PipelineStepLog(
+                    step_name="question_gen",
+                    status="success",
+                    duration_ms=sw.laps["question_gen"],
+                    summary=f"{len(questions)} questions generated",
+                    details={
+                        "question_count": len(questions),
+                        "questions": [
+                            {"id": q.id, "text": q.text, "type": q.type.value} for q in questions
+                        ],
+                    },
+                )
+            )
 
         return plan, questions, pipeline_result, tuple(step_logs)
 
@@ -433,7 +446,12 @@ class AutofillPipelineService:
         target_document_ref: str,
         sw: StopWatch,
         step_logs: list[PipelineStepLog],
-    ) -> tuple[FillPlan, tuple[FieldQuestion, ...], AutofillPipelineResult | None, tuple[PipelineStepLog, ...]]:
+    ) -> tuple[
+        FillPlan,
+        tuple[FieldQuestion, ...],
+        AutofillPipelineResult | None,
+        tuple[PipelineStepLog, ...],
+    ]:
         """Turn 2: Re-fill with user answers, then render final PDF."""
         # Step: Re-fill with answers
         with sw.lap("fill_plan"):
@@ -448,18 +466,20 @@ class AutofillPipelineService:
                 target_document_ref=target_document_ref,
             )
 
-        step_logs.append(PipelineStepLog(
-            step_name="render",
-            status="success",
-            duration_ms=sw.laps["render"],
-            summary=f"{report.filled_count} filled, {report.failed_count} failed (final)",
-            details={
-                "filled_count": report.filled_count,
-                "failed_count": report.failed_count,
-                "filled_document_ref": report.filled_document_ref,
-                "is_draft": False,
-            },
-        ))
+        step_logs.append(
+            PipelineStepLog(
+                step_name="render",
+                status="success",
+                duration_ms=sw.laps["render"],
+                summary=f"{report.filled_count} filled, {report.failed_count} failed (final)",
+                details={
+                    "filled_count": report.filled_count,
+                    "failed_count": report.failed_count,
+                    "filled_document_ref": report.filled_document_ref,
+                    "is_draft": False,
+                },
+            )
+        )
 
         pipeline_result = AutofillPipelineResult(
             context=context,
@@ -485,13 +505,15 @@ class AutofillPipelineService:
         # Check cache first
         cached = self._try_cached_prompt(context)
         if cached:
-            step_logs.append(PipelineStepLog(
-                step_name="prompt_generate",
-                status="success",
-                duration_ms=0,
-                summary="cache_hit",
-                details={"cached": True},
-            ))
+            step_logs.append(
+                PipelineStepLog(
+                    step_name="prompt_generate",
+                    status="success",
+                    duration_ms=0,
+                    summary="cache_hit",
+                    details={"cached": True},
+                )
+            )
             return cached
 
         if not self._prompt_generator:
@@ -510,31 +532,35 @@ class AutofillPipelineService:
                     field_count=len(result.field_mapping),
                 )
 
-            step_logs.append(PipelineStepLog(
-                step_name="prompt_generate",
-                status="success",
-                duration_ms=result.generation_time_ms,
-                summary=f"validated={result.validation_passed}",
-                details={
-                    "model_used": result.model_used,
-                    "generation_time_ms": result.generation_time_ms,
-                    "validation_passed": result.validation_passed,
-                    "missing_field_ids": list(result.missing_field_ids),
-                    "prompt_length": len(result.specialized_prompt),
-                    "specialized_prompt": result.specialized_prompt,
-                },
-            ))
+            step_logs.append(
+                PipelineStepLog(
+                    step_name="prompt_generate",
+                    status="success",
+                    duration_ms=result.generation_time_ms,
+                    summary=f"validated={result.validation_passed}",
+                    details={
+                        "model_used": result.model_used,
+                        "generation_time_ms": result.generation_time_ms,
+                        "validation_passed": result.validation_passed,
+                        "missing_field_ids": list(result.missing_field_ids),
+                        "prompt_length": len(result.specialized_prompt),
+                        "specialized_prompt": result.specialized_prompt,
+                    },
+                )
+            )
             return result.specialized_prompt
 
         except Exception as e:
             logger.warning(f"Prompt generation failed: {e}")
-            step_logs.append(PipelineStepLog(
-                step_name="prompt_generate",
-                status="error",
-                duration_ms=sw.laps.get("prompt_generate", 0),
-                summary=f"failed: {e}",
-                details={"error": str(e)},
-            ))
+            step_logs.append(
+                PipelineStepLog(
+                    step_name="prompt_generate",
+                    status="error",
+                    duration_ms=sw.laps.get("prompt_generate", 0),
+                    summary=f"failed: {e}",
+                    details={"error": str(e)},
+                )
+            )
             return None
 
     def _try_cached_prompt(self, context: FormContext) -> str | None:
@@ -557,33 +583,34 @@ class AutofillPipelineService:
         fill_count = sum(1 for a in plan.actions if a.action == FillActionType.FILL)
         skip_count = sum(1 for a in plan.actions if a.action == FillActionType.SKIP)
 
-        plan_prompt_chars = (
-            (len(plan.system_prompt) if plan.system_prompt else 0)
-            + (len(plan.user_prompt) if plan.user_prompt else 0)
+        plan_prompt_chars = (len(plan.system_prompt) if plan.system_prompt else 0) + (
+            len(plan.user_prompt) if plan.user_prompt else 0
         )
-        step_logs.append(PipelineStepLog(
-            step_name="fill_plan",
-            status="success",
-            duration_ms=duration_ms,
-            summary=f"{fill_count} fill, {skip_count} skip",
-            details={
-                "model_used": plan.model_used,
-                "prompt_chars": plan_prompt_chars,
-                "prompt_tokens_est": plan_prompt_chars // 4,
-                "system_prompt": plan.system_prompt,
-                "user_prompt": plan.user_prompt,
-                "raw_llm_response": plan.raw_llm_response,
-                "fill_count": fill_count,
-                "skip_count": skip_count,
-                "actions": [
-                    {
-                        "field_id": a.field_id,
-                        "action": a.action.value,
-                        "value": a.value,
-                        "confidence": a.confidence,
-                        "reason": a.reason,
-                    }
-                    for a in plan.actions
-                ],
-            },
-        ))
+        step_logs.append(
+            PipelineStepLog(
+                step_name="fill_plan",
+                status="success",
+                duration_ms=duration_ms,
+                summary=f"{fill_count} fill, {skip_count} skip",
+                details={
+                    "model_used": plan.model_used,
+                    "prompt_chars": plan_prompt_chars,
+                    "prompt_tokens_est": plan_prompt_chars // 4,
+                    "system_prompt": plan.system_prompt,
+                    "user_prompt": plan.user_prompt,
+                    "raw_llm_response": plan.raw_llm_response,
+                    "fill_count": fill_count,
+                    "skip_count": skip_count,
+                    "actions": [
+                        {
+                            "field_id": a.field_id,
+                            "action": a.action.value,
+                            "value": a.value,
+                            "confidence": a.confidence,
+                            "reason": a.reason,
+                        }
+                        for a in plan.actions
+                    ],
+                },
+            )
+        )

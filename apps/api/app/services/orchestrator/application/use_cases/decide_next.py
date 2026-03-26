@@ -123,9 +123,7 @@ class DecideNextUseCase:
 
         # 6. Improvement rate check (stagnation detection)
         if previous_issues is not None and job.iteration_count > 0:
-            improvement_result = self._check_improvement_rate(
-                job, previous_issues
-            )
+            improvement_result = self._check_improvement_rate(job, previous_issues)
             if improvement_result is not None:
                 return improvement_result
 
@@ -202,7 +200,8 @@ class DecideNextUseCase:
             return None
 
         critical_issues = [
-            issue for issue in job.issues
+            issue
+            for issue in job.issues
             if issue.severity in (IssueSeverity.CRITICAL, IssueSeverity.HIGH, IssueSeverity.ERROR)
         ]
 
@@ -270,8 +269,7 @@ class DecideNextUseCase:
     ) -> NextAction | None:
         """Check for layout issues requiring Adjust retry."""
         layout_issues = [
-            issue for issue in job.issues
-            if issue.issue_type == IssueType.LAYOUT_ISSUE
+            issue for issue in job.issues if issue.issue_type == IssueType.LAYOUT_ISSUE
         ]
 
         if not layout_issues:
@@ -300,8 +298,7 @@ class DecideNextUseCase:
     ) -> NextAction | None:
         """Check for mapping issues requiring Map retry."""
         mapping_issues = [
-            issue for issue in job.issues
-            if issue.issue_type == IssueType.MAPPING_AMBIGUOUS
+            issue for issue in job.issues if issue.issue_type == IssueType.MAPPING_AMBIGUOUS
         ]
 
         if not mapping_issues:

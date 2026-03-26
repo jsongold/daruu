@@ -44,9 +44,7 @@ def export_schema(output_path: Path) -> None:
 
 def main() -> None:
     """Main entry point."""
-    parser = argparse.ArgumentParser(
-        description="Export OpenAPI schema from FastAPI application"
-    )
+    parser = argparse.ArgumentParser(description="Export OpenAPI schema from FastAPI application")
     parser.add_argument(
         "--output",
         "-o",

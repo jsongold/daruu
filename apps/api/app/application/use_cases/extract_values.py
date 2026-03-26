@@ -15,6 +15,8 @@ from app.application.ports.llm_gateway import (
     EvidenceRef,
     FieldContext,
     LLMGateway,
+)
+from app.application.ports.llm_gateway import (
     OCRToken as LLMOCRToken,
 )
 from app.application.ports.ocr_gateway import OCRGateway, OCRResult
@@ -27,13 +29,9 @@ class ExtractionTarget(BaseModel):
     field_name: str = Field(..., description="Field name/label")
     field_type: str = Field(..., description="Field type")
     page: int = Field(..., ge=1, description="Page number")
-    bbox: tuple[float, float, float, float] = Field(
-        ..., description="Field bounding box"
-    )
+    bbox: tuple[float, float, float, float] = Field(..., description="Field bounding box")
     expected_format: str | None = Field(None, description="Expected value format")
-    validation_rules: dict[str, str] | None = Field(
-        None, description="Validation rules"
-    )
+    validation_rules: dict[str, str] | None = Field(None, description="Validation rules")
 
     model_config = {"frozen": True}
 
@@ -47,9 +45,7 @@ class ExtractRequest(BaseModel):
     page_image_refs: dict[int, str] = Field(
         ..., description="Map of page number to image reference"
     )
-    targets: list[ExtractionTarget] = Field(
-        ..., description="Fields to extract values for"
-    )
+    targets: list[ExtractionTarget] = Field(..., description="Fields to extract values for")
     native_text: dict[int, str] | None = Field(
         None, description="Optional pre-extracted native PDF text per page"
     )
@@ -66,18 +62,10 @@ class ExtractedValue(BaseModel):
     field_id: str = Field(..., description="Field ID")
     value: str = Field(..., description="Extracted value")
     confidence: float = Field(..., ge=0.0, le=1.0, description="Extraction confidence")
-    source: str = Field(
-        ..., description="Source of extraction (native_text, ocr, llm)"
-    )
-    evidence: list[EvidenceRef] = Field(
-        default_factory=list, description="Supporting evidence"
-    )
-    needs_review: bool = Field(
-        default=False, description="Whether manual review is needed"
-    )
-    normalized: bool = Field(
-        default=False, description="Whether value was normalized"
-    )
+    source: str = Field(..., description="Source of extraction (native_text, ocr, llm)")
+    evidence: list[EvidenceRef] = Field(default_factory=list, description="Supporting evidence")
+    needs_review: bool = Field(default=False, description="Whether manual review is needed")
+    normalized: bool = Field(default=False, description="Whether value was normalized")
 
     model_config = {"frozen": True}
 
@@ -87,16 +75,12 @@ class ExtractResult(BaseModel):
 
     job_id: str = Field(..., description="Job ID")
     document_id: str = Field(..., description="Source document ID")
-    extractions: list[ExtractedValue] = Field(
-        default_factory=list, description="Extracted values"
-    )
+    extractions: list[ExtractedValue] = Field(default_factory=list, description="Extracted values")
     failed_fields: list[str] = Field(
         default_factory=list, description="Field IDs that failed extraction"
     )
     success: bool = Field(..., description="Whether extraction succeeded")
-    errors: list[str] = Field(
-        default_factory=list, description="Any errors encountered"
-    )
+    errors: list[str] = Field(default_factory=list, description="Any errors encountered")
 
     model_config = {"frozen": True}
 

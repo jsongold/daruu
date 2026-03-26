@@ -72,22 +72,16 @@ class SupabaseCorrectionRepository:
             return self._to_model(result.data[0])
         return correction
 
-    def list_by_document(
-        self, document_id: str, limit: int = 100
-    ) -> list[CorrectionRecord]:
+    def list_by_document(self, document_id: str, limit: int = 100) -> list[CorrectionRecord]:
         """List corrections for a document with retry on transient errors."""
         try:
             return self._list_by_document_with_retry(document_id, limit)
         except Exception as e:
-            logger.error(
-                f"Failed to list corrections for document {document_id}: {e}"
-            )
+            logger.error(f"Failed to list corrections for document {document_id}: {e}")
             return []
 
     @with_retry(max_retries=3, base_delay=1.0)
-    def _list_by_document_with_retry(
-        self, document_id: str, limit: int
-    ) -> list[CorrectionRecord]:
+    def _list_by_document_with_retry(self, document_id: str, limit: int) -> list[CorrectionRecord]:
         """Internal list with retry logic."""
         result = (
             self._client.table(self.TABLE_NAME)

@@ -4,17 +4,15 @@ import asyncio
 import json
 from datetime import datetime, timezone
 from typing import Any, AsyncGenerator
-from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
+from app.infrastructure.repositories import get_event_publisher
 from app.models import (
     Activity,
     ApiResponse,
-    AsyncJobResponse,
-    Evidence,
     EvidenceResponse,
     FieldAnswer,
     FieldEdit,
@@ -25,14 +23,12 @@ from app.models import (
     ReviewResponse,
     RunAsyncRequest,
     RunAsyncResponse,
-    RunMode,
     RunRequest,
     RunResponse,
     TaskStatus,
     TaskStatusResponse,
 )
 from app.services import JobService
-from app.infrastructure.repositories import get_event_publisher
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -371,11 +367,13 @@ async def stream_events(job_id: str) -> StreamingResponse:
 
         try:
             # Send initial connection event
-            yield _format_sse_event({
-                "event": "connected",
-                "job_id": job_id,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            })
+            yield _format_sse_event(
+                {
+                    "event": "connected",
+                    "job_id": job_id,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+            )
 
             # Keep connection alive and send events
             while True:
@@ -385,10 +383,12 @@ async def stream_events(job_id: str) -> StreamingResponse:
                     yield _format_sse_event(event)
                 except asyncio.TimeoutError:
                     # Send keepalive ping
-                    yield _format_sse_event({
-                        "event": "ping",
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                    })
+                    yield _format_sse_event(
+                        {
+                            "event": "ping",
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                        }
+                    )
         finally:
             event_publisher.unsubscribe(job_id, queue)
 
@@ -490,6 +490,7 @@ def _get_task_queue():
     """Get the Celery task queue (lazy import to avoid circular deps)."""
     try:
         from app.infrastructure.celery import get_task_queue
+
         return get_task_queue()
     except ImportError:
         return None

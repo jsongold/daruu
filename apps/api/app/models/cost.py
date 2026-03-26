@@ -338,9 +338,7 @@ class CostTracker:
             Estimated cost in USD
         """
         # Get pricing for model, fallback to gpt-4o-mini pricing
-        pricing = DEFAULT_LLM_PRICING.get(
-            model_name, DEFAULT_LLM_PRICING[DEFAULT_MODEL]
-        )
+        pricing = DEFAULT_LLM_PRICING.get(model_name, DEFAULT_LLM_PRICING[DEFAULT_MODEL])
 
         # Calculate LLM cost (per million tokens)
         input_cost = (llm_tokens_input / 1_000_000) * pricing["input_per_1m"]
@@ -354,7 +352,9 @@ class CostTracker:
         # Calculate storage cost (convert bytes to GB)
         bytes_per_gb = 1024 * 1024 * 1024
         upload_cost = (storage_bytes_uploaded / bytes_per_gb) * DEFAULT_STORAGE_UPLOAD_COST_PER_GB
-        download_cost = (storage_bytes_downloaded / bytes_per_gb) * DEFAULT_STORAGE_DOWNLOAD_COST_PER_GB
+        download_cost = (
+            storage_bytes_downloaded / bytes_per_gb
+        ) * DEFAULT_STORAGE_DOWNLOAD_COST_PER_GB
         storage_cost = upload_cost + download_cost
 
         total = input_cost + output_cost + ocr_cost + storage_cost
@@ -366,9 +366,7 @@ class CostTracker:
         Returns:
             LLM cost in USD
         """
-        pricing = DEFAULT_LLM_PRICING.get(
-            self.model_name, DEFAULT_LLM_PRICING[DEFAULT_MODEL]
-        )
+        pricing = DEFAULT_LLM_PRICING.get(self.model_name, DEFAULT_LLM_PRICING[DEFAULT_MODEL])
         input_cost = (self.llm_tokens_input / 1_000_000) * pricing["input_per_1m"]
         output_cost = (self.llm_tokens_output / 1_000_000) * pricing["output_per_1m"]
         return round(input_cost + output_cost, 6)
@@ -390,8 +388,12 @@ class CostTracker:
             Storage cost in USD
         """
         bytes_per_gb = 1024 * 1024 * 1024
-        upload_cost = (self.storage_bytes_uploaded / bytes_per_gb) * DEFAULT_STORAGE_UPLOAD_COST_PER_GB
-        download_cost = (self.storage_bytes_downloaded / bytes_per_gb) * DEFAULT_STORAGE_DOWNLOAD_COST_PER_GB
+        upload_cost = (
+            self.storage_bytes_uploaded / bytes_per_gb
+        ) * DEFAULT_STORAGE_UPLOAD_COST_PER_GB
+        download_cost = (
+            self.storage_bytes_downloaded / bytes_per_gb
+        ) * DEFAULT_STORAGE_DOWNLOAD_COST_PER_GB
         return round(upload_cost + download_cost, 6)
 
     def to_summary_dict(self) -> dict:

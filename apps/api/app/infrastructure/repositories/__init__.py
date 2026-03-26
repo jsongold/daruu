@@ -25,30 +25,6 @@ Usage:
     doc_repo = get_document_repository(mode="memory")
 """
 
-from app.infrastructure.repositories.memory_repository import (
-    MemoryDocumentRepository,
-    MemoryEventPublisher,
-    MemoryFileRepository,
-    MemoryJobRepository,
-)
-from app.infrastructure.repositories.memory_conversation_repository import (
-    MemoryConversationRepository,
-)
-from app.infrastructure.repositories.memory_correction_repository import (
-    MemoryCorrectionRepository,
-)
-from app.infrastructure.repositories.memory_edit_repository import (
-    MemoryEditRepository,
-)
-from app.infrastructure.repositories.memory_message_repository import (
-    MemoryMessageRepository,
-)
-from app.infrastructure.repositories.memory_rule_snippet_repository import (
-    MemoryRuleSnippetRepository,
-)
-from app.infrastructure.repositories.memory_template_repository import (
-    MemoryTemplateRepository,
-)
 from app.infrastructure.repositories.factory import (
     clear_repository_singletons,
     get_active_mode,
@@ -64,6 +40,30 @@ from app.infrastructure.repositories.factory import (
     get_prompt_attempt_repository,
     get_rule_snippet_repository,
     get_template_repository,
+)
+from app.infrastructure.repositories.memory_conversation_repository import (
+    MemoryConversationRepository,
+)
+from app.infrastructure.repositories.memory_correction_repository import (
+    MemoryCorrectionRepository,
+)
+from app.infrastructure.repositories.memory_edit_repository import (
+    MemoryEditRepository,
+)
+from app.infrastructure.repositories.memory_message_repository import (
+    MemoryMessageRepository,
+)
+from app.infrastructure.repositories.memory_repository import (
+    MemoryDocumentRepository,
+    MemoryEventPublisher,
+    MemoryFileRepository,
+    MemoryJobRepository,
+)
+from app.infrastructure.repositories.memory_rule_snippet_repository import (
+    MemoryRuleSnippetRepository,
+)
+from app.infrastructure.repositories.memory_template_repository import (
+    MemoryTemplateRepository,
 )
 
 __all__ = [

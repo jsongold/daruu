@@ -1,6 +1,7 @@
 """Pytest configuration and fixtures."""
 
 import os
+
 import pytest
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
@@ -11,12 +12,6 @@ os.environ["DARU_REPOSITORY_MODE"] = "memory"
 
 from app.config import get_settings
 from app.main import app
-from app.infrastructure.repositories.memory_repository import (
-    _document_repository,
-    _event_publisher,
-    _file_repository,
-    _job_repository,
-)
 
 
 @pytest.fixture(autouse=True)
@@ -108,7 +103,6 @@ try:
     @pytest.fixture
     def celery_app(celery_config):
         """Create a test Celery app with eager execution."""
-        from app.infrastructure.celery.config import get_celery_config
 
         app = Celery("test")
         app.config_from_object(celery_config)

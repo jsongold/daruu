@@ -13,14 +13,15 @@ from uuid import uuid4
 
 from mcp.types import CallToolResult, TextContent
 
-from app.mcp.session import get_current_session
 from app.mcp.logging import tool_logger
+from app.mcp.session import get_current_session
 
 
 def _get_redis_client() -> Any:
     """Get Redis client."""
     try:
         import redis
+
         redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/2")
         client = redis.from_url(redis_url, decode_responses=True)
         client.ping()
@@ -59,23 +60,26 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
 
     if not fields:
         return CallToolResult(
-            content=[TextContent(
-                type="text",
-                text=(
-                    "Error: No fields provided. Please analyze the PDF visually "
-                    "and extract the field names, types, and positions."
+            content=[
+                TextContent(
+                    type="text",
+                    text=(
+                        "Error: No fields provided. Please analyze the PDF visually "
+                        "and extract the field names, types, and positions."
+                    ),
                 )
-            )]
+            ]
         )
 
     # Get current MCP session
     session = await get_current_session()
     if not session:
         return CallToolResult(
-            content=[TextContent(
-                type="text",
-                text="Error: No active session. Please start a new conversation."
-            )]
+            content=[
+                TextContent(
+                    type="text", text="Error: No active session. Please start a new conversation."
+                )
+            ]
         )
 
     session_id = session["id"]
@@ -87,8 +91,8 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
         field_id = field.get("id") or str(uuid4())
         normalized_fields[field_id] = {
             "id": field_id,
-            "name": field.get("name") or f"field_{i+1}",
-            "label": field.get("label") or field.get("name") or f"Field {i+1}",
+            "name": field.get("name") or f"field_{i + 1}",
+            "label": field.get("label") or field.get("name") or f"Field {i + 1}",
             "type": field.get("type", "text"),
             "page": field.get("page", 1),
             "position": field.get("position"),
@@ -151,6 +155,4 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
         "- Use `get_form_summary` to see current status"
     )
 
-    return CallToolResult(
-        content=[TextContent(type="text", text=response_text)]
-    )
+    return CallToolResult(content=[TextContent(type="text", text=response_text)])

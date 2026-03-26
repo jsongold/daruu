@@ -43,9 +43,7 @@ class FieldDTO(BaseModel):
     )
     confidence: float = Field(..., ge=0.0, le=1.0, description="Detection confidence")
     is_required: bool = Field(default=False, description="Whether field is required")
-    evidence_refs: list[str] = Field(
-        default_factory=list, description="Evidence references"
-    )
+    evidence_refs: list[str] = Field(default_factory=list, description="Evidence references")
 
     model_config = {"frozen": True}
 
@@ -54,13 +52,9 @@ class AnalyzeResponseDTO(BaseModel):
     """Response body for POST /api/v1/analyze."""
 
     document_id: str = Field(..., description="Analyzed document ID")
-    fields: list[FieldDTO] = Field(
-        default_factory=list, description="Detected fields"
-    )
+    fields: list[FieldDTO] = Field(default_factory=list, description="Detected fields")
     page_count: int = Field(..., ge=1, description="Number of pages analyzed")
     has_acroform: bool = Field(..., description="Whether document has AcroForm fields")
-    warnings: list[str] = Field(
-        default_factory=list, description="Any warnings generated"
-    )
+    warnings: list[str] = Field(default_factory=list, description="Any warnings generated")
 
     model_config = {"frozen": True}

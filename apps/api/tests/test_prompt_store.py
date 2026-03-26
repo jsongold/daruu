@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 import tempfile
 
-import pytest
-
 from app.domain.models.form_context import FormFieldSpec
 from app.services.prompt_generator.store import PromptStore
 

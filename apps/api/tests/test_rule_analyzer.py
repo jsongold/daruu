@@ -4,7 +4,6 @@ import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from app.domain.models.form_context import FormFieldSpec
 from app.domain.models.rule_snippet import RuleSnippet
 from app.domain.protocols.rule_analyzer import RuleAnalyzerProtocol
@@ -16,7 +15,6 @@ from app.services.rule_analyzer.analyzer import (
     RuleAnalyzerStub,
 )
 from app.services.rule_analyzer.schemas import ChunkAnalysisResult, ExtractedRule
-
 
 # ============================================================================
 # Helpers
@@ -41,19 +39,14 @@ def _make_llm_client(rules: list[dict] | None = None) -> AsyncMock:
     client = AsyncMock()
     client.complete = AsyncMock(return_value=_make_llm_response(rules))
     # Instructor path — _has_instructor() checks for `create` attribute
-    chunk_result = ChunkAnalysisResult(
-        rules=[ExtractedRule(**r) for r in rules]
-    )
+    chunk_result = ChunkAnalysisResult(rules=[ExtractedRule(**r) for r in rules])
     client.create = AsyncMock(return_value=chunk_result)
     return client
 
 
 def _make_field_hints(*field_ids: str) -> tuple[FormFieldSpec, ...]:
     """Create FormFieldSpec tuples for testing."""
-    return tuple(
-        FormFieldSpec(field_id=fid, label=fid, field_type="text")
-        for fid in field_ids
-    )
+    return tuple(FormFieldSpec(field_id=fid, label=fid, field_type="text") for fid in field_ids)
 
 
 def _make_embedding_gateway() -> AsyncMock:
@@ -104,9 +97,7 @@ class TestRuleAnalyzerEmptyDocs:
     @pytest.mark.asyncio
     async def test_empty_tuple_returns_empty(self):
         llm = _make_llm_client()
-        analyzer = RuleAnalyzer(
-            llm_client=llm, snippet_repo=MemoryRuleSnippetRepository()
-        )
+        analyzer = RuleAnalyzer(llm_client=llm, snippet_repo=MemoryRuleSnippetRepository())
         result = await analyzer.analyze(rule_docs=())
         assert result == []
         llm.create.assert_not_called()
@@ -114,9 +105,7 @@ class TestRuleAnalyzerEmptyDocs:
     @pytest.mark.asyncio
     async def test_whitespace_only_docs_returns_empty(self):
         llm = _make_llm_client()
-        analyzer = RuleAnalyzer(
-            llm_client=llm, snippet_repo=MemoryRuleSnippetRepository()
-        )
+        analyzer = RuleAnalyzer(llm_client=llm, snippet_repo=MemoryRuleSnippetRepository())
         result = await analyzer.analyze(rule_docs=("  ", "\n\n"))
         assert result == []
         llm.create.assert_not_called()
@@ -140,13 +129,9 @@ class TestRuleAnalyzerAnalysis:
         ]
         llm = _make_llm_client(rules)
         emb = _make_embedding_gateway()
-        analyzer = RuleAnalyzer(
-            llm_client=llm, snippet_repo=repo, embedding_gateway=emb
-        )
+        analyzer = RuleAnalyzer(llm_client=llm, snippet_repo=repo, embedding_gateway=emb)
 
-        result = await analyzer.analyze(
-            rule_docs=("Short rule doc",), document_id="doc-123"
-        )
+        result = await analyzer.analyze(rule_docs=("Short rule doc",), document_id="doc-123")
 
         assert len(result) == 1
         assert result[0].rule_text == "Date must be YYYY/MM/DD"
@@ -189,9 +174,7 @@ class TestRuleAnalyzerAnalysis:
         ]
         llm = _make_llm_client(rules)
         emb = _make_embedding_gateway()
-        analyzer = RuleAnalyzer(
-            llm_client=llm, snippet_repo=repo, embedding_gateway=emb
-        )
+        analyzer = RuleAnalyzer(llm_client=llm, snippet_repo=repo, embedding_gateway=emb)
 
         await analyzer.analyze(rule_docs=("Doc with two rules",))
 
@@ -252,9 +235,7 @@ class TestRuleAnalyzerSearch:
     async def test_search_rules_uses_embedding(self):
         repo = MemoryRuleSnippetRepository()
         emb = _make_embedding_gateway()
-        analyzer = RuleAnalyzer(
-            llm_client=AsyncMock(), snippet_repo=repo, embedding_gateway=emb
-        )
+        analyzer = RuleAnalyzer(llm_client=AsyncMock(), snippet_repo=repo, embedding_gateway=emb)
 
         # Pre-populate with a rule that has an embedding
         snippet = RuleSnippet(
@@ -272,9 +253,7 @@ class TestRuleAnalyzerSearch:
     @pytest.mark.asyncio
     async def test_search_rules_no_embedding_gateway(self):
         repo = MemoryRuleSnippetRepository()
-        analyzer = RuleAnalyzer(
-            llm_client=AsyncMock(), snippet_repo=repo, embedding_gateway=None
-        )
+        analyzer = RuleAnalyzer(llm_client=AsyncMock(), snippet_repo=repo, embedding_gateway=None)
 
         results = await analyzer.search_rules("date format")
 

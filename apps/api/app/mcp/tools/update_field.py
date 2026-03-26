@@ -31,9 +31,7 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
     value = arguments.get("value")
 
     if not form_id:
-        return CallToolResult(
-            content=[TextContent(type="text", text="Error: form_id is required")]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="Error: form_id is required")])
 
     if not field_id:
         return CallToolResult(
@@ -42,9 +40,7 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
 
     session = await get_current_session()
     if not session:
-        return CallToolResult(
-            content=[TextContent(type="text", text="Error: No active session")]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="Error: No active session")])
 
     storage = MCPStorage()
 
@@ -70,10 +66,7 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
         validation_result = _validate_value(value, field_type, field_info)
         if not validation_result["valid"]:
             return CallToolResult(
-                content=[TextContent(
-                    type="text",
-                    text=f"Error: {validation_result['error']}"
-                )]
+                content=[TextContent(type="text", text=f"Error: {validation_result['error']}")]
             )
 
         # Update the field
@@ -95,9 +88,7 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
             old_display = _format_value_for_display(old_value, field_type)
             response_text += f" (was: {old_display})"
 
-        return CallToolResult(
-            content=[TextContent(type="text", text=response_text)]
-        )
+        return CallToolResult(content=[TextContent(type="text", text=response_text)])
 
     except Exception as e:
         return CallToolResult(
@@ -150,6 +141,7 @@ def _validate_value(
     elif field_type == "date":
         # Basic date format validation
         import re
+
         if not re.match(r"^\d{4}-\d{2}-\d{2}$", str(value)):
             return {"valid": False, "error": "Date must be in YYYY-MM-DD format"}
 

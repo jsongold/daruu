@@ -12,7 +12,7 @@ import logging
 from typing import Any
 
 from app.models.data_source import DataSource, DataSourceType, ExtractionResult
-from app.repositories import DataSourceRepository, DocumentRepository, FileRepository
+from app.repositories import DataSourceRepository
 from app.services.document_service import DocumentService
 
 logger = logging.getLogger(__name__)
@@ -135,9 +135,7 @@ class TextExtractionService:
                     )
                     if text_blocks:
                         # Combine all text blocks
-                        raw_text = "\n".join(
-                            block.get("text", "") for block in text_blocks
-                        )
+                        raw_text = "\n".join(block.get("text", "") for block in text_blocks)
                         extracted_fields = self.extract_from_text(raw_text)
                         confidence = 0.3 if extracted_fields else 0.1
                 except Exception as e:

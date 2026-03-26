@@ -18,7 +18,6 @@ Usage:
 
 import argparse
 import logging
-import os
 import sys
 from pathlib import Path
 
@@ -93,12 +92,10 @@ def run_migration(sql_content: str, dry_run: bool = False) -> bool:
         from app.infrastructure.supabase.config import is_supabase_configured
 
         if not is_supabase_configured():
-            logger.error(
-                "Supabase is not configured. Set SUPABASE_URL and SUPABASE_KEY."
-            )
+            logger.error("Supabase is not configured. Set SUPABASE_URL and SUPABASE_KEY.")
             return False
 
-        client = get_supabase_client()
+        get_supabase_client()
 
         # Execute the SQL using RPC call
         # Note: Supabase doesn't directly support raw SQL execution via the client.
@@ -129,9 +126,7 @@ def run_migration(sql_content: str, dry_run: bool = False) -> bool:
 
 def main() -> int:
     """Main entry point for migration runner."""
-    parser = argparse.ArgumentParser(
-        description="Run Supabase database migrations"
-    )
+    parser = argparse.ArgumentParser(description="Run Supabase database migrations")
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -174,10 +169,7 @@ def main() -> int:
 
         # Filter to specific migration if requested
         if args.migration:
-            migration_files = [
-                f for f in migration_files
-                if args.migration in f.name
-            ]
+            migration_files = [f for f in migration_files if args.migration in f.name]
             if not migration_files:
                 logger.error(f"Migration '{args.migration}' not found")
                 return 1

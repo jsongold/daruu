@@ -35,10 +35,15 @@ Usage:
 """
 
 # Core orchestration components
+# Application layer - ports
+from app.orchestrator.application.ports import ServiceGateway, TaskQueue
+
+# Application layer - use cases
+from app.orchestrator.application.use_cases import (
+    DecideNextUseCase,
+    RunPipelineUseCase,
+)
 from app.orchestrator.decision_engine import DecisionEngine
-from app.orchestrator.orchestrator import Orchestrator
-from app.orchestrator.pipeline_executor import PipelineExecutor
-from app.orchestrator.service_client import ServiceClient
 
 # Domain layer
 from app.orchestrator.domain import (
@@ -49,17 +54,11 @@ from app.orchestrator.domain import (
     check_termination,
 )
 
-# Application layer - ports
-from app.orchestrator.application.ports import ServiceGateway, TaskQueue
-
-# Application layer - use cases
-from app.orchestrator.application.use_cases import (
-    DecideNextUseCase,
-    RunPipelineUseCase,
-)
-
 # Infrastructure layer
 from app.orchestrator.infrastructure import HttpServiceClient, RedisJobStore
+from app.orchestrator.orchestrator import Orchestrator
+from app.orchestrator.pipeline_executor import PipelineExecutor
+from app.orchestrator.service_client import ServiceClient
 
 __all__ = [
     # Core

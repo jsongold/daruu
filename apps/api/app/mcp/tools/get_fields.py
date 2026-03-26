@@ -31,15 +31,11 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
     filter_page = arguments.get("filter_page")
 
     if not form_id:
-        return CallToolResult(
-            content=[TextContent(type="text", text="Error: form_id is required")]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="Error: form_id is required")])
 
     session = await get_current_session()
     if not session:
-        return CallToolResult(
-            content=[TextContent(type="text", text="Error: No active session")]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="Error: No active session")])
 
     storage = MCPStorage()
 
@@ -61,31 +57,31 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
             if filter_page is not None and field_info.get("page", 1) != filter_page:
                 continue
 
-            result_fields.append({
-                "id": field_id,
-                **field_info,
-            })
+            result_fields.append(
+                {
+                    "id": field_id,
+                    **field_info,
+                }
+            )
 
         # Sort by page, then by position
-        result_fields.sort(key=lambda f: (
-            f.get("page", 1),
-            f.get("bbox", [0, 0, 0, 0])[1] if f.get("bbox") else 0,
-        ))
+        result_fields.sort(
+            key=lambda f: (
+                f.get("page", 1),
+                f.get("bbox", [0, 0, 0, 0])[1] if f.get("bbox") else 0,
+            )
+        )
 
         # Format output
         if not result_fields:
             if filter_empty:
                 return CallToolResult(
-                    content=[TextContent(
-                        type="text",
-                        text="All fields are filled! Ready to export."
-                    )]
+                    content=[
+                        TextContent(type="text", text="All fields are filled! Ready to export.")
+                    ]
                 )
             return CallToolResult(
-                content=[TextContent(
-                    type="text",
-                    text="No fields found in this form."
-                )]
+                content=[TextContent(type="text", text="No fields found in this form.")]
             )
 
         # Build response text
@@ -134,9 +130,7 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
 
             lines.append(f"- **{name}** [{ftype}]: {value_str}{conf_str}")
 
-        return CallToolResult(
-            content=[TextContent(type="text", text="\n".join(lines))]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="\n".join(lines))])
 
     except Exception as e:
         return CallToolResult(

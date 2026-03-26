@@ -7,9 +7,6 @@ Enriches fields with label candidates via injected FieldEnricher strategy.
 
 import asyncio
 import logging
-from typing import Any
-
-from app.infrastructure.observability.stopwatch import StopWatch
 
 from app.domain.models.form_context import (
     DataSourceEntry,
@@ -17,6 +14,7 @@ from app.domain.models.form_context import (
     FormFieldSpec,
     MappingCandidate,
 )
+from app.infrastructure.observability.stopwatch import StopWatch
 from app.models.data_source import DataSource
 from app.repositories import DataSourceRepository
 from app.services.form_context.enricher import FieldEnricher
@@ -64,9 +62,7 @@ class FormContextBuilder:
         """
         with StopWatch("FormContextBuilder.build", logger) as sw:
             with sw.lap("list_sources"):
-                data_sources = self._data_source_repo.list_by_conversation(
-                    conversation_id
-                )
+                data_sources = self._data_source_repo.list_by_conversation(conversation_id)
             logger.info(
                 "FormContextBuilder: %d sources",
                 len(data_sources),
@@ -112,10 +108,14 @@ class FormContextBuilder:
         """
         cached = self._enriched_fields_cache.get(document_id)
         if cached is not None:
-            logger.info("Field enrichment: CACHED for document %s (%d fields)", document_id, len(cached))
+            logger.info(
+                "Field enrichment: CACHED for document %s (%d fields)", document_id, len(cached)
+            )
             return cached
 
-        logger.info("Field enrichment: enriching %d fields for document %s", len(fields), document_id)
+        logger.info(
+            "Field enrichment: enriching %d fields for document %s", len(fields), document_id
+        )
         result = await self._enricher.enrich(document_id, fields)
 
         self._enriched_fields_cache[document_id] = result
@@ -177,9 +177,7 @@ class FormContextBuilder:
                 confidence=result.confidence,
             )
 
-        entries = list(await asyncio.gather(
-            *(_extract_single(s) for s in data_sources)
-        ))
+        entries = list(await asyncio.gather(*(_extract_single(s) for s in data_sources)))
         return entries
 
     def _build_mapping_candidates(
@@ -208,17 +206,17 @@ class FormContextBuilder:
             normalized_id = self._normalize_key(field.field_id)
 
             for normalized_key, (value, source_name, confidence) in combined.items():
-                score = self._compute_match_score(
-                    normalized_key, normalized_label, normalized_id
-                )
+                score = self._compute_match_score(normalized_key, normalized_label, normalized_id)
                 if score > 0.0:
-                    candidates.append(MappingCandidate(
-                        field_id=field.field_id,
-                        source_key=normalized_key,
-                        source_value=value,
-                        source_name=source_name,
-                        score=score,
-                    ))
+                    candidates.append(
+                        MappingCandidate(
+                            field_id=field.field_id,
+                            source_key=normalized_key,
+                            source_value=value,
+                            source_name=source_name,
+                            score=score,
+                        )
+                    )
 
         return candidates
 

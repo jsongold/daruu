@@ -7,27 +7,13 @@ It uses the test client to make requests and validates responses against schemas
 
 from __future__ import annotations
 
-import json
-from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
 import pytest
+from app.main import app
 from fastapi.testclient import TestClient
 from jsonschema import Draft7Validator
-
-from app.main import app
-from app.models import (
-    ApiResponse,
-    Document,
-    DocumentMeta,
-    DocumentType,
-    ErrorResponse,
-    JobContext,
-    JobCreate,
-    JobMode,
-    JobStatus,
-)
 
 
 @pytest.fixture

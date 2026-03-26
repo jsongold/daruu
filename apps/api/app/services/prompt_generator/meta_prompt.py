@@ -129,10 +129,10 @@ def build_prompt_generation_user_prompt(
                 direction = "nearby"
                 if hasattr(lc, "direction"):
                     direction = lc.direction
-                lines.append(f"  nearby_labels ({direction}): \"{lc.text}\"")
+                lines.append(f'  nearby_labels ({direction}): "{lc.text}"')
 
         if field.label and field.label != field.field_id:
-            lines.append(f"  current_label: \"{field.label}\"")
+            lines.append(f'  current_label: "{field.label}"')
 
         lines.append("")
 
@@ -145,7 +145,7 @@ def build_prompt_generation_user_prompt(
                 for key, value in ds.extracted_fields.items():
                     # Show key and a truncated value as hint
                     val_preview = str(value)[:80] if value else ""
-                    lines.append(f"  - key: \"{key}\" (value: \"{val_preview}\")")
+                    lines.append(f'  - key: "{key}" (value: "{val_preview}")')
             lines.append("")
 
     # Section 3: PDF text blocks (for rule extraction)

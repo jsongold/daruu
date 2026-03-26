@@ -29,9 +29,7 @@ class CorrectionRecord(BaseModel):
 
     document_id: str = Field(..., description="Document ID")
     field_id: str = Field(..., description="Field that was corrected")
-    original_value: str | None = Field(
-        None, description="Value that was auto-filled"
-    )
+    original_value: str | None = Field(None, description="Value that was auto-filled")
     corrected_value: str = Field(..., description="User's corrected value")
     category: CorrectionCategory = Field(
         default=CorrectionCategory.OTHER,
@@ -41,8 +39,6 @@ class CorrectionRecord(BaseModel):
         default_factory=datetime.utcnow,
         description="When the correction was made",
     )
-    conversation_id: str | None = Field(
-        None, description="Conversation context"
-    )
+    conversation_id: str | None = Field(None, description="Conversation context")
 
     model_config = {"frozen": True}

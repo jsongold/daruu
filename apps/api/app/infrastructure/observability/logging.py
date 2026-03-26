@@ -42,7 +42,7 @@ _STRUCTLOG_AVAILABLE = False
 
 try:
     import structlog
-    from structlog.types import EventDict, WrappedLogger
+    pass
 
     _STRUCTLOG_AVAILABLE = True
 except ImportError:
@@ -282,7 +282,6 @@ def _suppress_pdfminer_debug() -> None:
     extremely verbose logs. This function disables debug modes.
     """
     import os
-    import sys
 
     # Disable environment-based debug modes
     os.environ["PDFMINER_DEBUG"] = "0"
@@ -291,12 +290,14 @@ def _suppress_pdfminer_debug() -> None:
     # Suppress pdfminer's internal debug flags
     try:
         import pdfminer.settings
+
         pdfminer.settings.STRICT = False
     except (ImportError, AttributeError):
         pass
 
     try:
         from pdfminer import psparser
+
         if hasattr(psparser, "STRICT"):
             psparser.STRICT = False
     except ImportError:
@@ -305,6 +306,7 @@ def _suppress_pdfminer_debug() -> None:
     # Suppress python-multipart debug output
     try:
         import multipart
+
         if hasattr(multipart, "multipart"):
             # Disable callbacks debug logging
             mp = multipart.multipart
@@ -410,7 +412,7 @@ def _suppress_module_prints() -> None:
                 if first_arg.startswith(pattern) or pattern in first_arg:
                     return  # Suppress OTEL JSON output
             # Also suppress single braces (JSON formatting)
-            if first_arg in ('{', '}', '[', ']'):
+            if first_arg in ("{", "}", "[", "]"):
                 return
         _original_print(*args, **kwargs)
 

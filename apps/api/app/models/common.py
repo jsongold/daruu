@@ -126,9 +126,7 @@ class CostSummaryModel(BaseModel):
     for LLM and OCR operations within a job.
     """
 
-    llm_tokens_input: int = Field(
-        default=0, ge=0, description="Total input tokens sent to LLM"
-    )
+    llm_tokens_input: int = Field(default=0, ge=0, description="Total input tokens sent to LLM")
     llm_tokens_output: int = Field(
         default=0, ge=0, description="Total output tokens received from LLM"
     )
@@ -145,18 +143,14 @@ class CostSummaryModel(BaseModel):
     storage_bytes_downloaded: int = Field(
         default=0, ge=0, description="Total bytes downloaded from storage"
     )
-    estimated_cost_usd: float = Field(
-        default=0.0, ge=0, description="Total estimated cost in USD"
-    )
+    estimated_cost_usd: float = Field(default=0.0, ge=0, description="Total estimated cost in USD")
     breakdown: CostBreakdown = Field(
         default_factory=lambda: CostBreakdown(
             llm_cost_usd=0.0, ocr_cost_usd=0.0, storage_cost_usd=0.0
         ),
         description="Cost breakdown by category",
     )
-    model_name: str = Field(
-        default=DEFAULT_MODEL, description="Primary LLM model used"
-    )
+    model_name: str = Field(default=DEFAULT_MODEL, description="Primary LLM model used")
 
     model_config = {"frozen": True}
 
@@ -176,8 +170,6 @@ class CostSummaryModel(BaseModel):
             storage_bytes_uploaded=0,
             storage_bytes_downloaded=0,
             estimated_cost_usd=0.0,
-            breakdown=CostBreakdown(
-                llm_cost_usd=0.0, ocr_cost_usd=0.0, storage_cost_usd=0.0
-            ),
+            breakdown=CostBreakdown(llm_cost_usd=0.0, ocr_cost_usd=0.0, storage_cost_usd=0.0),
             model_name=DEFAULT_MODEL,
         )

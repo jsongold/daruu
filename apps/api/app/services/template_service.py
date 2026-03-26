@@ -7,7 +7,6 @@ Provides business logic for template management including:
 """
 
 from datetime import datetime, timezone
-from typing import Any
 from uuid import uuid4
 
 from app.models.template import (
@@ -127,7 +126,7 @@ class TemplateService:
         elif template_data.name:
             # Fall back to text embedding from name/description
             text = template_data.name
-            if hasattr(template_data, 'description') and template_data.description:
+            if hasattr(template_data, "description") and template_data.description:
                 text += f" {template_data.description}"
             embedding = await self._embedding_gateway.embed_text(text)
             embedding_id = f"emb-{template_id}"
@@ -218,14 +217,16 @@ class TemplateService:
                     break
 
             if template and template.tenant_id == tenant_id:
-                matches.append(TemplateMatch(
-                    template_id=template.id,
-                    template_name=template.name,
-                    form_type=template.form_type,
-                    similarity_score=score,
-                    preview_url=template.preview_url,
-                    field_count=template.field_count,
-                ))
+                matches.append(
+                    TemplateMatch(
+                        template_id=template.id,
+                        template_name=template.name,
+                        form_type=template.form_type,
+                        similarity_score=score,
+                        preview_url=template.preview_url,
+                        field_count=template.field_count,
+                    )
+                )
 
         # Sort by score and limit
         matches.sort(key=lambda m: m.similarity_score, reverse=True)

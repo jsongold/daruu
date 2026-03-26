@@ -45,9 +45,7 @@ class TextBlock(BaseModel):
     font_name: str | None = Field(None, description="Font name if available")
     font_size: float | None = Field(None, ge=0, description="Font size in points")
     is_bold: bool = Field(default=False, description="Whether text is bold")
-    confidence: float = Field(
-        default=1.0, ge=0.0, le=1.0, description="Extraction confidence"
-    )
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="Extraction confidence")
 
     model_config = {"frozen": True}
 
@@ -65,18 +63,10 @@ class BoxCandidate(BaseModel):
         default="input",
         description="Type of box (input, checkbox, signature, etc.)",
     )
-    has_border: bool = Field(
-        default=True, description="Whether box has visible border"
-    )
-    fill_color: str | None = Field(
-        None, description="Fill color if detected (hex format)"
-    )
-    confidence: float = Field(
-        default=1.0, ge=0.0, le=1.0, description="Detection confidence"
-    )
-    neighboring_text: list[str] = Field(
-        default_factory=list, description="Nearby text for context"
-    )
+    has_border: bool = Field(default=True, description="Whether box has visible border")
+    fill_color: str | None = Field(None, description="Fill color if detected (hex format)")
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="Detection confidence")
+    neighboring_text: list[str] = Field(default_factory=list, description="Nearby text for context")
 
     model_config = {"frozen": True}
 
@@ -109,18 +99,10 @@ class TableCandidate(BaseModel):
     bbox: BBox = Field(..., description="Overall table bounding box")
     rows: int = Field(..., ge=1, description="Number of rows")
     cols: int = Field(..., ge=1, description="Number of columns")
-    cells: tuple[TableCell, ...] = Field(
-        default=(), description="Table cells (immutable tuple)"
-    )
-    has_header_row: bool = Field(
-        default=False, description="Whether first row is header"
-    )
-    has_header_col: bool = Field(
-        default=False, description="Whether first column is header"
-    )
-    confidence: float = Field(
-        default=1.0, ge=0.0, le=1.0, description="Detection confidence"
-    )
+    cells: tuple[TableCell, ...] = Field(default=(), description="Table cells (immutable tuple)")
+    has_header_row: bool = Field(default=False, description="Whether first row is header")
+    has_header_col: bool = Field(default=False, description="Whether first column is header")
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="Detection confidence")
 
     model_config = {"frozen": True}
 
@@ -135,12 +117,8 @@ class LabelCandidate(BaseModel):
     id: str = Field(..., description="Unique identifier for this label")
     text: str = Field(..., description="Label text content")
     bbox: BBox = Field(..., description="Label bounding box")
-    source: str = Field(
-        default="ocr", description="Source of label (ocr, pdf_text, etc.)"
-    )
-    confidence: float = Field(
-        default=1.0, ge=0.0, le=1.0, description="Extraction confidence"
-    )
+    source: str = Field(default="ocr", description="Source of label (ocr, pdf_text, etc.)")
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="Extraction confidence")
     semantic_hints: list[str] = Field(
         default_factory=list,
         description="Semantic hints (e.g., 'name', 'date', 'address')",
@@ -163,15 +141,9 @@ class StructureEvidence(BaseModel):
     page: int = Field(..., ge=1, description="Page number")
     bbox: BBox | None = Field(None, description="Relevant bounding box")
     text: str | None = Field(None, description="Relevant text snippet")
-    confidence: float = Field(
-        ..., ge=0.0, le=1.0, description="Evidence confidence score"
-    )
-    rationale: str = Field(
-        ..., description="Explanation of why this evidence supports the linking"
-    )
-    metadata: dict[str, Any] | None = Field(
-        None, description="Additional evidence metadata"
-    )
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Evidence confidence score")
+    rationale: str = Field(..., description="Explanation of why this evidence supports the linking")
+    metadata: dict[str, Any] | None = Field(None, description="Additional evidence metadata")
 
     model_config = {"frozen": True}
 
@@ -186,17 +158,11 @@ class LinkedField(BaseModel):
 
     id: str = Field(..., description="Unique field identifier")
     name: str = Field(..., description="Field name (from linked label)")
-    field_type: str = Field(
-        default="text", description="Field type (text, checkbox, date, etc.)"
-    )
+    field_type: str = Field(default="text", description="Field type (text, checkbox, date, etc.)")
     page: int = Field(..., ge=1, description="Page number")
     bbox: BBox = Field(..., description="Field input area bounding box")
-    anchor_bbox: BBox | None = Field(
-        None, description="Anchor/label bounding box"
-    )
-    confidence: float = Field(
-        ..., ge=0.0, le=1.0, description="Overall linking confidence"
-    )
+    anchor_bbox: BBox | None = Field(None, description="Anchor/label bounding box")
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Overall linking confidence")
     needs_review: bool = Field(
         default=False,
         description="Whether field needs human review (low confidence)",
@@ -204,15 +170,9 @@ class LinkedField(BaseModel):
     evidence_refs: tuple[str, ...] = Field(
         default=(), description="IDs of supporting evidence (immutable tuple)"
     )
-    label_candidate_id: str | None = Field(
-        None, description="ID of linked label candidate"
-    )
-    box_candidate_id: str | None = Field(
-        None, description="ID of linked box candidate"
-    )
-    table_id: str | None = Field(
-        None, description="ID of containing table (if in table)"
-    )
+    label_candidate_id: str | None = Field(None, description="ID of linked label candidate")
+    box_candidate_id: str | None = Field(None, description="ID of linked box candidate")
+    table_id: str | None = Field(None, description="ID of containing table (if in table)")
 
     model_config = {"frozen": True}
 
@@ -225,15 +185,9 @@ class DetectedStructures(BaseModel):
     """
 
     page: int = Field(..., ge=1, description="Page number")
-    text_blocks: tuple[TextBlock, ...] = Field(
-        default=(), description="Native PDF text blocks"
-    )
-    box_candidates: tuple[BoxCandidate, ...] = Field(
-        default=(), description="Detected input boxes"
-    )
-    table_candidates: tuple[TableCandidate, ...] = Field(
-        default=(), description="Detected tables"
-    )
+    text_blocks: tuple[TextBlock, ...] = Field(default=(), description="Native PDF text blocks")
+    box_candidates: tuple[BoxCandidate, ...] = Field(default=(), description="Detected input boxes")
+    table_candidates: tuple[TableCandidate, ...] = Field(default=(), description="Detected tables")
     label_candidates: tuple[LabelCandidate, ...] = Field(
         default=(), description="Potential label texts"
     )

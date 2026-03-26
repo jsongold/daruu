@@ -7,10 +7,8 @@ from dataclasses import dataclass
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from app.domain.models.fill_plan import (
     FieldFillAction,
-    FieldQuestion,
     FillActionType,
     FillPlan,
     QuestionType,
@@ -22,7 +20,6 @@ from app.domain.models.form_context import (
     LabelCandidate,
 )
 from app.services.question_generator.generator import QuestionGenerator
-
 
 # ── Fixtures ──
 
@@ -40,9 +37,9 @@ def _make_fields(count: int = 5) -> tuple[FormFieldSpec, ...]:
             label=f"Text{i + 1}",
             field_type="text",
             page=1,
-            label_candidates=(
-                LabelCandidate(text=labels[i], confidence=0.9, page=1),
-            ) if i < len(labels) else (),
+            label_candidates=(LabelCandidate(text=labels[i], confidence=0.9, page=1),)
+            if i < len(labels)
+            else (),
         )
         for i in range(count)
     )
@@ -90,25 +87,33 @@ async def test_questions_from_skipped_fields() -> None:
     context = _make_context(fields)
 
     actions = (
-        FieldFillAction(field_id="Text1", action=FillActionType.FILL, value="山田太郎", confidence=0.95, source="resume.pdf"),
+        FieldFillAction(
+            field_id="Text1",
+            action=FillActionType.FILL,
+            value="山田太郎",
+            confidence=0.95,
+            source="resume.pdf",
+        ),
         FieldFillAction(field_id="Text2", action=FillActionType.SKIP, reason="no data found"),
         FieldFillAction(field_id="Text3", action=FillActionType.SKIP, reason="no data found"),
     )
     plan = _make_plan(actions)
 
-    llm_response = _make_llm_response([
-        {
-            "id": "q1",
-            "question": "住所を教えてください",
-            "question_type": "free_text",
-            "context": "データソースに住所が見つかりませんでした",
-        },
-        {
-            "id": "q2",
-            "question": "生年月日を教えてください",
-            "question_type": "free_text",
-        },
-    ])
+    llm_response = _make_llm_response(
+        [
+            {
+                "id": "q1",
+                "question": "住所を教えてください",
+                "question_type": "free_text",
+                "context": "データソースに住所が見つかりませんでした",
+            },
+            {
+                "id": "q2",
+                "question": "生年月日を教えてください",
+                "question_type": "free_text",
+            },
+        ]
+    )
 
     llm_client = MagicMock()
     llm_client.complete = AsyncMock(return_value=llm_response)
@@ -130,22 +135,36 @@ async def test_questions_from_low_confidence() -> None:
     context = _make_context(fields)
 
     actions = (
-        FieldFillAction(field_id="Text1", action=FillActionType.FILL, value="山田太郎", confidence=0.95, source="resume.pdf"),
-        FieldFillAction(field_id="Text2", action=FillActionType.FILL, value="渋谷区", confidence=0.5, source="resume.pdf"),
+        FieldFillAction(
+            field_id="Text1",
+            action=FillActionType.FILL,
+            value="山田太郎",
+            confidence=0.95,
+            source="resume.pdf",
+        ),
+        FieldFillAction(
+            field_id="Text2",
+            action=FillActionType.FILL,
+            value="渋谷区",
+            confidence=0.5,
+            source="resume.pdf",
+        ),
     )
     plan = _make_plan(actions)
 
-    llm_response = _make_llm_response([
-        {
-            "id": "q1",
-            "question": "住所は「渋谷区」で正しいですか？",
-            "question_type": "confirm",
-            "options": [
-                {"id": "yes", "label": "はい"},
-                {"id": "no", "label": "いいえ"},
-            ],
-        },
-    ])
+    llm_response = _make_llm_response(
+        [
+            {
+                "id": "q1",
+                "question": "住所は「渋谷区」で正しいですか？",
+                "question_type": "confirm",
+                "options": [
+                    {"id": "yes", "label": "はい"},
+                    {"id": "no", "label": "いいえ"},
+                ],
+            },
+        ]
+    )
 
     llm_client = MagicMock()
     llm_client.complete = AsyncMock(return_value=llm_response)
@@ -194,8 +213,20 @@ async def test_no_questions_when_all_confident() -> None:
     context = _make_context(fields)
 
     actions = (
-        FieldFillAction(field_id="Text1", action=FillActionType.FILL, value="山田太郎", confidence=0.95, source="resume.pdf"),
-        FieldFillAction(field_id="Text2", action=FillActionType.FILL, value="東京都", confidence=0.9, source="resume.pdf"),
+        FieldFillAction(
+            field_id="Text1",
+            action=FillActionType.FILL,
+            value="山田太郎",
+            confidence=0.95,
+            source="resume.pdf",
+        ),
+        FieldFillAction(
+            field_id="Text2",
+            action=FillActionType.FILL,
+            value="東京都",
+            confidence=0.9,
+            source="resume.pdf",
+        ),
     )
     plan = _make_plan(actions)
 

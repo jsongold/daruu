@@ -12,7 +12,8 @@ Key responsibilities:
 
 from typing import Protocol, runtime_checkable
 
-from pydantic import BaseModel, Field as PydanticField
+from pydantic import BaseModel
+from pydantic import Field as PydanticField
 
 
 class LabelCandidate(BaseModel):
@@ -23,9 +24,7 @@ class LabelCandidate(BaseModel):
         ..., description="Bounding box (x0, y0, x1, y1)"
     )
     page: int = PydanticField(..., ge=1, description="Page number")
-    confidence: float = PydanticField(
-        ..., ge=0.0, le=1.0, description="OCR/detection confidence"
-    )
+    confidence: float = PydanticField(..., ge=0.0, le=1.0, description="OCR/detection confidence")
 
     model_config = {"frozen": True}
 
@@ -37,9 +36,7 @@ class BoxCandidate(BaseModel):
         ..., description="Bounding box (x0, y0, x1, y1)"
     )
     page: int = PydanticField(..., ge=1, description="Page number")
-    box_type: str = PydanticField(
-        default="text", description="Type of box (text, checkbox, etc.)"
-    )
+    box_type: str = PydanticField(default="text", description="Type of box (text, checkbox, etc.)")
 
     model_config = {"frozen": True}
 
@@ -57,9 +54,7 @@ class LinkedField(BaseModel):
     anchor_bbox: tuple[float, float, float, float] | None = PydanticField(
         None, description="Label/anchor bounding box"
     )
-    confidence: float = PydanticField(
-        ..., ge=0.0, le=1.0, description="Linking confidence"
-    )
+    confidence: float = PydanticField(..., ge=0.0, le=1.0, description="Linking confidence")
     evidence_refs: list[str] = PydanticField(
         default_factory=list, description="References to supporting evidence"
     )
@@ -76,9 +71,7 @@ class EvidenceRef(BaseModel):
     )
     document: str = PydanticField(..., description="Document type (source/target)")
     page: int = PydanticField(..., ge=1, description="Page number")
-    bbox: tuple[float, float, float, float] | None = PydanticField(
-        None, description="Bounding box"
-    )
+    bbox: tuple[float, float, float, float] | None = PydanticField(None, description="Bounding box")
     text: str | None = PydanticField(None, description="Extracted text")
     confidence: float = PydanticField(..., ge=0.0, le=1.0, description="Confidence")
 
@@ -89,15 +82,11 @@ class AmbiguityResolutionResult(BaseModel):
     """Result of resolving extraction ambiguity."""
 
     value: str = PydanticField(..., description="Resolved value")
-    confidence: float = PydanticField(
-        ..., ge=0.0, le=1.0, description="Resolution confidence"
-    )
+    confidence: float = PydanticField(..., ge=0.0, le=1.0, description="Resolution confidence")
     evidence: list[EvidenceRef] = PydanticField(
         default_factory=list, description="Supporting evidence"
     )
-    rationale: str | None = PydanticField(
-        None, description="Explanation of resolution"
-    )
+    rationale: str | None = PydanticField(None, description="Explanation of resolution")
     alternatives: list[str] = PydanticField(
         default_factory=list, description="Alternative values considered"
     )
@@ -111,12 +100,8 @@ class FollowUpQuestion(BaseModel):
     field_id: str = PydanticField(..., description="Related field ID")
     question: str = PydanticField(..., description="Question text")
     reason: str = PydanticField(..., description="Why this question is needed")
-    expected_format: str | None = PydanticField(
-        None, description="Expected answer format"
-    )
-    suggestions: list[str] = PydanticField(
-        default_factory=list, description="Suggested answers"
-    )
+    expected_format: str | None = PydanticField(None, description="Expected answer format")
+    suggestions: list[str] = PydanticField(default_factory=list, description="Suggested answers")
 
     model_config = {"frozen": True}
 
@@ -125,9 +110,7 @@ class OCRToken(BaseModel):
     """A token from OCR extraction."""
 
     text: str = PydanticField(..., description="Token text")
-    bbox: tuple[float, float, float, float] = PydanticField(
-        ..., description="Bounding box"
-    )
+    bbox: tuple[float, float, float, float] = PydanticField(..., description="Bounding box")
     confidence: float = PydanticField(..., ge=0.0, le=1.0, description="OCR confidence")
 
     model_config = {"frozen": True}
@@ -140,9 +123,7 @@ class FieldContext(BaseModel):
     field_name: str = PydanticField(..., description="Field name")
     field_type: str = PydanticField(..., description="Field type")
     expected_format: str | None = PydanticField(None, description="Expected format")
-    validation_rules: dict[str, str] | None = PydanticField(
-        None, description="Validation rules"
-    )
+    validation_rules: dict[str, str] | None = PydanticField(None, description="Validation rules")
 
     model_config = {"frozen": True}
 

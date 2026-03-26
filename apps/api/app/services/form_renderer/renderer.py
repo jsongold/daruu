@@ -45,9 +45,7 @@ class FormRenderer:
         Returns:
             RenderReport with filled document reference and per-field results.
         """
-        fill_actions = [
-            a for a in plan.actions if a.action == FillActionType.FILL and a.value
-        ]
+        fill_actions = [a for a in plan.actions if a.action == FillActionType.FILL and a.value]
 
         if not fill_actions:
             return RenderReport(
@@ -95,9 +93,7 @@ class FormRenderer:
                 failed_count=len(fill_actions),
             )
 
-        fill_result_map = {
-            r.field_id: r for r in fill_result.field_results
-        }
+        fill_result_map = {r.field_id: r for r in fill_result.field_results}
         filled_field_ids = {a.field_id for a in fill_actions}
 
         field_results: list[FieldRenderResult] = []
@@ -105,32 +101,34 @@ class FormRenderer:
             if action.field_id in filled_field_ids:
                 fr = fill_result_map.get(action.field_id)
                 if fr and fr.success:
-                    field_results.append(FieldRenderResult(
-                        field_id=action.field_id,
-                        status=RenderStatus.SUCCESS,
-                        value_written=fr.value_written,
-                    ))
+                    field_results.append(
+                        FieldRenderResult(
+                            field_id=action.field_id,
+                            status=RenderStatus.SUCCESS,
+                            value_written=fr.value_written,
+                        )
+                    )
                 else:
                     msg = None
                     if fr and fr.issues:
                         msg = fr.issues[0].message
-                    field_results.append(FieldRenderResult(
-                        field_id=action.field_id,
-                        status=RenderStatus.FAILED,
-                        error_message=msg or "Fill failed",
-                    ))
+                    field_results.append(
+                        FieldRenderResult(
+                            field_id=action.field_id,
+                            status=RenderStatus.FAILED,
+                            error_message=msg or "Fill failed",
+                        )
+                    )
             else:
-                field_results.append(FieldRenderResult(
-                    field_id=action.field_id,
-                    status=RenderStatus.SKIPPED,
-                ))
+                field_results.append(
+                    FieldRenderResult(
+                        field_id=action.field_id,
+                        status=RenderStatus.SKIPPED,
+                    )
+                )
 
-        filled_count = sum(
-            1 for r in field_results if r.status == RenderStatus.SUCCESS
-        )
-        failed_count = sum(
-            1 for r in field_results if r.status == RenderStatus.FAILED
-        )
+        filled_count = sum(1 for r in field_results if r.status == RenderStatus.SUCCESS)
+        failed_count = sum(1 for r in field_results if r.status == RenderStatus.FAILED)
 
         return RenderReport(
             success=fill_result.success,
@@ -138,7 +136,5 @@ class FormRenderer:
             field_results=tuple(field_results),
             filled_count=filled_count,
             failed_count=failed_count,
-            error_message=(
-                fill_result.errors[0].message if fill_result.errors else None
-            ),
+            error_message=(fill_result.errors[0].message if fill_result.errors else None),
         )

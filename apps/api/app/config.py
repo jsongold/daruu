@@ -25,7 +25,7 @@ DEFAULT_MODEL = "gpt-4.1-mini"
 
 DEFAULT_LLM_PRICING: dict[str, dict[str, float]] = {
     "gpt-5-mini": {"input_per_1m": 0.15, "output_per_1m": 0.60},
-    "gpt-4.1-mini": {"input_per_1m": 0.15, "output_per_1m": 0.60}
+    "gpt-4.1-mini": {"input_per_1m": 0.15, "output_per_1m": 0.60},
 }
 
 
@@ -579,8 +579,10 @@ class CostConfig(BaseModel):
         """
         return self.model_pricing.get(
             model_name,
-            {"input_per_1m": self.llm_input_cost_per_1k * 1000,
-             "output_per_1m": self.llm_output_cost_per_1k * 1000},
+            {
+                "input_per_1m": self.llm_input_cost_per_1k * 1000,
+                "output_per_1m": self.llm_output_cost_per_1k * 1000,
+            },
         )
 
 
@@ -588,9 +590,7 @@ class CostConfig(BaseModel):
 # Processing Strategy Type
 # =============================================================================
 
-ProcessingStrategyLiteral = Literal[
-    "local_only", "llm_only", "hybrid", "llm_with_local_fallback"
-]
+ProcessingStrategyLiteral = Literal["local_only", "llm_only", "hybrid", "llm_with_local_fallback"]
 
 
 # =============================================================================

@@ -10,15 +10,13 @@ import base64
 import json
 import os
 import tempfile
-from datetime import timedelta
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from mcp.types import CallToolResult, TextContent
 
-from app.mcp.session import get_current_session, MCPSessionManager
-
+from app.mcp.session import get_current_session
 
 FORM_PREFIX = "mcp:form:"
 STORAGE_TTL = 3600
@@ -28,6 +26,7 @@ def _get_redis_client() -> Any:
     """Get Redis client."""
     try:
         import redis
+
         redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/2")
         client = redis.from_url(redis_url, decode_responses=True)
         client.ping()
@@ -84,15 +83,11 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
     flatten = arguments.get("flatten", False)
 
     if not form_id:
-        return CallToolResult(
-            content=[TextContent(type="text", text="Error: form_id is required")]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="Error: form_id is required")])
 
     session = await get_current_session()
     if not session:
-        return CallToolResult(
-            content=[TextContent(type="text", text="Error: No active session")]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="Error: No active session")])
 
     # Get form metadata
     form = await _get_form(session["id"], form_id)
@@ -110,10 +105,12 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
             pdf_bytes = base64.b64decode(source_data)
             if not pdf_bytes.startswith(b"%PDF"):
                 return CallToolResult(
-                    content=[TextContent(
-                        type="text",
-                        text="Error: Invalid PDF data. Please attach a valid PDF file."
-                    )]
+                    content=[
+                        TextContent(
+                            type="text",
+                            text="Error: Invalid PDF data. Please attach a valid PDF file.",
+                        )
+                    ]
                 )
         except Exception:
             return CallToolResult(
@@ -126,27 +123,26 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
             pdf_bytes = await _fetch_pdf_from_url(source_url)
         except Exception as e:
             return CallToolResult(
-                content=[TextContent(
-                    type="text",
-                    text=f"Error fetching PDF from URL: {str(e)}"
-                )]
+                content=[TextContent(type="text", text=f"Error fetching PDF from URL: {str(e)}")]
             )
 
     else:
         # No source provided - ask user
         form_type = form.get("form_type", "form")
         return CallToolResult(
-            content=[TextContent(
-                type="text",
-                text=(
-                    f"📄 **Source PDF needed for export**\n\n"
-                    f"To generate your filled {form_type}, I need the original PDF.\n\n"
-                    f"Please either:\n"
-                    f"1. **Share a link** to the PDF (Google Drive, Dropbox, etc.)\n"
-                    f"2. **Attach the PDF again** to this conversation\n\n"
-                    f"Then tell me to export again."
+            content=[
+                TextContent(
+                    type="text",
+                    text=(
+                        f"📄 **Source PDF needed for export**\n\n"
+                        f"To generate your filled {form_type}, I need the original PDF.\n\n"
+                        f"Please either:\n"
+                        f"1. **Share a link** to the PDF (Google Drive, Dropbox, etc.)\n"
+                        f"2. **Attach the PDF again** to this conversation\n\n"
+                        f"Then tell me to export again."
+                    ),
                 )
-            )]
+            ]
         )
 
     # Now we have the PDF - fill it
@@ -196,12 +192,11 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
             f"_Link expires in 10 minutes_"
         )
 
-        return CallToolResult(
-            content=[TextContent(type="text", text=response_text)]
-        )
+        return CallToolResult(content=[TextContent(type="text", text=response_text)])
 
     except Exception as e:
         import traceback
+
         traceback.print_exc()
         return CallToolResult(
             content=[TextContent(type="text", text=f"Error generating PDF: {str(e)}")]
@@ -224,8 +219,9 @@ async def _generate_filled_pdf(
     Returns:
         Filled PDF as bytes
     """
-    import fitz  # PyMuPDF
     import io
+
+    import fitz  # PyMuPDF
 
     fields = form.get("fields", {})
 
@@ -252,11 +248,12 @@ async def _generate_filled_pdf(
                             continue
 
                         # Match by name (case-insensitive, partial match)
-                        if (widget_name.lower() in field_name.lower() or
-                            field_name.lower() in widget_name.lower() or
-                            widget_name.lower() in field_label.lower() or
-                            field_label.lower() in widget_name.lower()):
-
+                        if (
+                            widget_name.lower() in field_name.lower()
+                            or field_name.lower() in widget_name.lower()
+                            or widget_name.lower() in field_label.lower()
+                            or field_label.lower() in widget_name.lower()
+                        ):
                             if field_info.get("type") == "checkbox":
                                 widget.field_value = bool(value)
                             else:

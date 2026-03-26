@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from jsonschema import Draft7Validator, RefResolver, ValidationError, validate
+from jsonschema import Draft7Validator, RefResolver
 
 # Base paths
 CONTRACTS_DIR = Path(__file__).parent.parent
@@ -129,9 +129,7 @@ def inline_external_refs(
 
                     # Also inline any definitions that this definition references
                     # from the same source schema
-                    _inline_internal_refs_from_source(
-                        result, source_schema, schema_name, visited
-                    )
+                    _inline_internal_refs_from_source(result, source_schema, schema_name, visited)
 
         # Replace external refs with internal refs
         _replace_external_refs(result, external_refs)
@@ -353,9 +351,9 @@ class TestSchemaValidity:
             has_enum = "enum" in definition
             has_const = "const" in definition
 
-            valid_definition = any([
-                has_type, has_ref, has_oneof, has_anyof, has_allof, has_enum, has_const
-            ])
+            valid_definition = any(
+                [has_type, has_ref, has_oneof, has_anyof, has_allof, has_enum, has_const]
+            )
 
             assert valid_definition, (
                 f"Definition '{def_name}' in {schema_file.name} must have "
@@ -451,8 +449,7 @@ class TestExampleValidation:
 
         # Remove $schema and _description from example before validation
         data_to_validate = {
-            k: v for k, v in example_data.items()
-            if k not in ("$schema", "_description")
+            k: v for k, v in example_data.items() if k not in ("$schema", "_description")
         }
 
         # Validate the example against the schema
@@ -464,9 +461,7 @@ class TestExampleValidation:
                 error_messages = "\n".join(
                     f"  - {e.message} at {list(e.absolute_path)}" for e in errors
                 )
-                pytest.fail(
-                    f"Example {example_file.name} failed validation:\n{error_messages}"
-                )
+                pytest.fail(f"Example {example_file.name} failed validation:\n{error_messages}")
         except Exception as e:
             pytest.fail(f"Validation error for {example_file.name}: {e}")
 
@@ -512,9 +507,16 @@ class TestSchemaConsistency:
                 properties = definition.get("properties", {})
 
                 # Check fields that should be UUIDs
-                id_fields = ["id", "job_id", "document_id", "field_id",
-                             "source_field_id", "target_field_id", "evidence_id",
-                             "issue_id"]
+                id_fields = [
+                    "id",
+                    "job_id",
+                    "document_id",
+                    "field_id",
+                    "source_field_id",
+                    "target_field_id",
+                    "evidence_id",
+                    "issue_id",
+                ]
 
                 for field_name in id_fields:
                     if field_name in properties:
@@ -527,7 +529,11 @@ class TestSchemaConsistency:
     def test_datetime_format_is_consistent(self, schemas: dict[str, dict[str, Any]]) -> None:
         """Verify datetime fields use format: date-time consistently."""
         datetime_field_names = [
-            "created_at", "updated_at", "completed_at", "resolved_at", "timestamp"
+            "created_at",
+            "updated_at",
+            "completed_at",
+            "resolved_at",
+            "timestamp",
         ]
 
         for schema_name, schema in schemas.items():
@@ -545,9 +551,7 @@ class TestSchemaConsistency:
                                 "should have format: date-time"
                             )
 
-    def test_confidence_fields_have_valid_range(
-        self, schemas: dict[str, dict[str, Any]]
-    ) -> None:
+    def test_confidence_fields_have_valid_range(self, schemas: dict[str, dict[str, Any]]) -> None:
         """Verify confidence fields have min 0 and max 1."""
         for schema_name, schema in schemas.items():
             definitions = schema.get("definitions", {})
@@ -596,9 +600,7 @@ class TestCrossSchemaReferences:
             schema = load_json(schema_file)
             self._check_refs_in_obj(schema, schema, schema_file.name)
 
-    def _check_refs_in_obj(
-        self, obj: Any, root_schema: dict[str, Any], schema_name: str
-    ) -> None:
+    def _check_refs_in_obj(self, obj: Any, root_schema: dict[str, Any], schema_name: str) -> None:
         """Recursively check all $ref in an object."""
         if isinstance(obj, dict):
             if "$ref" in obj:
@@ -614,9 +616,7 @@ class TestCrossSchemaReferences:
             for item in obj:
                 self._check_refs_in_obj(item, root_schema, schema_name)
 
-    def _validate_internal_ref(
-        self, ref: str, schema: dict[str, Any], schema_name: str
-    ) -> None:
+    def _validate_internal_ref(self, ref: str, schema: dict[str, Any], schema_name: str) -> None:
         """Validate an internal reference can be resolved."""
         path = ref[1:]  # Remove leading #
         parts = path.strip("/").split("/")
@@ -627,6 +627,5 @@ class TestCrossSchemaReferences:
                 current = current[part]
             else:
                 pytest.fail(
-                    f"Invalid internal ref '{ref}' in {schema_name}: "
-                    f"cannot resolve '{part}'"
+                    f"Invalid internal ref '{ref}' in {schema_name}: cannot resolve '{part}'"
                 )

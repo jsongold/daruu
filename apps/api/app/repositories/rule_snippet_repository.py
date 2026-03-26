@@ -14,9 +14,7 @@ from app.domain.models.rule_snippet import RuleSnippet
 class RuleSnippetRepository(Protocol):
     """Interface for rule snippet persistence and search."""
 
-    def create(
-        self, snippet: RuleSnippet, embedding: list[float] | None = None
-    ) -> RuleSnippet:
+    def create(self, snippet: RuleSnippet, embedding: list[float] | None = None) -> RuleSnippet:
         """Persist a rule snippet with optional embedding.
 
         Args:
@@ -28,9 +26,7 @@ class RuleSnippetRepository(Protocol):
         """
         ...
 
-    def list_by_document(
-        self, document_id: str, limit: int = 100
-    ) -> list[RuleSnippet]:
+    def list_by_document(self, document_id: str, limit: int = 100) -> list[RuleSnippet]:
         """List rule snippets for a document.
 
         Args:

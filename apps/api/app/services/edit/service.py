@@ -9,12 +9,10 @@ from datetime import datetime, timezone
 from app.infrastructure.observability import get_logger
 from app.models.edit import (
     BatchEditResponse,
-    BboxData,
     EditHistory,
     EditRequest,
     EditResponse,
     FieldEdit,
-    FieldState,
     FieldValue,
     FieldValuesResponse,
     UndoRedoResponse,

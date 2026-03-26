@@ -1,6 +1,6 @@
 """Data models for prompt generation results and caching."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)

@@ -10,12 +10,8 @@ class ReviewRequestDTO(BaseModel):
     """
 
     job_id: str = Field(..., description="Job ID to review")
-    include_diff_images: bool = Field(
-        default=True, description="Whether to include diff images"
-    )
-    include_evidence: bool = Field(
-        default=True, description="Whether to include evidence details"
-    )
+    include_diff_images: bool = Field(default=True, description="Whether to include diff images")
+    include_evidence: bool = Field(default=True, description="Whether to include evidence details")
 
     model_config = {"frozen": True}
 
@@ -27,9 +23,7 @@ class FieldStateDTO(BaseModel):
     name: str = Field(..., description="Field name")
     value: str | None = Field(None, description="Current value")
     confidence: float | None = Field(None, description="Extraction confidence")
-    status: str = Field(
-        ..., description="Status (filled, missing, low_confidence, error)"
-    )
+    status: str = Field(..., description="Status (filled, missing, low_confidence, error)")
     page: int = Field(..., ge=1, description="Page number")
     bbox: list[float] = Field(
         ...,
@@ -89,19 +83,11 @@ class ConfidenceSummaryDTO(BaseModel):
     """Summary of confidence across all fields."""
 
     total_fields: int = Field(..., ge=0, description="Total number of fields")
-    high_confidence: int = Field(
-        ..., ge=0, description="Fields with confidence >= 0.8"
-    )
-    medium_confidence: int = Field(
-        ..., ge=0, description="Fields with confidence 0.5-0.8"
-    )
-    low_confidence: int = Field(
-        ..., ge=0, description="Fields with confidence < 0.5"
-    )
+    high_confidence: int = Field(..., ge=0, description="Fields with confidence >= 0.8")
+    medium_confidence: int = Field(..., ge=0, description="Fields with confidence 0.5-0.8")
+    low_confidence: int = Field(..., ge=0, description="Fields with confidence < 0.5")
     missing: int = Field(..., ge=0, description="Fields with no value")
-    average_confidence: float = Field(
-        ..., ge=0.0, le=1.0, description="Average confidence"
-    )
+    average_confidence: float = Field(..., ge=0.0, le=1.0, description="Average confidence")
 
     model_config = {"frozen": True}
 
@@ -111,21 +97,11 @@ class ReviewResponseDTO(BaseModel):
 
     job_id: str = Field(..., description="Job ID")
     status: str = Field(..., description="Current job status")
-    fields: list[FieldStateDTO] = Field(
-        default_factory=list, description="Field states"
-    )
-    issues: list[IssueDetailDTO] = Field(
-        default_factory=list, description="Current issues"
-    )
-    previews: list[PagePreviewDTO] = Field(
-        default_factory=list, description="Page previews"
-    )
-    evidence: list[EvidenceDetailDTO] = Field(
-        default_factory=list, description="Evidence details"
-    )
-    confidence_summary: ConfidenceSummaryDTO = Field(
-        ..., description="Confidence summary"
-    )
+    fields: list[FieldStateDTO] = Field(default_factory=list, description="Field states")
+    issues: list[IssueDetailDTO] = Field(default_factory=list, description="Current issues")
+    previews: list[PagePreviewDTO] = Field(default_factory=list, description="Page previews")
+    evidence: list[EvidenceDetailDTO] = Field(default_factory=list, description="Evidence details")
+    confidence_summary: ConfidenceSummaryDTO = Field(..., description="Confidence summary")
     output_url: str | None = Field(None, description="URL to output PDF (if available)")
 
     model_config = {"frozen": True}

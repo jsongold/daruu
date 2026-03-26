@@ -7,13 +7,14 @@ These tests verify:
 - Task queue implementation follows the protocol
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime, timezone
+
+import pytest
 
 # Check if Celery is available
 try:
     import celery
+
     CELERY_AVAILABLE = True
 except ImportError:
     CELERY_AVAILABLE = False
@@ -216,10 +217,7 @@ class TestIngestDocumentTask:
         """Test that ingest_document_task is properly defined."""
         from app.infrastructure.celery.tasks import ingest_document_task
 
-        assert (
-            ingest_document_task.name
-            == "app.infrastructure.celery.tasks.ingest_document_task"
-        )
+        assert ingest_document_task.name == "app.infrastructure.celery.tasks.ingest_document_task"
         assert ingest_document_task.max_retries == 3
 
 
@@ -265,20 +263,20 @@ class TestAsyncJobEndpoints:
     @pytest.fixture
     def client(self):
         """Create test client."""
-        from fastapi.testclient import TestClient
         from app.main import app
+        from fastapi.testclient import TestClient
 
         return TestClient(app)
 
     @pytest.fixture
     def sample_job(self, client, api_prefix, sample_pdf_content):
         """Create a sample job for testing."""
+
         from app.infrastructure.repositories import (
             get_document_repository,
             get_job_repository,
         )
-        from app.models import Document, DocumentMeta, DocumentType, JobMode
-        from uuid import uuid4
+        from app.models import DocumentMeta, DocumentType, JobMode
 
         doc_repo = get_document_repository()
         job_repo = get_job_repository()
@@ -314,9 +312,7 @@ class TestAsyncJobEndpoints:
 
     def test_run_async_returns_202(self, client, sample_job, api_prefix):
         """Test that POST /jobs/{id}/run/async returns 202 Accepted."""
-        with patch(
-            "app.routes.jobs._get_task_queue"
-        ) as mock_get_queue:
+        with patch("app.routes.jobs._get_task_queue") as mock_get_queue:
             mock_queue = AsyncMock()
             mock_queue.enqueue.return_value = "task-123"
             mock_get_queue.return_value = mock_queue
@@ -347,9 +343,7 @@ class TestAsyncJobEndpoints:
 
     def test_get_task_status(self, client, sample_job, api_prefix):
         """Test GET /jobs/{id}/task/{task_id} returns status."""
-        with patch(
-            "app.routes.jobs._get_task_queue"
-        ) as mock_get_queue:
+        with patch("app.routes.jobs._get_task_queue") as mock_get_queue:
             mock_queue = AsyncMock()
             mock_queue.get_status.return_value = {
                 "status": "running",
@@ -370,9 +364,7 @@ class TestAsyncJobEndpoints:
 
     def test_cancel_task(self, client, sample_job, api_prefix):
         """Test DELETE /jobs/{id}/task/{task_id} cancels task."""
-        with patch(
-            "app.routes.jobs._get_task_queue"
-        ) as mock_get_queue:
+        with patch("app.routes.jobs._get_task_queue") as mock_get_queue:
             mock_queue = AsyncMock()
             mock_queue.cancel.return_value = True
             mock_get_queue.return_value = mock_queue

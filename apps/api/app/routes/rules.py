@@ -12,7 +12,6 @@ from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, Field, field_validator
 
 from app.domain.models.rule_snippet import RuleSnippet
-from app.infrastructure.gateways.embedding import MockEmbeddingGateway
 from app.infrastructure.repositories import get_rule_snippet_repository
 from app.models.common import ApiResponse
 from app.repositories.rule_snippet_repository import RuleSnippetRepository
@@ -76,9 +75,7 @@ class AnalyzeRulesRequest(BaseModel):
         max_chars = 500_000
         for i, doc in enumerate(v):
             if len(doc) > max_chars:
-                raise ValueError(
-                    f"rule_docs[{i}] exceeds maximum length of {max_chars} characters"
-                )
+                raise ValueError(f"rule_docs[{i}] exceeds maximum length of {max_chars} characters")
         return v
 
 
@@ -136,9 +133,7 @@ def get_embedding_gateway():
 async def search_rules(
     q: str = Query(..., min_length=1, description="Search query"),
     limit: int = Query(default=10, ge=1, le=100, description="Max results"),
-    threshold: float = Query(
-        default=0.7, ge=0.0, le=1.0, description="Min similarity"
-    ),
+    threshold: float = Query(default=0.7, ge=0.0, le=1.0, description="Min similarity"),
     repo: RuleSnippetRepository = Depends(get_repo),
     embedding_gw=Depends(get_embedding_gateway),
 ) -> ApiResponse[list[RuleSnippetDTO]]:

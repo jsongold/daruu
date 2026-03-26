@@ -18,7 +18,7 @@ from typing import Any
 from celery import Task, shared_task
 from celery.exceptions import MaxRetriesExceededError, SoftTimeLimitExceeded
 
-from app.infrastructure.celery.config import get_celery_config, get_task_progress_config
+from app.infrastructure.celery.config import get_celery_config
 from app.models import JobStatus, RunMode
 
 
@@ -124,7 +124,6 @@ def _run_async(coro: Any) -> Any:
 
     if loop is not None:
         # If there's already a running loop, use run_coroutine_threadsafe
-        import concurrent.futures
 
         future = asyncio.run_coroutine_threadsafe(coro, loop)
         return future.result(timeout=600)
@@ -333,6 +332,7 @@ def ingest_document_task(
         )
 
         # Import services and adapters
+        from app.config import get_settings
         from app.infrastructure.repositories import (
             get_document_repository,
             get_file_repository,
@@ -343,7 +343,6 @@ def ingest_document_task(
             LocalStorageAdapter,
             PyMuPdfAdapter,
         )
-        from app.config import get_settings
 
         document_repository = get_document_repository()
         file_repository = get_file_repository()

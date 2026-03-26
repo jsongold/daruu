@@ -1,10 +1,13 @@
 """Document service for handling document operations."""
 
 import io
-from pathlib import Path
 from uuid import uuid4
 
 from app.infrastructure.observability import get_logger
+from app.infrastructure.repositories import (
+    get_document_repository,
+    get_file_repository,
+)
 from app.models import Document, DocumentMeta, DocumentResponse, DocumentType
 from app.models.acroform import (
     AcroFormFieldInfo,
@@ -13,10 +16,6 @@ from app.models.acroform import (
 )
 from app.models.common import BBox
 from app.repositories import DocumentRepository, FileRepository
-from app.infrastructure.repositories import (
-    get_document_repository,
-    get_file_repository,
-)
 
 logger = get_logger("document_service")
 
@@ -217,8 +216,6 @@ class DocumentService:
 
             for page_num in range(len(doc)):
                 page = doc[page_num]
-                page_height = page.rect.height
-
                 # Get form field widgets on this page
                 for widget in page.widgets():
                     if widget is None:
@@ -263,9 +260,7 @@ class DocumentService:
             # Log extraction summary
             field_types_count: dict[str, int] = {}
             for field in fields:
-                field_types_count[field.field_type] = (
-                    field_types_count.get(field.field_type, 0) + 1
-                )
+                field_types_count[field.field_type] = field_types_count.get(field.field_type, 0) + 1
 
             logger.info(
                 "AcroForm extraction completed",
@@ -311,9 +306,7 @@ class DocumentService:
                 preview_scale=2,
             )
 
-    def extract_text_blocks(
-        self, document_id: str, pages: list[int] | None = None
-    ) -> list[dict]:
+    def extract_text_blocks(self, document_id: str, pages: list[int] | None = None) -> list[dict]:
         """Extract text blocks from a PDF document (multiple pages).
 
         Convenience wrapper that aggregates per-page results from
@@ -338,9 +331,7 @@ class DocumentService:
             all_blocks.extend(page_blocks)
         return all_blocks
 
-    def extract_text_blocks_for_page(
-        self, document_id: str, page: int
-    ) -> list[dict]:
+    def extract_text_blocks_for_page(self, document_id: str, page: int) -> list[dict]:
         """Extract text blocks for a single page (cached).
 
         Args:
@@ -351,21 +342,15 @@ class DocumentService:
             List of text block dictionaries for the requested page.
         """
         self._ensure_text_blocks_extracted(document_id)
-        return list(
-            self._text_blocks_cache.get(document_id, {}).get(page, [])
-        )
+        return list(self._text_blocks_cache.get(document_id, {}).get(page, []))
 
     def _ensure_text_blocks_extracted(self, document_id: str) -> None:
         """Extract and cache all text blocks per page if not already cached."""
         if document_id in self._text_blocks_cache:
             return
-        self._text_blocks_cache[document_id] = self._extract_text_blocks(
-            document_id
-        )
+        self._text_blocks_cache[document_id] = self._extract_text_blocks(document_id)
 
-    def _extract_text_blocks(
-        self, document_id: str
-    ) -> dict[int, list[dict]]:
+    def _extract_text_blocks(self, document_id: str) -> dict[int, list[dict]]:
         """Internal text block extraction — returns blocks grouped by page."""
         logger.debug(
             "Starting text block extraction",
@@ -422,14 +407,16 @@ class DocumentService:
                                 continue
 
                             block_counter += 1
-                            page_blocks.append({
-                                "id": f"tb_{page_number}_{block_counter}",
-                                "text": text,
-                                "page": page_number,
-                                "bbox": [x, y, width, height],
-                                "font_name": span.get("font", None),
-                                "font_size": span.get("size", None),
-                            })
+                            page_blocks.append(
+                                {
+                                    "id": f"tb_{page_number}_{block_counter}",
+                                    "text": text,
+                                    "page": page_number,
+                                    "bbox": [x, y, width, height],
+                                    "font_name": span.get("font", None),
+                                    "font_size": span.get("size", None),
+                                }
+                            )
 
                 pages_map[page_number] = page_blocks
 
@@ -470,14 +457,14 @@ class DocumentService:
         """
         # PyMuPDF field type constants (fitz.PDF_WIDGET_TYPE_*)
         type_map = {
-            0: "unknown",        # PDF_WIDGET_TYPE_UNKNOWN
-            1: "button",         # PDF_WIDGET_TYPE_BUTTON
-            2: "checkbox",       # PDF_WIDGET_TYPE_CHECKBOX
-            3: "combobox",       # PDF_WIDGET_TYPE_COMBOBOX
-            4: "listbox",        # PDF_WIDGET_TYPE_LISTBOX
-            5: "radio",          # PDF_WIDGET_TYPE_RADIOBUTTON
-            6: "signature",      # PDF_WIDGET_TYPE_SIGNATURE
-            7: "text",           # PDF_WIDGET_TYPE_TEXT
+            0: "unknown",  # PDF_WIDGET_TYPE_UNKNOWN
+            1: "button",  # PDF_WIDGET_TYPE_BUTTON
+            2: "checkbox",  # PDF_WIDGET_TYPE_CHECKBOX
+            3: "combobox",  # PDF_WIDGET_TYPE_COMBOBOX
+            4: "listbox",  # PDF_WIDGET_TYPE_LISTBOX
+            5: "radio",  # PDF_WIDGET_TYPE_RADIOBUTTON
+            6: "signature",  # PDF_WIDGET_TYPE_SIGNATURE
+            7: "text",  # PDF_WIDGET_TYPE_TEXT
         }
         return type_map.get(field_type, "unknown")
 
@@ -497,6 +484,7 @@ class DocumentService:
             # Use PyMuPDF to get actual page count and detect AcroForm
             try:
                 import fitz
+
                 doc = fitz.open(stream=content, filetype="pdf")
                 page_count = len(doc)
                 # Check for AcroForm fields (widgets) on any page
@@ -605,8 +593,12 @@ class DocumentService:
             except (OSError, IOError):
                 try:
                     # Try alternative font paths
-                    font_large = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 36)
-                    font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24)
+                    font_large = ImageFont.truetype(
+                        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 36
+                    )
+                    font_small = ImageFont.truetype(
+                        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24
+                    )
                 except (OSError, IOError):
                     # Fallback to default font
                     font_large = ImageFont.load_default()
@@ -615,15 +607,15 @@ class DocumentService:
             # Draw placeholder text
             text = "Document Preview"
             subtext = "Placeholder - Preview generation pending"
-            
+
             # Get text dimensions for centering
             bbox = draw.textbbox((0, 0), text, font=font_large)
             text_width = bbox[2] - bbox[0]
             text_height = bbox[3] - bbox[1]
-            
+
             bbox_sub = draw.textbbox((0, 0), subtext, font=font_small)
             subtext_width = bbox_sub[2] - bbox_sub[0]
-            
+
             # Center the text
             x = (width - text_width) // 2
             y = (height - text_height) // 2 - 30
@@ -633,7 +625,7 @@ class DocumentService:
             # Draw text with shadow effect
             draw.text((x + 2, y + 2), text, fill="#9ca3af", font=font_large)
             draw.text((x, y), text, fill="#374151", font=font_large)
-            
+
             draw.text((x_sub + 1, y_sub + 1), subtext, fill="#d1d5db", font=font_small)
             draw.text((x_sub, y_sub), subtext, fill="#6b7280", font=font_small)
 
@@ -641,26 +633,89 @@ class DocumentService:
             buffer = io.BytesIO()
             img.save(buffer, format="PNG")
             png_bytes = buffer.getvalue()
-            
+
             if not png_bytes or len(png_bytes) == 0:
                 raise ValueError("Generated PNG is empty")
-            
+
             return png_bytes
 
         except ImportError:
             # PIL not available, fallback to minimal PNG
             import warnings
+
             warnings.warn("PIL not available, using minimal 1x1 placeholder")
             # Fallback to minimal PNG if PIL is not available
             # Minimal 1x1 white PNG
-            return bytes([
-                0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,  # PNG signature
-                0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,  # IHDR chunk
-                0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-                0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
-                0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41,  # IDAT chunk
-                0x54, 0x08, 0xD7, 0x63, 0xF8, 0xFF, 0xFF, 0xFF,
-                0x00, 0x05, 0xFE, 0x02, 0xFE, 0xDC, 0xCC, 0x59,
-                0xE7, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E,  # IEND chunk
-                0x44, 0xAE, 0x42, 0x60, 0x82,
-            ])
+            return bytes(
+                [
+                    0x89,
+                    0x50,
+                    0x4E,
+                    0x47,
+                    0x0D,
+                    0x0A,
+                    0x1A,
+                    0x0A,  # PNG signature
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x0D,
+                    0x49,
+                    0x48,
+                    0x44,
+                    0x52,  # IHDR chunk
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x01,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x01,
+                    0x08,
+                    0x02,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x90,
+                    0x77,
+                    0x53,
+                    0xDE,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x0C,
+                    0x49,
+                    0x44,
+                    0x41,  # IDAT chunk
+                    0x54,
+                    0x08,
+                    0xD7,
+                    0x63,
+                    0xF8,
+                    0xFF,
+                    0xFF,
+                    0xFF,
+                    0x00,
+                    0x05,
+                    0xFE,
+                    0x02,
+                    0xFE,
+                    0xDC,
+                    0xCC,
+                    0x59,
+                    0xE7,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x49,
+                    0x45,
+                    0x4E,  # IEND chunk
+                    0x44,
+                    0xAE,
+                    0x42,
+                    0x60,
+                    0x82,
+                ]
+            )

@@ -4,8 +4,6 @@ Tests validate model creation, field constraints, and immutability.
 """
 
 import pytest
-from pydantic import ValidationError
-
 from app.models.ingest import (
     DocumentMeta,
     IngestError,
@@ -15,6 +13,7 @@ from app.models.ingest import (
     PageMeta,
     RenderedPage,
 )
+from pydantic import ValidationError
 
 
 class TestPageMeta:

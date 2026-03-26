@@ -12,9 +12,7 @@ class Evidence(BaseModel):
     field_id: str = Field(..., description="ID of field this evidence supports")
     source: str = Field(..., description="Source of evidence (e.g., 'ocr', 'llm', 'user')")
     bbox: BBox | None = Field(None, description="Bounding box in source document")
-    confidence: float = Field(
-        ..., ge=0.0, le=1.0, description="Confidence score"
-    )
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Confidence score")
     text: str | None = Field(None, description="Extracted text")
     document_id: str = Field(..., description="ID of source document")
 

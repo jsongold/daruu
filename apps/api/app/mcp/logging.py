@@ -28,8 +28,7 @@ def setup_mcp_logger(name: str = "mcp") -> logging.Logger:
 
         # Format with timestamp and component name
         formatter = logging.Formatter(
-            "[%(asctime)s] %(levelname)s [%(name)s] %(message)s",
-            datefmt="%H:%M:%S"
+            "[%(asctime)s] %(levelname)s [%(name)s] %(message)s", datefmt="%H:%M:%S"
         )
         handler.setFormatter(formatter)
         logger.addHandler(handler)

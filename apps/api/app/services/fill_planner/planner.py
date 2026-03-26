@@ -125,8 +125,7 @@ class FillPlanner:
                 )
                 elapsed_ms = int((time.perf_counter() - t0) * 1000)
                 logger.info(
-                    f"[refill_plan] done in {elapsed_ms:,}ms | "
-                    f"filled={len(result.filled_fields)}"
+                    f"[refill_plan] done in {elapsed_ms:,}ms | filled={len(result.filled_fields)}"
                 )
                 actions = self._convert_fill_response(context, result)
                 return FillPlan(
@@ -137,9 +136,7 @@ class FillPlanner:
                     user_prompt=user_prompt,
                 )
             else:
-                return await self._llm_plan_raw(
-                    context, messages, user_prompt, system_prompt
-                )
+                return await self._llm_plan_raw(context, messages, user_prompt, system_prompt)
         except Exception as e:
             logger.warning(f"Refill plan failed, falling back to candidates: {e}")
             return self._candidate_plan(context)
@@ -234,34 +231,38 @@ class FillPlanner:
         result: LLMFillResponse,
     ) -> list[FieldFillAction]:
         """Convert Instructor-validated LLMFillResponse to FieldFillActions."""
-        filled_map: dict[str, LLMFilledField] = {
-            f.field_id: f for f in result.filled_fields
-        }
+        filled_map: dict[str, LLMFilledField] = {f.field_id: f for f in result.filled_fields}
         unfilled_set = set(result.unfilled_fields)
         actions: list[FieldFillAction] = []
 
         for field in context.fields:
             if field.field_id in filled_map:
                 entry = filled_map[field.field_id]
-                actions.append(FieldFillAction(
-                    field_id=field.field_id,
-                    action=FillActionType.FILL,
-                    value=entry.value,
-                    confidence=entry.confidence,
-                    source=entry.source,
-                ))
+                actions.append(
+                    FieldFillAction(
+                        field_id=field.field_id,
+                        action=FillActionType.FILL,
+                        value=entry.value,
+                        confidence=entry.confidence,
+                        source=entry.source,
+                    )
+                )
             elif field.field_id in unfilled_set:
-                actions.append(FieldFillAction(
-                    field_id=field.field_id,
-                    action=FillActionType.SKIP,
-                    reason="LLM could not determine a value",
-                ))
+                actions.append(
+                    FieldFillAction(
+                        field_id=field.field_id,
+                        action=FillActionType.SKIP,
+                        reason="LLM could not determine a value",
+                    )
+                )
             else:
-                actions.append(FieldFillAction(
-                    field_id=field.field_id,
-                    action=FillActionType.SKIP,
-                    reason="Field not referenced in LLM response",
-                ))
+                actions.append(
+                    FieldFillAction(
+                        field_id=field.field_id,
+                        action=FillActionType.SKIP,
+                        reason="Field not referenced in LLM response",
+                    )
+                )
 
         return actions
 
@@ -281,25 +282,31 @@ class FillPlanner:
         for field in context.fields:
             if field.field_id in filled_map:
                 entry = filled_map[field.field_id]
-                actions.append(FieldFillAction(
-                    field_id=field.field_id,
-                    action=FillActionType.FILL,
-                    value=str(entry["value"]),
-                    confidence=float(entry.get("confidence", 0.8)),
-                    source=entry.get("source"),
-                ))
+                actions.append(
+                    FieldFillAction(
+                        field_id=field.field_id,
+                        action=FillActionType.FILL,
+                        value=str(entry["value"]),
+                        confidence=float(entry.get("confidence", 0.8)),
+                        source=entry.get("source"),
+                    )
+                )
             elif field.field_id in unfilled_set:
-                actions.append(FieldFillAction(
-                    field_id=field.field_id,
-                    action=FillActionType.SKIP,
-                    reason="LLM could not determine a value",
-                ))
+                actions.append(
+                    FieldFillAction(
+                        field_id=field.field_id,
+                        action=FillActionType.SKIP,
+                        reason="LLM could not determine a value",
+                    )
+                )
             else:
-                actions.append(FieldFillAction(
-                    field_id=field.field_id,
-                    action=FillActionType.SKIP,
-                    reason="Field not referenced in LLM response",
-                ))
+                actions.append(
+                    FieldFillAction(
+                        field_id=field.field_id,
+                        action=FillActionType.SKIP,
+                        reason="Field not referenced in LLM response",
+                    )
+                )
 
         return actions
 
@@ -320,19 +327,23 @@ class FillPlanner:
         for field in context.fields:
             match = best_candidates.get(field.field_id)
             if match and match[1] >= 0.5:
-                actions.append(FieldFillAction(
-                    field_id=field.field_id,
-                    action=FillActionType.FILL,
-                    value=match[0],
-                    confidence=match[1],
-                    source=match[2],
-                ))
+                actions.append(
+                    FieldFillAction(
+                        field_id=field.field_id,
+                        action=FillActionType.FILL,
+                        value=match[0],
+                        confidence=match[1],
+                        source=match[2],
+                    )
+                )
             else:
-                actions.append(FieldFillAction(
-                    field_id=field.field_id,
-                    action=FillActionType.SKIP,
-                    reason="No matching data source entry found",
-                ))
+                actions.append(
+                    FieldFillAction(
+                        field_id=field.field_id,
+                        action=FillActionType.SKIP,
+                        reason="No matching data source entry found",
+                    )
+                )
 
         return FillPlan(
             document_id=context.document_id,

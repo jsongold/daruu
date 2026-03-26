@@ -78,16 +78,12 @@ def validate_schema(schema: dict[str, Any]) -> list[str]:
 
 def main() -> None:
     """Main entry point."""
-    parser = argparse.ArgumentParser(
-        description="Export OpenAPI schema from FastAPI application"
-    )
+    parser = argparse.ArgumentParser(description="Export OpenAPI schema from FastAPI application")
     parser.add_argument(
         "--output",
         "-o",
         type=Path,
-        default=Path(__file__).parent.parent.parent.parent.parent
-        / "contracts"
-        / "openapi.json",
+        default=Path(__file__).parent.parent.parent.parent.parent / "contracts" / "openapi.json",
         help="Output path for the OpenAPI JSON file",
     )
     parser.add_argument(

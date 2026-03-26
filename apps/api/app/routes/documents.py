@@ -70,7 +70,7 @@ async def upload_document(
         is_jpeg = content.startswith(b"\xff\xd8\xff")
         is_tiff = content.startswith(b"II*\x00") or content.startswith(b"MM\x00*")
         is_webp = content[0:4] == b"RIFF" and content[8:12] == b"WEBP"
-        
+
         if not (is_pdf or is_png or is_jpeg or is_tiff or is_webp):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

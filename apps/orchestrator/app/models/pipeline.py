@@ -103,8 +103,12 @@ class RunResponse(BaseModel):
     status: str = Field(..., description="Current job status")
     steps_executed: int = Field(..., ge=0, description="Number of steps executed in this run")
     current_stage: PipelineStage | None = Field(None, description="Current pipeline stage")
-    next_actions: list[NextAction] = Field(default_factory=list, description="Suggested next actions")
-    stage_results: list[StageResult] = Field(default_factory=list, description="Results of executed stages")
+    next_actions: list[NextAction] = Field(
+        default_factory=list, description="Suggested next actions"
+    )
+    stage_results: list[StageResult] = Field(
+        default_factory=list, description="Results of executed stages"
+    )
 
     model_config = {"frozen": True}
 

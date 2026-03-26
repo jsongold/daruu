@@ -19,9 +19,7 @@ class PageImageInput(BaseModel):
     """
 
     page: int = Field(..., ge=1, description="Page number (1-indexed)")
-    image_ref: str = Field(
-        ..., description="Reference/path to the rendered page image"
-    )
+    image_ref: str = Field(..., description="Reference/path to the rendered page image")
     width: int | None = Field(None, gt=0, description="Image width in pixels")
     height: int | None = Field(None, gt=0, description="Image height in pixels")
 
@@ -67,9 +65,7 @@ class BoxCandidateInput(BaseModel):
         default="input",
         description="Box type (input, checkbox, signature, etc.)",
     )
-    confidence: float = Field(
-        default=1.0, ge=0.0, le=1.0, description="Detection confidence"
-    )
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="Detection confidence")
 
     model_config = {"frozen": True}
 
@@ -107,12 +103,8 @@ class TableCandidateInput(BaseModel):
     )
     rows: int = Field(..., ge=1, description="Number of rows")
     cols: int = Field(..., ge=1, description="Number of columns")
-    cells: list[TableCellInput] = Field(
-        default_factory=list, description="Table cells"
-    )
-    confidence: float = Field(
-        default=1.0, ge=0.0, le=1.0, description="Detection confidence"
-    )
+    cells: list[TableCellInput] = Field(default_factory=list, description="Table cells")
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="Detection confidence")
 
     model_config = {"frozen": True}
 
@@ -124,12 +116,8 @@ class StructureLabellingRequest(BaseModel):
     Provides all necessary data for label-to-position linking.
     """
 
-    document_id: str = Field(
-        ..., min_length=1, description="Document identifier"
-    )
-    document_ref: str = Field(
-        ..., min_length=1, description="Reference to original document"
-    )
+    document_id: str = Field(..., min_length=1, description="Document identifier")
+    document_ref: str = Field(..., min_length=1, description="Reference to original document")
     page_images: list[PageImageInput] = Field(
         ..., min_length=1, description="Page images for visual analysis"
     )
@@ -158,9 +146,7 @@ class EvidenceOutput(BaseModel):
     """
 
     id: str = Field(..., description="Unique evidence identifier")
-    kind: str = Field(
-        ..., description="Evidence kind (llm_linking, ocr_match, etc.)"
-    )
+    kind: str = Field(..., description="Evidence kind (llm_linking, ocr_match, etc.)")
     field_id: str = Field(..., description="ID of field this evidence supports")
     page: int = Field(..., ge=1, description="Page number")
     bbox: list[float] | None = Field(
@@ -170,12 +156,8 @@ class EvidenceOutput(BaseModel):
         description="Relevant bounding box",
     )
     text: str | None = Field(None, description="Relevant text snippet")
-    confidence: float = Field(
-        ..., ge=0.0, le=1.0, description="Evidence confidence"
-    )
-    rationale: str = Field(
-        ..., description="Explanation for the linking decision"
-    )
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Evidence confidence")
+    rationale: str = Field(..., description="Explanation for the linking decision")
 
     model_config = {"frozen": True}
 
@@ -189,9 +171,7 @@ class FieldOutput(BaseModel):
 
     id: str = Field(..., description="Unique field identifier")
     name: str = Field(..., description="Field name (from linked label)")
-    field_type: str = Field(
-        default="text", description="Field type (text, checkbox, date, etc.)"
-    )
+    field_type: str = Field(default="text", description="Field type (text, checkbox, date, etc.)")
     page: int = Field(..., ge=1, description="Page number")
     bbox: list[float] = Field(
         ...,
@@ -205,15 +185,9 @@ class FieldOutput(BaseModel):
         max_length=4,
         description="Anchor/label bounding box",
     )
-    confidence: float = Field(
-        ..., ge=0.0, le=1.0, description="Linking confidence"
-    )
-    needs_review: bool = Field(
-        default=False, description="Whether field needs human review"
-    )
-    evidence_refs: list[str] = Field(
-        ..., min_length=1, description="IDs of supporting evidence"
-    )
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Linking confidence")
+    needs_review: bool = Field(default=False, description="Whether field needs human review")
+    evidence_refs: list[str] = Field(..., min_length=1, description="IDs of supporting evidence")
     box_candidate_id: str | None = Field(
         None, description="Original box candidate ID (for mapping back to AcroForm fields)"
     )
@@ -237,11 +211,7 @@ class StructureLabellingResult(BaseModel):
         default_factory=list, description="Evidence supporting field detections"
     )
     page_count: int = Field(..., ge=1, description="Number of pages processed")
-    warnings: list[str] = Field(
-        default_factory=list, description="Processing warnings"
-    )
-    errors: list[str] = Field(
-        default_factory=list, description="Processing errors"
-    )
+    warnings: list[str] = Field(default_factory=list, description="Processing warnings")
+    errors: list[str] = Field(default_factory=list, description="Processing errors")
 
     model_config = {"frozen": True}

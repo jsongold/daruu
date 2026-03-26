@@ -11,10 +11,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 import pytest
-
 from app.models.edit import (
     EditHistory,
-    EditRequest,
     FieldEdit,
     FieldState,
 )
@@ -231,9 +229,7 @@ class IntegrationEditService:
             return {"success": False, "error": "NOTHING_TO_UNDO"}
 
         for edit in reverted:
-            self._field_repo.set_field_value(
-                conversation_id, edit.field_id, edit.old_value or ""
-            )
+            self._field_repo.set_field_value(conversation_id, edit.field_id, edit.old_value or "")
 
         history = self._edit_repo.get_history(conversation_id)
 

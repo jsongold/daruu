@@ -27,15 +27,11 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
     form_id = arguments.get("form_id")
 
     if not form_id:
-        return CallToolResult(
-            content=[TextContent(type="text", text="Error: form_id is required")]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="Error: form_id is required")])
 
     session = await get_current_session()
     if not session:
-        return CallToolResult(
-            content=[TextContent(type="text", text="Error: No active session")]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="Error: No active session")])
 
     storage = MCPStorage()
 
@@ -80,9 +76,7 @@ async def handle(arguments: dict[str, Any]) -> CallToolResult:
         filled_fields = validation_result.get("filled_count", 0)
         lines.append(f"\n---\n**Summary**: {filled_fields}/{total_fields} fields filled")
 
-        return CallToolResult(
-            content=[TextContent(type="text", text="\n".join(lines))]
-        )
+        return CallToolResult(content=[TextContent(type="text", text="\n".join(lines))])
 
     except Exception as e:
         return CallToolResult(
@@ -125,12 +119,14 @@ async def _validate_form(form: dict[str, Any]) -> dict[str, Any]:
 
         # Check required fields
         if is_required and (value is None or value == ""):
-            errors.append({
-                "field_id": field_id,
-                "field_name": field_name,
-                "message": "This field is required",
-                "type": "required",
-            })
+            errors.append(
+                {
+                    "field_id": field_id,
+                    "field_name": field_name,
+                    "message": "This field is required",
+                    "type": "required",
+                }
+            )
             continue
 
         # Skip further validation if empty
@@ -140,62 +136,75 @@ async def _validate_form(form: dict[str, Any]) -> dict[str, Any]:
         # Type-specific validation
         if field_type == "checkbox":
             if not isinstance(value, bool):
-                errors.append({
-                    "field_id": field_id,
-                    "field_name": field_name,
-                    "message": "Expected checkbox value (true/false)",
-                    "type": "type_mismatch",
-                })
+                errors.append(
+                    {
+                        "field_id": field_id,
+                        "field_name": field_name,
+                        "message": "Expected checkbox value (true/false)",
+                        "type": "type_mismatch",
+                    }
+                )
 
         elif field_type == "number":
             try:
                 float(value)
             except (ValueError, TypeError):
-                errors.append({
-                    "field_id": field_id,
-                    "field_name": field_name,
-                    "message": "Expected numeric value",
-                    "type": "type_mismatch",
-                })
+                errors.append(
+                    {
+                        "field_id": field_id,
+                        "field_name": field_name,
+                        "message": "Expected numeric value",
+                        "type": "type_mismatch",
+                    }
+                )
 
         elif field_type == "date":
             import re
+
             if not re.match(r"^\d{4}-\d{2}-\d{2}$", str(value)):
-                errors.append({
-                    "field_id": field_id,
-                    "field_name": field_name,
-                    "message": "Expected date in YYYY-MM-DD format",
-                    "type": "format",
-                })
+                errors.append(
+                    {
+                        "field_id": field_id,
+                        "field_name": field_name,
+                        "message": "Expected date in YYYY-MM-DD format",
+                        "type": "format",
+                    }
+                )
 
         elif field_type in ("radio", "dropdown", "select"):
             options = field_info.get("options", [])
             if options and value not in options:
-                errors.append({
-                    "field_id": field_id,
-                    "field_name": field_name,
-                    "message": f"Value must be one of: {', '.join(options)}",
-                    "type": "invalid_option",
-                })
+                errors.append(
+                    {
+                        "field_id": field_id,
+                        "field_name": field_name,
+                        "message": f"Value must be one of: {', '.join(options)}",
+                        "type": "invalid_option",
+                    }
+                )
 
         # Check for low confidence values
         if confidence < 0.7:
-            warnings.append({
-                "field_id": field_id,
-                "field_name": field_name,
-                "message": f"'{field_name}' has low extraction confidence - please verify",
-                "type": "low_confidence",
-            })
+            warnings.append(
+                {
+                    "field_id": field_id,
+                    "field_name": field_name,
+                    "message": f"'{field_name}' has low extraction confidence - please verify",
+                    "type": "low_confidence",
+                }
+            )
 
         # Check max length
         max_length = field_info.get("max_length")
         if max_length and isinstance(value, str) and len(value) > max_length:
-            errors.append({
-                "field_id": field_id,
-                "field_name": field_name,
-                "message": f"Value exceeds maximum length of {max_length} characters",
-                "type": "max_length",
-            })
+            errors.append(
+                {
+                    "field_id": field_id,
+                    "field_name": field_name,
+                    "message": f"Value exceeds maximum length of {max_length} characters",
+                    "type": "max_length",
+                }
+            )
 
     return {
         "is_valid": len(errors) == 0,

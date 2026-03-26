@@ -181,9 +181,7 @@ def with_retry(
             return await openai_client.chat.completions.create(...)
     """
 
-    def decorator(
-        func: Callable[..., Awaitable[T]]
-    ) -> Callable[..., Awaitable[T]]:
+    def decorator(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> T:
             last_exception: Exception | None = None
@@ -218,7 +216,7 @@ def with_retry(
                         delay = min(retry_after, max_delay)
                     else:
                         delay = min(
-                            base_delay * (exponential_base ** attempt),
+                            base_delay * (exponential_base**attempt),
                             max_delay,
                         )
 

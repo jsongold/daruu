@@ -4,7 +4,6 @@ from datetime import datetime
 from unittest.mock import MagicMock
 
 import pytest
-
 from app.domain.models.correction_record import CorrectionCategory, CorrectionRecord
 from app.domain.protocols.correction_tracker import CorrectionTrackerProtocol
 from app.infrastructure.repositories.memory_correction_repository import (
@@ -14,7 +13,6 @@ from app.services.correction_tracker.tracker import (
     CorrectionTracker,
     CorrectionTrackerStub,
 )
-
 
 # ============================================================================
 # Helpers

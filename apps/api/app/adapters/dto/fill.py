@@ -39,9 +39,7 @@ class FillRequestDTO(BaseModel):
     """
 
     document_id: str = Field(..., description="Target document ID")
-    values: list[FillValueDTO] = Field(
-        ..., min_length=1, description="Values to fill"
-    )
+    values: list[FillValueDTO] = Field(..., min_length=1, description="Values to fill")
     method: str = Field(
         default="auto",
         description="Fill method: auto, acroform, or overlay",
@@ -61,9 +59,7 @@ class IssueDTO(BaseModel):
     """An issue detected during filling."""
 
     field_id: str = Field(..., description="Field ID with issue")
-    issue_type: str = Field(
-        ..., description="Issue type (overflow, overlap, missing, etc.)"
-    )
+    issue_type: str = Field(..., description="Issue type (overflow, overlap, missing, etc.)")
     message: str = Field(..., description="Human-readable issue description")
     severity: str = Field(..., description="Severity (info, warning, error)")
 

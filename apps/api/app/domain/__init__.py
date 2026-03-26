@@ -8,28 +8,28 @@ backward compatibility while establishing the Clean Architecture structure.
 """
 
 from app.domain.entities import (
+    # Job entities
+    Activity,
+    ActivityAction,
+    # Common value objects
+    BBox,
     # Document entities
     Document,
     DocumentMeta,
     DocumentType,
+    # Evidence entities
+    Evidence,
+    Extraction,
     # Field entities
     FieldModel,
     FieldType,
-    Mapping,
-    # Evidence entities
-    Evidence,
-    # Job entities
-    Activity,
-    ActivityAction,
-    Extraction,
     Issue,
     IssueSeverity,
     IssueType,
     JobContext,
     JobMode,
     JobStatus,
-    # Common value objects
-    BBox,
+    Mapping,
 )
 
 __all__ = [

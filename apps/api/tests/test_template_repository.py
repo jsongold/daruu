@@ -22,17 +22,24 @@ class TestMemoryTemplateRepository:
         from app.infrastructure.repositories.memory_template_repository import (
             MemoryTemplateRepository,
         )
+
         return MemoryTemplateRepository()
 
     @pytest.fixture
     def sample_template(self):
         """Sample template for testing."""
-        from app.models.template import Template, TemplateBbox, TemplateRule, FieldType, RuleType
+        from app.models.template import FieldType, RuleType, Template, TemplateBbox, TemplateRule
 
         now = datetime.now(timezone.utc)
         bbox = TemplateBbox(
-            id="name", x=10.0, y=20.0, width=100.0, height=30.0, page=1,
-            field_type=FieldType.TEXT, label="Full Name"
+            id="name",
+            x=10.0,
+            y=20.0,
+            width=100.0,
+            height=30.0,
+            page=1,
+            field_type=FieldType.TEXT,
+            label="Full Name",
         )
         rule = TemplateRule(
             field_id="name",
@@ -68,8 +75,9 @@ class TestMemoryTemplateRepository:
 
     def test_create_multiple_templates(self, repository) -> None:
         """Test creating multiple templates."""
-        from app.models.template import Template
         from datetime import datetime, timezone
+
+        from app.models.template import Template
 
         now = datetime.now(timezone.utc)
         template1 = Template(
@@ -97,8 +105,9 @@ class TestMemoryTemplateRepository:
 
     def test_create_template_minimal(self, repository) -> None:
         """Test creating a template with minimal data."""
-        from app.models.template import Template
         from datetime import datetime, timezone
+
+        from app.models.template import Template
 
         now = datetime.now(timezone.utc)
         template = Template(
@@ -176,8 +185,9 @@ class TestMemoryTemplateRepository:
 
     def test_update_template_not_found_raises(self, repository) -> None:
         """Test updating a non-existent template raises ValueError."""
-        from app.models.template import Template
         from datetime import datetime, timezone
+
+        from app.models.template import Template
 
         now = datetime.now(timezone.utc)
         template = Template(
@@ -193,13 +203,18 @@ class TestMemoryTemplateRepository:
 
     def test_update_template_bboxes(self, repository, sample_template) -> None:
         """Test updating template bboxes."""
-        from app.models.template import Template, TemplateBbox, FieldType
+        from app.models.template import FieldType, Template, TemplateBbox
 
         repository.create(sample_template)
 
         new_bbox = TemplateBbox(
-            id="address", x=50.0, y=100.0, width=200.0, height=40.0, page=2,
-            field_type=FieldType.TEXT
+            id="address",
+            x=50.0,
+            y=100.0,
+            width=200.0,
+            height=40.0,
+            page=2,
+            field_type=FieldType.TEXT,
         )
         updated_template = Template(
             id=sample_template.id,
@@ -219,7 +234,7 @@ class TestMemoryTemplateRepository:
 
     def test_update_template_rules(self, repository, sample_template) -> None:
         """Test updating template rules."""
-        from app.models.template import Template, TemplateRule, RuleType
+        from app.models.template import RuleType, Template, TemplateRule
 
         repository.create(sample_template)
 
@@ -277,22 +292,41 @@ class TestMemoryTemplateRepository:
 
     def test_list_by_tenant(self, repository) -> None:
         """Test listing templates by tenant."""
-        from app.models.template import Template
         from datetime import datetime, timezone
 
+        from app.models.template import Template
+
         now = datetime.now(timezone.utc)
-        repository.create(Template(
-            id="t1", tenant_id="tenant-1", name="Form 1", form_type="type1",
-            created_at=now, updated_at=now
-        ))
-        repository.create(Template(
-            id="t2", tenant_id="tenant-2", name="Form 2", form_type="type2",
-            created_at=now, updated_at=now
-        ))
-        repository.create(Template(
-            id="t3", tenant_id="tenant-1", name="Form 3", form_type="type3",
-            created_at=now, updated_at=now
-        ))
+        repository.create(
+            Template(
+                id="t1",
+                tenant_id="tenant-1",
+                name="Form 1",
+                form_type="type1",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        repository.create(
+            Template(
+                id="t2",
+                tenant_id="tenant-2",
+                name="Form 2",
+                form_type="type2",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        repository.create(
+            Template(
+                id="t3",
+                tenant_id="tenant-1",
+                name="Form 3",
+                form_type="type3",
+                created_at=now,
+                updated_at=now,
+            )
+        )
 
         tenant1_templates = repository.list_by_tenant("tenant-1")
         tenant2_templates = repository.list_by_tenant("tenant-2")
@@ -315,22 +349,41 @@ class TestMemoryTemplateRepository:
 
     def test_find_by_form_type(self, repository) -> None:
         """Test finding templates by form type."""
-        from app.models.template import Template
         from datetime import datetime, timezone
 
+        from app.models.template import Template
+
         now = datetime.now(timezone.utc)
-        repository.create(Template(
-            id="t1", tenant_id="tenant-1", name="App Form 1", form_type="application",
-            created_at=now, updated_at=now
-        ))
-        repository.create(Template(
-            id="t2", tenant_id="tenant-1", name="Tax Form", form_type="tax",
-            created_at=now, updated_at=now
-        ))
-        repository.create(Template(
-            id="t3", tenant_id="tenant-1", name="App Form 2", form_type="application",
-            created_at=now, updated_at=now
-        ))
+        repository.create(
+            Template(
+                id="t1",
+                tenant_id="tenant-1",
+                name="App Form 1",
+                form_type="application",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        repository.create(
+            Template(
+                id="t2",
+                tenant_id="tenant-1",
+                name="Tax Form",
+                form_type="tax",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        repository.create(
+            Template(
+                id="t3",
+                tenant_id="tenant-1",
+                name="App Form 2",
+                form_type="application",
+                created_at=now,
+                updated_at=now,
+            )
+        )
 
         app_templates = repository.find_by_form_type("application", tenant_id="tenant-1")
         tax_templates = repository.find_by_form_type("tax", tenant_id="tenant-1")

@@ -58,9 +58,7 @@ class QuestionGenerator:
         if not skipped and not low_confidence:
             return ()
 
-        user_prompt = self._build_user_prompt(
-            skipped, low_confidence, good_fills, context
-        )
+        user_prompt = self._build_user_prompt(skipped, low_confidence, good_fills, context)
 
         messages: list[dict[str, str]] = [
             {"role": "system", "content": QUESTION_GENERATION_SYSTEM_PROMPT},
@@ -130,8 +128,7 @@ class QuestionGenerator:
                 field = field_map.get(a.field_id)
                 label = self._get_field_label(field) if field else a.field_id
                 filled_lines.append(
-                    f"- {a.field_id}: {label} = \"{a.value}\" "
-                    f"(confidence={a.confidence:.2f})"
+                    f'- {a.field_id}: {label} = "{a.value}" (confidence={a.confidence:.2f})'
                 )
             filled_text = "\n".join(filled_lines)
         else:
@@ -156,7 +153,7 @@ class QuestionGenerator:
                 field = field_map.get(a.field_id)
                 label = self._get_field_label(field) if field else a.field_id
                 low_conf_lines.append(
-                    f"- {a.field_id}: {label} = \"{a.value}\" "
+                    f'- {a.field_id}: {label} = "{a.value}" '
                     f"(confidence={a.confidence:.2f}, source={a.source})"
                 )
             low_conf_text = "\n".join(low_conf_lines)
@@ -178,9 +175,7 @@ class QuestionGenerator:
         field_context_lines = []
         for field in context.fields:
             label = self._get_field_label(field)
-            field_context_lines.append(
-                f"- {field.field_id}: {label} ({field.field_type})"
-            )
+            field_context_lines.append(f"- {field.field_id}: {label} ({field.field_type})")
         fields_context = "\n".join(field_context_lines)
 
         return QUESTION_GENERATION_USER_TEMPLATE.format(
@@ -245,12 +240,14 @@ class QuestionGenerator:
             if not text:
                 continue
 
-            questions.append(FieldQuestion(
-                id=q.get("id", f"q{i}"),
-                text=text,
-                type=q_type,
-                options=options,
-                context=q.get("context"),
-            ))
+            questions.append(
+                FieldQuestion(
+                    id=q.get("id", f"q{i}"),
+                    text=text,
+                    type=q_type,
+                    options=options,
+                    context=q.get("context"),
+                )
+            )
 
         return tuple(questions)

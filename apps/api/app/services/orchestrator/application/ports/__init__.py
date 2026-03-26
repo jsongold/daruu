@@ -8,8 +8,6 @@ are provided in the infrastructure layer. This separation allows:
 3. Clear dependency boundaries
 """
 
-from app.services.orchestrator.application.ports.service_gateway import ServiceGateway
-from app.services.orchestrator.application.ports.task_queue import TaskQueue
 from app.services.orchestrator.application.ports.pipeline_services import (
     AdjustServicePort,
     ExtractServicePort,
@@ -19,6 +17,8 @@ from app.services.orchestrator.application.ports.pipeline_services import (
     ReviewServicePort,
     StructureLabellingServicePort,
 )
+from app.services.orchestrator.application.ports.service_gateway import ServiceGateway
+from app.services.orchestrator.application.ports.task_queue import TaskQueue
 
 __all__ = [
     # Gateway ports

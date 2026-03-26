@@ -203,16 +203,16 @@ class DirectionalFieldEnricher:
                         continue
                     seen_texts.add(label.text)
                     confidence = max(0.0, 1.0 - label.distance / _DIR_MAX_DISTANCE)
-                    candidates.append(LabelCandidate(
-                        text=label.text,
-                        confidence=round(confidence, 3),
-                        page=raw_bbox.page,
-                    ))
+                    candidates.append(
+                        LabelCandidate(
+                            text=label.text,
+                            confidence=round(confidence, 3),
+                            page=raw_bbox.page,
+                        )
+                    )
                     if len(candidates) >= _MAX_LABEL_CANDIDATES:
                         break
-                enriched.append(
-                    field.model_copy(update={"label_candidates": tuple(candidates)})
-                )
+                enriched.append(field.model_copy(update={"label_candidates": tuple(candidates)}))
             else:
                 enriched.append(field)
 
@@ -274,13 +274,9 @@ class LLMFieldEnricher:
         ) -> dict[str, list[LabelCandidate]]:
             """Run LLM enrichment for a single page's fields."""
             try:
-                page_blocks = self._document_service.extract_text_blocks_for_page(
-                    document_id, page
-                )
+                page_blocks = self._document_service.extract_text_blocks_for_page(document_id, page)
             except Exception as e:
-                logger.warning(
-                    "Failed to extract text blocks for page %s: %s", page, e
-                )
+                logger.warning("Failed to extract text blocks for page %s: %s", page, e)
                 return {}
 
             if not page_blocks:
@@ -297,7 +293,9 @@ class LLMFieldEnricher:
 
             logger.info(
                 "Enriching page %s: %d fields, %d blocks",
-                page, len(page_fields), len(nearby_blocks),
+                page,
+                len(page_fields),
+                len(nearby_blocks),
             )
 
             try:
@@ -310,9 +308,7 @@ class LLMFieldEnricher:
                 )
                 result = json.loads(response.content)
             except Exception as e:
-                logger.warning(
-                    "Field enrichment LLM failed for page %s: %s", page, e
-                )
+                logger.warning("Field enrichment LLM failed for page %s: %s", page, e)
                 return {}
 
             label_map: dict[str, list[LabelCandidate]] = {}
@@ -346,9 +342,7 @@ class LLMFieldEnricher:
         for field in fields:
             candidates = merged_labels.get(field.field_id)
             if candidates:
-                enriched.append(
-                    field.model_copy(update={"label_candidates": tuple(candidates)})
-                )
+                enriched.append(field.model_copy(update={"label_candidates": tuple(candidates)}))
             else:
                 enriched.append(field)
 

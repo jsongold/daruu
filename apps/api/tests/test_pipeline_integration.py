@@ -7,67 +7,53 @@ Uses mocked service ports to avoid external dependencies while
 testing the full integration path.
 """
 
-from datetime import datetime
 from uuid import uuid4
 
 import pytest
-
+from app.infrastructure.repositories import (
+    get_document_repository,
+    get_job_repository,
+)
 from app.models import (
-    Activity,
     ActivityAction,
-    BBox,
-    Document,
     DocumentMeta,
     DocumentType,
-    FieldModel,
-    FieldType,
-    Issue,
-    IssueSeverity,
-    IssueType,
-    JobContext,
     JobMode,
     JobStatus,
     RunMode,
 )
+from app.models.adjust.models import AdjustRequest, AdjustResult
+from app.models.extract.models import (
+    Extraction,
+    ExtractionSource,
+    ExtractRequest,
+    ExtractResult,
+)
+from app.models.fill.models import FillMethod, FillRequest, FillResult
 from app.models.ingest.models import (
     DocumentMeta as IngestDocumentMeta,
+)
+from app.models.ingest.models import (
     IngestRequest,
     IngestResult,
     PageMeta,
     RenderedPage,
 )
+from app.models.mapping.models import (
+    MappingItem,
+    MappingResult,
+)
+from app.models.orchestrator import (
+    OrchestratorConfig,
+)
+from app.models.review.models import ReviewRequest, ReviewResult
 from app.models.structure_labelling.models import (
     FieldOutput,
     StructureLabellingRequest,
     StructureLabellingResult,
 )
-from app.models.mapping.models import (
-    MappingItem,
-    MappingResult,
-    SourceField,
-    TargetField,
-)
-from app.models.extract.models import (
-    Extraction,
-    ExtractRequest,
-    ExtractResult,
-    ExtractionSource,
-)
-from app.models.adjust.models import AdjustRequest, AdjustResult
-from app.models.fill.models import FillRequest, FillResult, FillMethod
-from app.models.review.models import ReviewRequest, ReviewResult
-from app.models.orchestrator import (
-    OrchestratorConfig,
-    PipelineStage,
-    StageResult,
-)
 from app.services.orchestrator import Orchestrator
 from app.services.orchestrator.service_client import ServiceClient
-from app.infrastructure.repositories import (
-    get_document_repository,
-    get_job_repository,
-)
-
 
 # ============================================================================
 # Mock Service Implementations
@@ -133,9 +119,7 @@ class MockStructureLabellingServicePort:
         self.field_count = field_count
         self.calls: list[StructureLabellingRequest] = []
 
-    async def process(
-        self, request: StructureLabellingRequest
-    ) -> StructureLabellingResult:
+    async def process(self, request: StructureLabellingRequest) -> StructureLabellingResult:
         """Mock structure labelling that returns configurable fields."""
         self.calls.append(request)
 
@@ -158,9 +142,7 @@ class MockStructureLabellingServicePort:
                 confidence=0.85,
                 evidence_refs=[evidence_id],
             )
-            for i, (name, field_type, page) in enumerate(
-                field_configs[: self.field_count]
-            )
+            for i, (name, field_type, page) in enumerate(field_configs[: self.field_count])
         ]
 
         return StructureLabellingResult(
@@ -185,8 +167,8 @@ class MockMappingServicePort:
         """Mock mapping that returns configurable mappings."""
         self.calls.append(request)
 
-        source_fields = list(request.source_fields)[:self.mapping_count]
-        target_fields = list(request.target_fields)[:self.mapping_count]
+        source_fields = list(request.source_fields)[: self.mapping_count]
+        target_fields = list(request.target_fields)[: self.mapping_count]
 
         mappings = tuple(
             MappingItem(

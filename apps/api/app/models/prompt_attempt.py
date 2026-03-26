@@ -10,7 +10,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-
 # ============================================
 # Core Model
 # ============================================
@@ -24,12 +23,16 @@ class PromptAttempt(BaseModel):
     document_id: str = Field(..., description="ID of the target document")
     system_prompt: str = Field(..., description="System prompt sent to the LLM")
     user_prompt: str = Field(..., description="User prompt sent to the LLM")
-    custom_rules: list[str] = Field(default_factory=list, description="Custom rules active during the attempt")
+    custom_rules: list[str] = Field(
+        default_factory=list, description="Custom rules active during the attempt"
+    )
     raw_response: str = Field(default="", description="Raw LLM response text")
     parsed_result: dict[str, Any] | None = Field(None, description="Parsed result JSON")
     success: bool = Field(default=False, description="Whether the attempt succeeded")
     error: str | None = Field(None, description="Error message if the attempt failed")
-    metadata: dict[str, Any] = Field(default_factory=dict, description="Additional metadata (model, processing_time_ms)")
+    metadata: dict[str, Any] = Field(
+        default_factory=dict, description="Additional metadata (model, processing_time_ms)"
+    )
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
 

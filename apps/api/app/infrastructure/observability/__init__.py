@@ -30,26 +30,26 @@ Usage:
     logger.info("Pipeline started", stage="ingest")
 """
 
-from app.infrastructure.observability.tracing import (
-    get_tracer,
-    trace_stage,
-    init_tracing,
-    shutdown_tracing,
-    get_current_span,
-    set_span_attribute,
-)
-from app.infrastructure.observability.metrics import (
-    metrics,
-    init_metrics,
-    get_metrics_handler,
-)
 from app.infrastructure.observability.logging import (
+    configure_logging,
     get_logger,
     init_logging,
-    configure_logging,
     with_job_context,
 )
+from app.infrastructure.observability.metrics import (
+    get_metrics_handler,
+    init_metrics,
+    metrics,
+)
 from app.infrastructure.observability.stopwatch import StopWatch
+from app.infrastructure.observability.tracing import (
+    get_current_span,
+    get_tracer,
+    init_tracing,
+    set_span_attribute,
+    shutdown_tracing,
+    trace_stage,
+)
 
 __all__ = [
     # Tracing

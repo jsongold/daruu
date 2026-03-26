@@ -12,13 +12,12 @@ from __future__ import annotations
 
 import copy
 import json
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 import pytest
-from jsonschema import Draft7Validator, validate
+from jsonschema import validate
 
 # Base paths
 CONTRACTS_DIR = Path(__file__).parent.parent
@@ -443,9 +442,7 @@ class TestContractEvolution:
         """Load all schemas."""
         return load_all_schemas()
 
-    def test_required_fields_are_documented(
-        self, schemas: dict[str, dict[str, Any]]
-    ) -> None:
+    def test_required_fields_are_documented(self, schemas: dict[str, dict[str, Any]]) -> None:
         """Verify all required fields have descriptions."""
         for schema_name, schema in schemas.items():
             definitions = schema.get("definitions", {})
@@ -466,9 +463,7 @@ class TestContractEvolution:
                             # This is a warning, not a failure
                             pass
 
-    def test_optional_fields_have_defaults(
-        self, schemas: dict[str, dict[str, Any]]
-    ) -> None:
+    def test_optional_fields_have_defaults(self, schemas: dict[str, dict[str, Any]]) -> None:
         """Verify optional fields either have defaults or are nullable."""
         for schema_name, schema in schemas.items():
             definitions = schema.get("definitions", {})
@@ -499,6 +494,5 @@ class TestContractEvolution:
 
                     # Strict schemas should disallow additional properties
                     assert additional is False, (
-                        f"{schema_name}.{def_name} should have "
-                        "additionalProperties: false"
+                        f"{schema_name}.{def_name} should have additionalProperties: false"
                     )

@@ -139,20 +139,14 @@ class BoundingBox:
 
     def contains_point(self, px: float, py: float) -> bool:
         """Check if a point is within this bounding box."""
-        return (
-            self.x <= px <= self.x2
-            and self.y <= py <= self.y2
-        )
+        return self.x <= px <= self.x2 and self.y <= py <= self.y2
 
     def overlaps(self, other: "BoundingBox") -> bool:
         """Check if this bounding box overlaps with another."""
         if self.page != other.page:
             return False
         return not (
-            self.x2 < other.x
-            or other.x2 < self.x
-            or self.y2 < other.y
-            or other.y2 < self.y
+            self.x2 < other.x or other.x2 < self.x or self.y2 < other.y or other.y2 < self.y
         )
 
     def with_padding(self, padding: float) -> "BoundingBox":

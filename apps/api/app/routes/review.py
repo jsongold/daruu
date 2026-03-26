@@ -78,14 +78,8 @@ async def get_review_data(
     # Calculate confidence summary from job fields
     total_fields = len(job.fields)
     high_conf = sum(1 for f in job.fields if f.confidence and f.confidence >= 0.8)
-    medium_conf = sum(
-        1 for f in job.fields
-        if f.confidence and 0.5 <= f.confidence < 0.8
-    )
-    low_conf = sum(
-        1 for f in job.fields
-        if f.confidence and f.confidence < 0.5
-    )
+    medium_conf = sum(1 for f in job.fields if f.confidence and 0.5 <= f.confidence < 0.8)
+    low_conf = sum(1 for f in job.fields if f.confidence and f.confidence < 0.5)
     no_value = sum(1 for f in job.fields if not f.value)
 
     confidences = [f.confidence for f in job.fields if f.confidence]

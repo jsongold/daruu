@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from app.domain.models.fill_plan import (
     FieldFillAction,
     FieldQuestion,
@@ -20,9 +19,7 @@ from app.domain.models.form_context import (
     FormFieldSpec,
 )
 from app.domain.models.render_report import RenderReport
-from app.services.autofill_pipeline.models import AutofillPipelineResult
 from app.services.autofill_pipeline.service import AutofillPipelineService
-
 
 # ── Fixtures ──
 
@@ -56,9 +53,21 @@ def _make_draft_plan() -> FillPlan:
     return FillPlan(
         document_id="doc-1",
         actions=(
-            FieldFillAction(field_id="Text1", action=FillActionType.FILL, value="John", confidence=0.95, source="src.pdf"),
+            FieldFillAction(
+                field_id="Text1",
+                action=FillActionType.FILL,
+                value="John",
+                confidence=0.95,
+                source="src.pdf",
+            ),
             FieldFillAction(field_id="Text2", action=FillActionType.SKIP, reason="no data"),
-            FieldFillAction(field_id="Text3", action=FillActionType.FILL, value="1990-01-01", confidence=0.5, source="src.pdf"),
+            FieldFillAction(
+                field_id="Text3",
+                action=FillActionType.FILL,
+                value="1990-01-01",
+                confidence=0.5,
+                source="src.pdf",
+            ),
         ),
     )
 
@@ -67,9 +76,15 @@ def _make_final_plan() -> FillPlan:
     return FillPlan(
         document_id="doc-1",
         actions=(
-            FieldFillAction(field_id="Text1", action=FillActionType.FILL, value="John", confidence=0.95),
-            FieldFillAction(field_id="Text2", action=FillActionType.FILL, value="123 Main St", confidence=0.95),
-            FieldFillAction(field_id="Text3", action=FillActionType.FILL, value="1990-05-15", confidence=0.95),
+            FieldFillAction(
+                field_id="Text1", action=FillActionType.FILL, value="John", confidence=0.95
+            ),
+            FieldFillAction(
+                field_id="Text2", action=FillActionType.FILL, value="123 Main St", confidence=0.95
+            ),
+            FieldFillAction(
+                field_id="Text3", action=FillActionType.FILL, value="1990-05-15", confidence=0.95
+            ),
         ),
     )
 
@@ -118,7 +133,9 @@ def _build_service(
 
     fill_planner = MagicMock()
     fill_planner.plan = AsyncMock(return_value=plan_return or _make_draft_plan())
-    fill_planner.plan_with_answers = AsyncMock(return_value=plan_with_answers_return or _make_final_plan())
+    fill_planner.plan_with_answers = AsyncMock(
+        return_value=plan_with_answers_return or _make_final_plan()
+    )
     fill_planner.set_specialized_prompt = MagicMock()
 
     form_renderer = MagicMock()
@@ -200,7 +217,12 @@ async def test_turn2_returns_final_no_questions() -> None:
     # Turn 2 with answers
     answers = [
         {"question_id": "q1", "question_text": "What is your address?", "free_text": "123 Main St"},
-        {"question_id": "q2", "question_text": "Is your DOB 1990-01-01?", "selected_option_ids": ["no"], "free_text": "1990-05-15"},
+        {
+            "question_id": "q2",
+            "question_text": "Is your DOB 1990-01-01?",
+            "selected_option_ids": ["no"],
+            "free_text": "1990-05-15",
+        },
     ]
 
     plan, qs, result, step_logs = await service.autofill_turn(

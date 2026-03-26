@@ -7,21 +7,14 @@ This enables testing service logic in isolation from external dependencies
 while validating correct usage of the port interfaces.
 """
 
-from datetime import datetime
-from uuid import uuid4
-
 import pytest
-
-from app.models import BBox, FieldModel, FieldType
+from app.models import BBox
 from app.models.ingest.models import (
     DocumentMeta as IngestDocumentMeta,
-    IngestErrorCode,
-    IngestRequest,
-    IngestResult,
-    PageMeta,
-    RenderedPage,
 )
-
+from app.models.ingest.models import (
+    PageMeta,
+)
 
 # ============================================================================
 # Ingest Service Tests
@@ -66,11 +59,13 @@ class MockPdfReaderPort:
 
     def get_page_meta(self, pdf_path: str, page_number: int) -> PageMeta:
         """Mock page metadata extraction."""
-        self.calls.append({
-            "method": "get_page_meta",
-            "pdf_path": pdf_path,
-            "page_number": page_number,
-        })
+        self.calls.append(
+            {
+                "method": "get_page_meta",
+                "pdf_path": pdf_path,
+                "page_number": page_number,
+            }
+        )
         return PageMeta(
             page_number=page_number,
             width=612.0,
@@ -85,12 +80,14 @@ class MockPdfReaderPort:
         dpi: int = 150,
     ) -> bytes:
         """Mock page rendering."""
-        self.calls.append({
-            "method": "render_page",
-            "pdf_path": pdf_path,
-            "page_number": page_number,
-            "dpi": dpi,
-        })
+        self.calls.append(
+            {
+                "method": "render_page",
+                "pdf_path": pdf_path,
+                "page_number": page_number,
+                "dpi": dpi,
+            }
+        )
         # Return fake PNG bytes
         return b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
 
@@ -112,12 +109,14 @@ class MockIngestStoragePort:
         """Mock image saving."""
         ref = f"{document_id}/page_{page_number}.png"
         self.saved_images[ref] = image_data
-        self.calls.append({
-            "method": "save_image",
-            "document_id": document_id,
-            "page_number": page_number,
-            "size": len(image_data),
-        })
+        self.calls.append(
+            {
+                "method": "save_image",
+                "document_id": document_id,
+                "page_number": page_number,
+                "size": len(image_data),
+            }
+        )
         return ref
 
     def get_url(self, image_ref: str) -> str:
@@ -128,8 +127,7 @@ class MockIngestStoragePort:
         """Mock artifact deletion."""
         count = len([k for k in self.saved_images if k.startswith(document_id)])
         self.saved_images = {
-            k: v for k, v in self.saved_images.items()
-            if not k.startswith(document_id)
+            k: v for k, v in self.saved_images.items() if not k.startswith(document_id)
         }
         return count
 
@@ -229,11 +227,13 @@ class MockStructureDetectorPort:
             DetectedStructures,
         )
 
-        self.calls.append({
-            "method": "detect_structures",
-            "page": page,
-            "image_size": len(page_image),
-        })
+        self.calls.append(
+            {
+                "method": "detect_structures",
+                "page": page,
+                "image_size": len(page_image),
+            }
+        )
 
         box_candidates = tuple(
             BoxCandidate(
@@ -262,10 +262,12 @@ class MockStructureDetectorPort:
         """Mock box detection."""
         from app.services.structure_labelling.domain.models import BoxCandidate
 
-        self.calls.append({
-            "method": "detect_boxes",
-            "page": page,
-        })
+        self.calls.append(
+            {
+                "method": "detect_boxes",
+                "page": page,
+            }
+        )
 
         return [
             BoxCandidate(
@@ -285,10 +287,12 @@ class MockStructureDetectorPort:
         options: dict | None = None,
     ):
         """Mock table detection."""
-        self.calls.append({
-            "method": "detect_tables",
-            "page": page,
-        })
+        self.calls.append(
+            {
+                "method": "detect_tables",
+                "page": page,
+            }
+        )
         return []
 
 
@@ -337,9 +341,7 @@ class TestStructureLabellingServiceWithMockedPorts:
     @pytest.mark.asyncio
     async def test_image_loader_returns_bytes(self):
         """Test image loader returns image bytes."""
-        loader = MockPageImageLoaderPort(
-            images={"page_1.png": b"test_image_data"}
-        )
+        loader = MockPageImageLoaderPort(images={"page_1.png": b"test_image_data"})
 
         result = await loader.load_image("page_1.png")
 
@@ -371,11 +373,13 @@ class MockStringMatcherPort:
 
     def compute_similarity(self, source: str, target: str) -> float:
         """Mock similarity computation."""
-        self.calls.append({
-            "method": "compute_similarity",
-            "source": source,
-            "target": target,
-        })
+        self.calls.append(
+            {
+                "method": "compute_similarity",
+                "source": source,
+                "target": target,
+            }
+        )
         # Simple mock: return 1.0 for exact match, default otherwise
         if source.lower() == target.lower():
             return 1.0
@@ -391,12 +395,14 @@ class MockStringMatcherPort:
         limit: int = 5,
     ) -> tuple[tuple[str, float], ...]:
         """Mock match finding."""
-        self.calls.append({
-            "method": "find_matches",
-            "source": source,
-            "targets": targets,
-            "threshold": threshold,
-        })
+        self.calls.append(
+            {
+                "method": "find_matches",
+                "source": source,
+                "targets": targets,
+                "threshold": threshold,
+            }
+        )
         matches = []
         for target in targets:
             score = self.compute_similarity(source, target)
@@ -412,15 +418,14 @@ class MockStringMatcherPort:
         threshold: float = 0.6,
     ) -> dict[str, tuple[tuple[str, float], ...]]:
         """Mock batch match finding."""
-        self.calls.append({
-            "method": "batch_find_matches",
-            "sources": sources,
-            "targets": targets,
-        })
-        return {
-            source: self.find_matches(source, targets, threshold)
-            for source in sources
-        }
+        self.calls.append(
+            {
+                "method": "batch_find_matches",
+                "sources": sources,
+                "targets": targets,
+            }
+        )
+        return {source: self.find_matches(source, targets, threshold) for source in sources}
 
 
 class TestMappingServiceWithMockedPorts:
@@ -497,14 +502,16 @@ class MockNativeTextExtractorPort:
         region: BBox | None = None,
     ):
         """Mock text extraction."""
-        from app.services.extract.domain.models import NativeTextResult, NativeTextLine
+        from app.services.extract.domain.models import NativeTextLine, NativeTextResult
 
-        self.calls.append({
-            "method": "extract_text",
-            "document_ref": document_ref,
-            "page": page,
-            "region": region,
-        })
+        self.calls.append(
+            {
+                "method": "extract_text",
+                "document_ref": document_ref,
+                "page": page,
+                "region": region,
+            }
+        )
 
         return NativeTextResult(
             page=page,
@@ -519,10 +526,12 @@ class MockNativeTextExtractorPort:
 
     async def has_text_layer(self, document_ref: str) -> bool:
         """Check if document has text layer."""
-        self.calls.append({
-            "method": "has_text_layer",
-            "document_ref": document_ref,
-        })
+        self.calls.append(
+            {
+                "method": "has_text_layer",
+                "document_ref": document_ref,
+            }
+        )
         return self._has_text_layer
 
 
@@ -546,14 +555,16 @@ class MockOcrServicePort:
         language: str = "ja+en",
     ):
         """Mock OCR recognition."""
-        from app.services.extract.domain.models import OcrResult, OcrToken, OcrLine
+        from app.services.extract.domain.models import OcrLine, OcrResult, OcrToken
 
-        self.calls.append({
-            "method": "recognize",
-            "image_size": len(image_data),
-            "page": page,
-            "language": language,
-        })
+        self.calls.append(
+            {
+                "method": "recognize",
+                "image_size": len(image_data),
+                "page": page,
+                "language": language,
+            }
+        )
 
         token = OcrToken(
             text=self.recognized_text,
@@ -580,11 +591,13 @@ class MockOcrServicePort:
         language: str = "ja+en",
     ):
         """Mock region OCR."""
-        self.calls.append({
-            "method": "recognize_region",
-            "page": page,
-            "bbox": bbox,
-        })
+        self.calls.append(
+            {
+                "method": "recognize_region",
+                "page": page,
+                "bbox": bbox,
+            }
+        )
         return await self.recognize(image_data, page, bbox, language)
 
 
@@ -594,9 +607,7 @@ class TestExtractServiceWithMockedPorts:
     @pytest.mark.asyncio
     async def test_native_text_extraction(self):
         """Test native text extraction returns correct result."""
-        extractor = MockNativeTextExtractorPort(
-            extracted_text="John Doe"
-        )
+        extractor = MockNativeTextExtractorPort(extracted_text="John Doe")
 
         result = await extractor.extract_text(
             document_ref="/path/to/doc.pdf",
@@ -652,8 +663,7 @@ class TestExtractServiceWithMockedPorts:
         # recognize_region adds entry first, then calls recognize which adds another
         # So we need to check the second-to-last call (recognize_region's call)
         recognize_region_call = next(
-            (c for c in ocr.calls if c.get("method") == "recognize_region"),
-            None
+            (c for c in ocr.calls if c.get("method") == "recognize_region"), None
         )
         assert recognize_region_call is not None
         assert recognize_region_call["bbox"] == bbox
@@ -679,11 +689,13 @@ class MockBboxCalculatorPort:
         """Mock coordinate transformation."""
         from app.services.adjust.domain.models import BboxValues
 
-        self.calls.append({
-            "method": "transform_to_page_coords",
-            "source_dpi": source_dpi,
-            "target_dpi": target_dpi,
-        })
+        self.calls.append(
+            {
+                "method": "transform_to_page_coords",
+                "source_dpi": source_dpi,
+                "target_dpi": target_dpi,
+            }
+        )
 
         scale = target_dpi / source_dpi
         return BboxValues(
@@ -691,7 +703,7 @@ class MockBboxCalculatorPort:
             y=bbox.y * scale,
             width=bbox.width * scale,
             height=bbox.height * scale,
-            page=getattr(bbox, 'page', 1),
+            page=getattr(bbox, "page", 1),
         )
 
     def calculate_relative_position(
@@ -700,9 +712,11 @@ class MockBboxCalculatorPort:
         anchor_bbox,
     ) -> tuple[float, float]:
         """Mock relative position calculation."""
-        self.calls.append({
-            "method": "calculate_relative_position",
-        })
+        self.calls.append(
+            {
+                "method": "calculate_relative_position",
+            }
+        )
         return (bbox.x - anchor_bbox.x, bbox.y - anchor_bbox.y)
 
     def apply_relative_position(
@@ -716,15 +730,17 @@ class MockBboxCalculatorPort:
         """Mock applying relative position."""
         from app.services.adjust.domain.models import BboxValues
 
-        self.calls.append({
-            "method": "apply_relative_position",
-        })
+        self.calls.append(
+            {
+                "method": "apply_relative_position",
+            }
+        )
         return BboxValues(
             x=anchor_bbox.x + relative_x,
             y=anchor_bbox.y + relative_y,
             width=original_width,
             height=original_height,
-            page=getattr(anchor_bbox, 'page', 1),
+            page=getattr(anchor_bbox, "page", 1),
         )
 
 
@@ -741,11 +757,13 @@ class MockOverlapDetectorPort:
         threshold: float = 0.0,
     ):
         """Mock overlap detection."""
-        self.calls.append({
-            "method": "detect_overlaps",
-            "bbox_count": len(bboxes),
-            "threshold": threshold,
-        })
+        self.calls.append(
+            {
+                "method": "detect_overlaps",
+                "bbox_count": len(bboxes),
+                "threshold": threshold,
+            }
+        )
         return tuple(self.overlaps)
 
     def detect_overflow(
@@ -758,10 +776,12 @@ class MockOverlapDetectorPort:
         """Mock overflow detection."""
         from app.services.adjust.domain.models import OverflowInfo
 
-        self.calls.append({
-            "method": "detect_overflow",
-            "field_id": field_id,
-        })
+        self.calls.append(
+            {
+                "method": "detect_overflow",
+                "field_id": field_id,
+            }
+        )
 
         # Calculate overflow amounts
         right_overflow = max(0, (bbox.x + bbox.width) - page_width)
@@ -857,12 +877,14 @@ class MockTextMeasurePort:
         font_size: float,
     ) -> tuple[float, float]:
         """Mock text measurement."""
-        self.calls.append({
-            "method": "measure",
-            "text": text,
-            "font_family": font_family,
-            "font_size": font_size,
-        })
+        self.calls.append(
+            {
+                "method": "measure",
+                "text": text,
+                "font_family": font_family,
+                "font_size": font_size,
+            }
+        )
         width = len(text) * self.char_width * (font_size / 12.0)
         height = self.line_height * (font_size / 12.0)
         return (width, height)
@@ -874,11 +896,13 @@ class MockTextMeasurePort:
         line_height_multiplier: float = 1.0,
     ) -> float:
         """Mock line height calculation."""
-        self.calls.append({
-            "method": "get_line_height",
-            "font_family": font_family,
-            "font_size": font_size,
-        })
+        self.calls.append(
+            {
+                "method": "get_line_height",
+                "font_family": font_family,
+                "font_size": font_size,
+            }
+        )
         return self.line_height * (font_size / 12.0) * line_height_multiplier
 
 
@@ -905,11 +929,13 @@ class MockAcroFormWriterPort:
         font_config=None,
     ) -> bool:
         """Mock field value setting."""
-        self.calls.append({
-            "method": "set_field_value",
-            "field_name": field_name,
-            "value": value,
-        })
+        self.calls.append(
+            {
+                "method": "set_field_value",
+                "field_name": field_name,
+                "value": value,
+            }
+        )
         if not self.has_form:
             return False
         self.field_values[field_name] = value
@@ -917,11 +943,13 @@ class MockAcroFormWriterPort:
 
     def set_checkbox(self, field_name: str, checked: bool) -> bool:
         """Mock checkbox setting."""
-        self.calls.append({
-            "method": "set_checkbox",
-            "field_name": field_name,
-            "checked": checked,
-        })
+        self.calls.append(
+            {
+                "method": "set_checkbox",
+                "field_name": field_name,
+                "checked": checked,
+            }
+        )
         if not self.has_form:
             return False
         self.checkbox_states[field_name] = checked
@@ -1004,12 +1032,14 @@ class MockPdfRendererPort:
         """Mock page rendering."""
         from app.services.review.domain.models import RenderResult
 
-        self.calls.append({
-            "method": "render_page",
-            "pdf_path": pdf_path,
-            "page_number": page_number,
-            "dpi": dpi,
-        })
+        self.calls.append(
+            {
+                "method": "render_page",
+                "pdf_path": pdf_path,
+                "page_number": page_number,
+                "dpi": dpi,
+            }
+        )
 
         return RenderResult(
             page_number=page_number,
@@ -1025,15 +1055,14 @@ class MockPdfRendererPort:
         dpi: int = 150,
     ):
         """Mock rendering all pages."""
-        self.calls.append({
-            "method": "render_all_pages",
-            "pdf_path": pdf_path,
-            "dpi": dpi,
-        })
-        return tuple(
-            self.render_page(pdf_path, i + 1, dpi)
-            for i in range(self.page_count)
+        self.calls.append(
+            {
+                "method": "render_all_pages",
+                "pdf_path": pdf_path,
+                "dpi": dpi,
+            }
         )
+        return tuple(self.render_page(pdf_path, i + 1, dpi) for i in range(self.page_count))
 
 
 class MockDiffGeneratorPort:
@@ -1050,21 +1079,20 @@ class MockDiffGeneratorPort:
         highlight_color: tuple[int, int, int] = (255, 0, 0),
     ):
         """Mock diff generation."""
-        from app.services.review.domain.models import DiffResult, ChangeRegion
+        from app.services.review.domain.models import ChangeRegion, DiffResult
 
-        self.calls.append({
-            "method": "generate_diff",
-            "original_size": len(original_image),
-            "filled_size": len(filled_image),
-        })
+        self.calls.append(
+            {
+                "method": "generate_diff",
+                "original_size": len(original_image),
+                "filled_size": len(filled_image),
+            }
+        )
 
         change_regions = ()
         if self.change_detected:
             change_regions = (
-                ChangeRegion(
-                    x=100, y=200, width=150, height=30,
-                    page=1, change_percentage=0.1
-                ),
+                ChangeRegion(x=100, y=200, width=150, height=30, page=1, change_percentage=0.1),
             )
 
         return DiffResult(
@@ -1081,10 +1109,12 @@ class MockDiffGeneratorPort:
         opacity: float = 0.5,
     ) -> bytes:
         """Mock overlay generation."""
-        self.calls.append({
-            "method": "generate_overlay",
-            "opacity": opacity,
-        })
+        self.calls.append(
+            {
+                "method": "generate_overlay",
+                "opacity": opacity,
+            }
+        )
         return b"\x89PNG" + b"\x00" * 80
 
 

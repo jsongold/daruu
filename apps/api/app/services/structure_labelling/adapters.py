@@ -101,8 +101,8 @@ class OpenCVStructureDetector:
             # Use Pillow to decode the image (handles PNG, JPEG, etc.)
             pil_image = Image.open(io.BytesIO(page_image))
             # Convert to RGB if necessary (handles grayscale, RGBA, etc.)
-            if pil_image.mode != 'RGB':
-                pil_image = pil_image.convert('RGB')
+            if pil_image.mode != "RGB":
+                pil_image = pil_image.convert("RGB")
             # Convert to numpy array
             img_rgb = np.array(pil_image)
             # Convert RGB to BGR for OpenCV compatibility
@@ -137,9 +137,7 @@ class OpenCVStructureDetector:
         # Default to input field
         return "input"
 
-    def _filter_nested_boxes(
-        self, boxes: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
+    def _filter_nested_boxes(self, boxes: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Filter out boxes that are fully contained within other boxes.
 
         Keeps only outermost boxes to avoid duplicate detections.
@@ -299,9 +297,7 @@ class OpenCVStructureDetector:
         closed = cv2.morphologyEx(combined, cv2.MORPH_CLOSE, kernel, iterations=2)
 
         # Find contours
-        contours, _ = cv2.findContours(
-            closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        )
+        contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         # Get options
         opts = options or {}
@@ -347,15 +343,17 @@ class OpenCVStructureDetector:
             # Calculate confidence based on rectangularity
             confidence = min(1.0, rectangularity + 0.2)
 
-            raw_boxes.append({
-                "x": float(x),
-                "y": float(y),
-                "width": float(w),
-                "height": float(h),
-                "area": area,
-                "aspect_ratio": aspect_ratio,
-                "confidence": confidence,
-            })
+            raw_boxes.append(
+                {
+                    "x": float(x),
+                    "y": float(y),
+                    "width": float(w),
+                    "height": float(h),
+                    "area": area,
+                    "aspect_ratio": aspect_ratio,
+                    "confidence": confidence,
+                }
+            )
 
         # Filter nested boxes
         filtered_boxes = self._filter_nested_boxes(raw_boxes)
@@ -415,7 +413,6 @@ class OpenCVStructureDetector:
             return []
 
         import cv2
-        import numpy as np
 
         try:
             img = self._decode_image(page_image)
@@ -431,28 +428,18 @@ class OpenCVStructureDetector:
         _, binary = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY_INV)
 
         # Detect horizontal lines
-        horizontal_kernel = cv2.getStructuringElement(
-            cv2.MORPH_RECT, (max(40, img_width // 20), 1)
-        )
-        horizontal_lines = cv2.morphologyEx(
-            binary, cv2.MORPH_OPEN, horizontal_kernel, iterations=2
-        )
+        horizontal_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (max(40, img_width // 20), 1))
+        horizontal_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, horizontal_kernel, iterations=2)
 
         # Detect vertical lines
-        vertical_kernel = cv2.getStructuringElement(
-            cv2.MORPH_RECT, (1, max(40, img_height // 30))
-        )
-        vertical_lines = cv2.morphologyEx(
-            binary, cv2.MORPH_OPEN, vertical_kernel, iterations=2
-        )
+        vertical_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, max(40, img_height // 30)))
+        vertical_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, vertical_kernel, iterations=2)
 
         # Combine horizontal and vertical lines
         table_mask = cv2.add(horizontal_lines, vertical_lines)
 
         # Find contours of the combined mask (potential table regions)
-        contours, _ = cv2.findContours(
-            table_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        )
+        contours, _ = cv2.findContours(table_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         opts = options or {}
         min_cells = opts.get("min_cells", self.table_min_cells)
@@ -486,9 +473,7 @@ class OpenCVStructureDetector:
                 continue
 
             # Extract cell boundaries
-            cells = self._extract_cells(
-                table_region, x, y, rows, cols, page
-            )
+            cells = self._extract_cells(table_region, x, y, rows, cols, page)
 
             if len(cells) < min_cells:
                 continue
@@ -526,7 +511,6 @@ class OpenCVStructureDetector:
         Returns:
             Estimated number of lines
         """
-        import cv2
         import numpy as np
 
         if direction == "horizontal":
@@ -687,9 +671,7 @@ class LocalPageImageLoader:
 
         return path.read_bytes()
 
-    async def load_images(
-        self, image_refs: list[str]
-    ) -> dict[str, bytes]:
+    async def load_images(self, image_refs: list[str]) -> dict[str, bytes]:
         """Load multiple page images.
 
         Loads images sequentially from local storage.
@@ -774,9 +756,7 @@ class MockPageImageLoader:
             return self.mock_images[image_ref]
         return self.default_image
 
-    async def load_images(
-        self, image_refs: list[str]
-    ) -> dict[str, bytes]:
+    async def load_images(self, image_refs: list[str]) -> dict[str, bytes]:
         """Return mock images for all refs."""
         return {ref: await self.load_image(ref) for ref in image_refs}
 

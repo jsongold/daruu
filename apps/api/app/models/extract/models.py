@@ -39,9 +39,7 @@ class ExtractionEvidence(BaseModel):
     page: int = Field(..., ge=1, description="Page number")
     bbox: BBox | None = Field(None, description="Bounding box of source region")
     text: str | None = Field(None, description="Source text")
-    confidence: float = Field(
-        ..., ge=0.0, le=1.0, description="Evidence confidence"
-    )
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Evidence confidence")
 
     model_config = {"frozen": True}
 
@@ -95,12 +93,8 @@ class ExtractField(BaseModel):
         description="Expected type (text, number, date, checkbox)",
     )
     page: int = Field(..., ge=1, description="Page number to extract from")
-    bbox: BBox | None = Field(
-        None, description="Bounding box region to extract from"
-    )
-    validation_pattern: str | None = Field(
-        None, description="Regex pattern for validation"
-    )
+    bbox: BBox | None = Field(None, description="Bounding box region to extract from")
+    validation_pattern: str | None = Field(None, description="Regex pattern for validation")
 
     model_config = {"frozen": True}
 
@@ -111,21 +105,13 @@ class ExtractRequest(BaseModel):
     Input contract for the Extract service.
     """
 
-    document_ref: str = Field(
-        ..., min_length=1, description="Reference/path to the document"
-    )
-    fields: tuple[ExtractField, ...] = Field(
-        ..., min_length=1, description="Fields to extract"
-    )
+    document_ref: str = Field(..., min_length=1, description="Reference/path to the document")
+    fields: tuple[ExtractField, ...] = Field(..., min_length=1, description="Fields to extract")
     artifacts: tuple[PageArtifact, ...] = Field(
         default=(), description="Rendered page images for OCR"
     )
-    user_rules: dict[str, Any] | None = Field(
-        None, description="User-defined extraction rules"
-    )
-    use_ocr: bool = Field(
-        default=True, description="Whether to use OCR for extraction"
-    )
+    user_rules: dict[str, Any] | None = Field(None, description="User-defined extraction rules")
+    use_ocr: bool = Field(default=True, description="Whether to use OCR for extraction")
     use_llm: bool = Field(
         default=True,
         description="Whether to use LLM for ambiguity resolution",
@@ -148,19 +134,11 @@ class Extraction(BaseModel):
 
     field_id: str = Field(..., description="Field identifier")
     value: str = Field(..., description="Extracted value")
-    normalized_value: str | None = Field(
-        None, description="Normalized/standardized value"
-    )
-    confidence: float = Field(
-        ..., ge=0.0, le=1.0, description="Extraction confidence"
-    )
+    normalized_value: str | None = Field(None, description="Normalized/standardized value")
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Extraction confidence")
     source: ExtractionSource = Field(..., description="Source of extraction")
-    evidence: tuple[ExtractionEvidence, ...] = Field(
-        default=(), description="Supporting evidence"
-    )
-    needs_review: bool = Field(
-        default=False, description="Whether manual review is recommended"
-    )
+    evidence: tuple[ExtractionEvidence, ...] = Field(default=(), description="Supporting evidence")
+    needs_review: bool = Field(default=False, description="Whether manual review is recommended")
     conflict_detected: bool = Field(
         default=False, description="Whether conflicting values were found"
     )
@@ -191,9 +169,7 @@ class FollowupQuestion(BaseModel):
 
     field_id: str = Field(..., description="Field requiring clarification")
     question: str = Field(..., description="Question to ask the user")
-    candidates: tuple[str, ...] = Field(
-        default=(), description="Possible answer candidates"
-    )
+    candidates: tuple[str, ...] = Field(default=(), description="Possible answer candidates")
     reason: str = Field(..., description="Why clarification is needed")
 
     model_config = {"frozen": True}
@@ -233,8 +209,6 @@ class ExtractResult(BaseModel):
     followup_questions: tuple[FollowupQuestion, ...] = Field(
         default=(), description="Questions for user clarification"
     )
-    errors: tuple[ExtractError, ...] = Field(
-        default=(), description="Extraction errors"
-    )
+    errors: tuple[ExtractError, ...] = Field(default=(), description="Extraction errors")
 
     model_config = {"frozen": True}

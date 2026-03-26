@@ -6,11 +6,9 @@ from dataclasses import dataclass
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from app.domain.models.form_context import FormContext, FormFieldSpec, LabelCandidate
 from app.services.prompt_generator.generator import PromptGenerator
 from app.services.prompt_generator.meta_prompt import build_prompt_generation_user_prompt
-
 
 # ── Fixtures ──
 
@@ -34,9 +32,7 @@ def _make_fields() -> tuple[FormFieldSpec, ...]:
             y=200.0,
             width=200.0,
             height=20.0,
-            label_candidates=(
-                LabelCandidate(text="氏名", confidence=0.9, page=1),
-            ),
+            label_candidates=(LabelCandidate(text="氏名", confidence=0.9, page=1),),
         ),
         FormFieldSpec(
             field_id="Text2",
@@ -47,9 +43,7 @@ def _make_fields() -> tuple[FormFieldSpec, ...]:
             y=250.0,
             width=200.0,
             height=20.0,
-            label_candidates=(
-                LabelCandidate(text="住所", confidence=0.85, page=1),
-            ),
+            label_candidates=(LabelCandidate(text="住所", confidence=0.85, page=1),),
         ),
         FormFieldSpec(
             field_id="Check1",
@@ -111,9 +105,7 @@ async def test_generate_returns_result_with_all_fields() -> None:
 
     llm_client = MagicMock()
     llm_client.model = "gpt-4o-mini"
-    llm_client.complete = AsyncMock(
-        return_value=FakeLLMResponse(content=_json.dumps(mapping))
-    )
+    llm_client.complete = AsyncMock(return_value=FakeLLMResponse(content=_json.dumps(mapping)))
 
     doc_service = MagicMock()
     doc_service.extract_text_blocks = MagicMock(return_value=_make_text_blocks())
@@ -151,9 +143,7 @@ async def test_generate_appends_missing_fields() -> None:
 
     llm_client = MagicMock()
     llm_client.model = "gpt-4o-mini"
-    llm_client.complete = AsyncMock(
-        return_value=FakeLLMResponse(content=_json.dumps(mapping))
-    )
+    llm_client.complete = AsyncMock(return_value=FakeLLMResponse(content=_json.dumps(mapping)))
 
     doc_service = MagicMock()
     doc_service.extract_text_blocks = MagicMock(return_value=_make_text_blocks())
@@ -273,6 +263,7 @@ def test_user_prompt_includes_data_source_keys() -> None:
 async def test_generate_with_key_field_mappings() -> None:
     """Generated result should include key_field_mappings from LLM."""
     import json as _json
+
     from app.domain.models.form_context import DataSourceEntry
 
     context = FormContext(
@@ -319,9 +310,7 @@ async def test_generate_with_key_field_mappings() -> None:
 
     llm_client = MagicMock()
     llm_client.model = "gpt-4o-mini"
-    llm_client.complete = AsyncMock(
-        return_value=FakeLLMResponse(content=_json.dumps(mapping))
-    )
+    llm_client.complete = AsyncMock(return_value=FakeLLMResponse(content=_json.dumps(mapping)))
 
     doc_service = MagicMock()
     doc_service.extract_text_blocks = MagicMock(return_value=_make_text_blocks())
@@ -337,5 +326,5 @@ async def test_generate_with_key_field_mappings() -> None:
 
     # Specialized prompt should include mapping section
     assert "Data Source Key" in result.specialized_prompt
-    assert "\"氏名\" → Text1" in result.specialized_prompt
-    assert "\"住所\" → Text2" in result.specialized_prompt
+    assert '"氏名" → Text1' in result.specialized_prompt
+    assert '"住所" → Text2' in result.specialized_prompt

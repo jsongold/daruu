@@ -136,19 +136,13 @@ def with_retry_result(
     def decorator(func: Callable[..., T | None]) -> Callable[..., T | None]:
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> T | None:
-            last_error: Exception | None = None
-
             for attempt in range(max_retries + 1):
                 try:
                     return func(*args, **kwargs)
                 except Exception as e:
-                    last_error = e
-
                     if not is_retryable_error(e):
                         # Non-retryable error (e.g., 404) - log and return None
-                        logger.debug(
-                            f"Non-retryable error in {func.__name__}: {e}"
-                        )
+                        logger.debug(f"Non-retryable error in {func.__name__}: {e}")
                         return None
 
                     if attempt >= max_retries:

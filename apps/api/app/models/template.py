@@ -55,9 +55,7 @@ class TemplateBbox(BaseModel):
     width: float = Field(..., gt=0, description="Field width")
     height: float = Field(..., gt=0, description="Field height")
     label: str | None = Field(None, description="Human-readable label for the field")
-    field_type: FieldType = Field(
-        default=FieldType.TEXT, description="Type of input field"
-    )
+    field_type: FieldType = Field(default=FieldType.TEXT, description="Type of input field")
 
     model_config = {"frozen": True}
 
@@ -104,9 +102,7 @@ class Template(BaseModel):
     rules: tuple[TemplateRule, ...] = Field(
         default_factory=tuple, description="Validation and fill rules"
     )
-    embedding_id: str | None = Field(
-        None, description="Reference to stored visual embedding"
-    )
+    embedding_id: str | None = Field(None, description="Reference to stored visual embedding")
     preview_url: str | None = Field(None, description="URL to template preview image")
     field_count: int = Field(default=0, ge=0, description="Number of fields")
     created_at: datetime = Field(..., description="Creation timestamp")
@@ -126,12 +122,8 @@ class TemplateCreate(BaseModel):
         max_length=50,
         description="Form type identifier",
     )
-    bboxes: list[TemplateBbox] = Field(
-        default_factory=list, description="Field positions"
-    )
-    rules: list[TemplateRule] = Field(
-        default_factory=list, description="Validation rules"
-    )
+    bboxes: list[TemplateBbox] = Field(default_factory=list, description="Field positions")
+    rules: list[TemplateRule] = Field(default_factory=list, description="Validation rules")
     preview_url: str | None = Field(None, description="URL to template preview image")
     tenant_id: str | None = Field(None, description="Tenant ID for multi-tenancy")
 
@@ -189,9 +181,7 @@ class TemplateMatch(BaseModel):
     template_id: str = Field(..., description="Matched template ID")
     template_name: str = Field(..., description="Template display name")
     form_type: str = Field(..., description="Form type identifier")
-    similarity_score: float = Field(
-        ..., ge=0.0, le=1.0, description="Similarity score (0-1)"
-    )
+    similarity_score: float = Field(..., ge=0.0, le=1.0, description="Similarity score (0-1)")
     preview_url: str | None = Field(None, description="Template preview URL")
     field_count: int = Field(default=0, description="Number of fields in template")
 
@@ -201,16 +191,10 @@ class TemplateMatch(BaseModel):
 class TemplateMatchRequest(BaseModel):
     """Request to find matching templates for an uploaded page."""
 
-    page_image: bytes | None = Field(
-        None, description="Page image bytes (PNG/JPEG) for embedding"
-    )
-    page_image_ref: str | None = Field(
-        None, description="Reference to stored page image"
-    )
+    page_image: bytes | None = Field(None, description="Page image bytes (PNG/JPEG) for embedding")
+    page_image_ref: str | None = Field(None, description="Reference to stored page image")
     limit: int = Field(default=3, ge=1, le=10, description="Maximum matches to return")
-    threshold: float = Field(
-        default=0.8, ge=0.0, le=1.0, description="Minimum similarity score"
-    )
+    threshold: float = Field(default=0.8, ge=0.0, le=1.0, description="Minimum similarity score")
     tenant_id: str | None = Field(None, description="Filter by tenant")
 
     model_config = {"frozen": True}

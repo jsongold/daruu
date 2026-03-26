@@ -19,7 +19,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 # Base paths
 SCRIPT_DIR = Path(__file__).parent
 CONTRACTS_DIR = SCRIPT_DIR.parent
@@ -241,6 +240,7 @@ from pydantic import BaseModel, Field, ConfigDict
 
     # Clean up temp directory
     import shutil
+
     shutil.rmtree(temp_dir)
 
     return True

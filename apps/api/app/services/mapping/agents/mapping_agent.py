@@ -352,9 +352,7 @@ class LangChainMappingAgent:
 
         except ImportError:
             # LangChain not available, fall back to simple heuristic
-            logger.warning(
-                "LangChain not available, using fallback for resolve_mapping"
-            )
+            logger.warning("LangChain not available, using fallback for resolve_mapping")
             return self._fallback_resolve_mapping(source_field, candidates)
 
         except Exception as e:
@@ -417,7 +415,9 @@ class LangChainMappingAgent:
         # Build target ID to field mapping
         target_id_to_field = {f.id: f for f in target_fields}
         candidate_names = [
-            target_id_to_field.get(c.target_field_id, TargetField(id=c.target_field_id, name=c.target_field_id)).name
+            target_id_to_field.get(
+                c.target_field_id, TargetField(id=c.target_field_id, name=c.target_field_id)
+            ).name
             for c in candidates
         ]
 
@@ -460,9 +460,7 @@ class LangChainMappingAgent:
             )
 
         except Exception as e:
-            logger.warning(
-                "Error generating LLM question, using fallback: %s", str(e)
-            )
+            logger.warning("Error generating LLM question, using fallback: %s", str(e))
             # Fallback: generate a simple question without LLM
             return FollowupQuestion(
                 id=str(uuid4()),
@@ -574,9 +572,7 @@ class LangChainMappingAgent:
             return tuple(results)
 
         except ImportError:
-            logger.warning(
-                "LangChain not available, using fallback for batch mapping"
-            )
+            logger.warning("LangChain not available, using fallback for batch mapping")
             return ()
 
         except Exception as e:
@@ -607,7 +603,7 @@ class LangChainMappingAgent:
         for c in candidates:
             target = target_id_to_field.get(c.target_field_id)
             if target:
-                desc = f"  - ID: {target.id}, Name: \"{target.name}\""
+                desc = f'  - ID: {target.id}, Name: "{target.name}"'
                 if target.field_type:
                     desc += f", Type: {target.field_type}"
                 desc += f", Similarity Score: {c.similarity_score:.2f}"
@@ -616,13 +612,13 @@ class LangChainMappingAgent:
         prompt = f"""Source Field to Map:
   - ID: {source_field.id}
   - Name: "{source_field.name}"
-  - Type: {source_field.field_type or 'unknown'}
-  - Current Value: {json.dumps(source_field.value) if source_field.value else 'empty'}
+  - Type: {source_field.field_type or "unknown"}
+  - Current Value: {json.dumps(source_field.value) if source_field.value else "empty"}
 
 Candidate Target Fields:
 {chr(10).join(candidate_descriptions)}
 
-{f'Additional Context: {context}' if context else ''}
+{f"Additional Context: {context}" if context else ""}
 
 Based on semantic meaning, which target field best matches the source field?
 Return the target_field_id, your confidence (0.0-1.0), and brief reasoning."""
@@ -660,7 +656,7 @@ Return the target_field_id, your confidence (0.0-1.0), and brief reasoning."""
 
 Source Field:
   - Name: "{source_field.name}"
-  - Value: {json.dumps(source_field.value) if source_field.value else 'empty'}
+  - Value: {json.dumps(source_field.value) if source_field.value else "empty"}
 
 Candidate Target Fields:
 {json.dumps(candidate_info, indent=2, ensure_ascii=False)}
@@ -714,9 +710,7 @@ Create a clear, helpful question asking which target field this source should ma
             src = next((f for f in source_fields if f.id == m.source_field_id), None)
             tgt = next((f for f in target_fields if f.id == m.target_field_id), None)
             if src and tgt:
-                existing_examples.append(
-                    f'  - "{src.name}" -> "{tgt.name}"'
-                )
+                existing_examples.append(f'  - "{src.name}" -> "{tgt.name}"')
 
         prompt = f"""Map each source field to the best matching target field.
 

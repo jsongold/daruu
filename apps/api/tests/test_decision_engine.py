@@ -4,7 +4,6 @@ from datetime import datetime
 from uuid import uuid4
 
 import pytest
-
 from app.models import (
     Document,
     DocumentMeta,
@@ -689,9 +688,7 @@ class TestDecisionEngineImprovementRate:
             }
         )
 
-        result = decision_engine.decide_next_action(
-            job, None, previous_issues=previous_issues
-        )
+        result = decision_engine.decide_next_action(job, None, previous_issues=previous_issues)
 
         assert result.action == "ask"
         assert "improvement" in result.reason.lower()
@@ -732,9 +729,7 @@ class TestDecisionEngineImprovementRate:
             }
         )
 
-        result = decision_engine.decide_next_action(
-            job, None, previous_issues=previous_issues
-        )
+        result = decision_engine.decide_next_action(job, None, previous_issues=previous_issues)
 
         # Should continue as improvement is significant
         assert result.action in ("continue", "retry")

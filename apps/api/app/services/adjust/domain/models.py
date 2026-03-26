@@ -121,12 +121,7 @@ class OverflowInfo:
     @property
     def total_overflow(self) -> float:
         """Total overflow amount in all directions."""
-        return (
-            self.overflow_left
-            + self.overflow_right
-            + self.overflow_top
-            + self.overflow_bottom
-        )
+        return self.overflow_left + self.overflow_right + self.overflow_top + self.overflow_bottom
 
 
 @dataclass(frozen=True)

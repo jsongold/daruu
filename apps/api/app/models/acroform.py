@@ -62,9 +62,7 @@ class PageDimensions(BaseModel):
 class AcroFormFieldsResponse(BaseModel):
     """Response containing AcroForm fields and page information."""
 
-    has_acroform: bool = Field(
-        ..., description="Whether the PDF has AcroForm fields"
-    )
+    has_acroform: bool = Field(..., description="Whether the PDF has AcroForm fields")
     page_dimensions: list[PageDimensions] = Field(
         default_factory=list, description="Dimensions of each page"
     )
@@ -82,9 +80,7 @@ class AcroFormFieldsResponse(BaseModel):
             "examples": [
                 {
                     "has_acroform": True,
-                    "page_dimensions": [
-                        {"page": 1, "width": 595.0, "height": 842.0}
-                    ],
+                    "page_dimensions": [{"page": 1, "width": 595.0, "height": 842.0}],
                     "fields": [
                         {
                             "field_name": "氏名",

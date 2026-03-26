@@ -97,8 +97,7 @@ class PyMuPdfAdapter:
         """
         if not PYMUPDF_AVAILABLE:
             raise NotImplementedError(
-                "PyMuPDF (fitz) is not installed. "
-                "Install with: pip install PyMuPDF"
+                "PyMuPDF (fitz) is not installed. Install with: pip install PyMuPDF"
             )
 
         try:
@@ -163,8 +162,7 @@ class PyMuPdfAdapter:
         """
         if not PYMUPDF_AVAILABLE:
             raise NotImplementedError(
-                "PyMuPDF (fitz) is not installed. "
-                "Install with: pip install PyMuPDF"
+                "PyMuPDF (fitz) is not installed. Install with: pip install PyMuPDF"
             )
 
         with self._resolve_path(pdf_path) as local_path:
@@ -212,8 +210,7 @@ class PyMuPdfAdapter:
         """
         if not PYMUPDF_AVAILABLE:
             raise NotImplementedError(
-                "PyMuPDF (fitz) is not installed. "
-                "Install with: pip install PyMuPDF"
+                "PyMuPDF (fitz) is not installed. Install with: pip install PyMuPDF"
             )
 
         with self._resolve_path(pdf_path) as local_path:
@@ -228,8 +225,7 @@ class PyMuPdfAdapter:
 
                 if page_index < 0 or page_index >= doc.page_count:
                     raise ValueError(
-                        f"Page {page_number} out of range. "
-                        f"Document has {doc.page_count} pages."
+                        f"Page {page_number} out of range. Document has {doc.page_count} pages."
                     )
 
                 page = doc[page_index]
@@ -255,6 +251,7 @@ class PyMuPdfAdapter:
         """
         try:
             from PIL import Image
+
             with Image.open(file_path) as img:
                 img.verify()  # Verify it's a valid image
             return True
@@ -271,23 +268,24 @@ class PyMuPdfAdapter:
             PNG image bytes
         """
         import io
+
         from PIL import Image
 
         with Image.open(file_path) as img:
             # Convert to RGB if necessary (handles RGBA, grayscale, etc.)
-            if img.mode in ('RGBA', 'LA', 'P'):
+            if img.mode in ("RGBA", "LA", "P"):
                 # Create white background for transparency
-                background = Image.new('RGB', img.size, (255, 255, 255))
-                if img.mode == 'P':
-                    img = img.convert('RGBA')
-                background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+                background = Image.new("RGB", img.size, (255, 255, 255))
+                if img.mode == "P":
+                    img = img.convert("RGBA")
+                background.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
                 img = background
-            elif img.mode != 'RGB':
-                img = img.convert('RGB')
+            elif img.mode != "RGB":
+                img = img.convert("RGB")
 
             # Save to PNG bytes
             buffer = io.BytesIO()
-            img.save(buffer, format='PNG')
+            img.save(buffer, format="PNG")
             return buffer.getvalue()
 
     def render_page(
@@ -318,8 +316,7 @@ class PyMuPdfAdapter:
         """
         if not PYMUPDF_AVAILABLE:
             raise NotImplementedError(
-                "PyMuPDF (fitz) is not installed. "
-                "Install with: pip install PyMuPDF"
+                "PyMuPDF (fitz) is not installed. Install with: pip install PyMuPDF"
             )
 
         with self._resolve_path(pdf_path) as local_path:
@@ -343,8 +340,7 @@ class PyMuPdfAdapter:
 
                 if page_index < 0 or page_index >= doc.page_count:
                     raise ValueError(
-                        f"Page {page_number} out of range. "
-                        f"Document has {doc.page_count} pages."
+                        f"Page {page_number} out of range. Document has {doc.page_count} pages."
                     )
 
                 page = doc[page_index]

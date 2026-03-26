@@ -32,9 +32,7 @@ class ExtractRequestDTO(BaseModel):
         None,
         description="Specific fields to extract. If None, extracts all detected fields.",
     )
-    use_ocr: bool = Field(
-        default=True, description="Whether to use OCR for extraction"
-    )
+    use_ocr: bool = Field(default=True, description="Whether to use OCR for extraction")
     confidence_threshold: float = Field(
         default=0.7,
         ge=0.0,
@@ -50,9 +48,7 @@ class EvidenceDTO(BaseModel):
     """Evidence supporting an extracted value."""
 
     id: str = Field(..., description="Evidence ID")
-    kind: str = Field(
-        ..., description="Evidence kind (native_text, ocr, llm, user_input)"
-    )
+    kind: str = Field(..., description="Evidence kind (native_text, ocr, llm, user_input)")
     page: int = Field(..., ge=1, description="Page number")
     bbox: list[float] | None = Field(
         None,
@@ -72,15 +68,9 @@ class ExtractedValueDTO(BaseModel):
     field_id: str = Field(..., description="Field ID")
     value: str = Field(..., description="Extracted value")
     confidence: float = Field(..., ge=0.0, le=1.0, description="Extraction confidence")
-    source: str = Field(
-        ..., description="Source of extraction (native_text, ocr, llm)"
-    )
-    evidence: list[EvidenceDTO] = Field(
-        default_factory=list, description="Supporting evidence"
-    )
-    needs_review: bool = Field(
-        default=False, description="Whether manual review is recommended"
-    )
+    source: str = Field(..., description="Source of extraction (native_text, ocr, llm)")
+    evidence: list[EvidenceDTO] = Field(default_factory=list, description="Supporting evidence")
+    needs_review: bool = Field(default=False, description="Whether manual review is recommended")
 
     model_config = {"frozen": True}
 
@@ -99,8 +89,6 @@ class ExtractResponseDTO(BaseModel):
         default_factory=list,
         description="Field IDs that need user input",
     )
-    warnings: list[str] = Field(
-        default_factory=list, description="Any warnings generated"
-    )
+    warnings: list[str] = Field(default_factory=list, description="Any warnings generated")
 
     model_config = {"frozen": True}

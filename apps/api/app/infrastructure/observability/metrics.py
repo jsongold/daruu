@@ -41,18 +41,16 @@ from dataclasses import dataclass
 from time import time
 from typing import Any, Callable, Generator
 
-
 # Check if prometheus_client is available
 _METRICS_AVAILABLE = False
 
 try:
     from prometheus_client import (
-        CollectorRegistry,
+        CONTENT_TYPE_LATEST,
         Counter,
         Gauge,
         Histogram,
         generate_latest,
-        CONTENT_TYPE_LATEST,
     )
 
     _METRICS_AVAILABLE = True

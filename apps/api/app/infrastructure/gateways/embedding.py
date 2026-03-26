@@ -140,6 +140,7 @@ class OpenAIEmbeddingGateway:
         For true multimodal embeddings, use a Vision model pipeline instead.
         """
         import base64
+
         image_b64 = base64.b64encode(image_bytes).decode("utf-8")
         return await self.embed_text(f"image:{image_b64[:100]}")
 
@@ -170,9 +171,7 @@ class OpenAIEmbeddingGateway:
                     input=text,
                 )
                 return response.data[0].embedding
-            raise RuntimeError(
-                "Neither litellm nor a direct embedding client is available"
-            )
+            raise RuntimeError("Neither litellm nor a direct embedding client is available")
 
     async def embed_document_page(
         self,

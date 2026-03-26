@@ -86,16 +86,12 @@ class FillServiceRequestDTO(BaseModel):
     target_document_ref: str = Field(
         ..., min_length=1, description="Reference/path to the target PDF"
     )
-    fields: list[FillValueDTO] = Field(
-        ..., min_length=1, description="Fields and values to fill"
-    )
+    fields: list[FillValueDTO] = Field(..., min_length=1, description="Fields and values to fill")
     method: str = Field(
         default="auto",
         description="Fill method: auto, acroform, or overlay",
     )
-    render_params: RenderParamsDTO | None = Field(
-        None, description="Default rendering parameters"
-    )
+    render_params: RenderParamsDTO | None = Field(None, description="Default rendering parameters")
     field_params: dict[str, RenderParamsDTO] | None = Field(
         None, description="Field-specific rendering parameters"
     )
@@ -120,9 +116,7 @@ class FieldResultDTO(BaseModel):
     field_id: str = Field(..., description="Field ID")
     success: bool = Field(..., description="Whether field was filled")
     value_written: str | None = Field(None, description="Value that was written")
-    issues: list[FillIssueDTO] = Field(
-        default_factory=list, description="Issues for this field"
-    )
+    issues: list[FillIssueDTO] = Field(default_factory=list, description="Issues for this field")
 
     model_config = {"frozen": True}
 
@@ -139,9 +133,7 @@ class FillServiceResponseDTO(BaseModel):
     field_results: list[FieldResultDTO] = Field(
         default_factory=list, description="Per-field results"
     )
-    errors: list[str] = Field(
-        default_factory=list, description="Fatal errors encountered"
-    )
+    errors: list[str] = Field(default_factory=list, description="Fatal errors encountered")
 
     model_config = {"frozen": True}
 
@@ -438,8 +430,7 @@ def _validate_download_path(ref: str) -> Path:
 
         # Check if the path is within any allowed base path
         is_allowed = any(
-            str(resolved_path).startswith(allowed_base)
-            for allowed_base in ALLOWED_DOWNLOAD_PATHS
+            str(resolved_path).startswith(allowed_base) for allowed_base in ALLOWED_DOWNLOAD_PATHS
         )
 
         if not is_allowed:

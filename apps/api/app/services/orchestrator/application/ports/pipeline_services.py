@@ -16,16 +16,16 @@ Ingest -> Structure/Labelling -> Mapping -> Extract -> Adjust -> Fill -> Review
 
 from typing import Protocol
 
+from app.models.adjust.models import AdjustRequest, AdjustResult
+from app.models.extract.models import ExtractRequest, ExtractResult
+from app.models.fill.models import FillRequest, FillResult
 from app.models.ingest.models import IngestRequest, IngestResult
+from app.models.mapping.models import MappingRequest, MappingResult
+from app.models.review.models import ReviewRequest, ReviewResult
 from app.models.structure_labelling.models import (
     StructureLabellingRequest,
     StructureLabellingResult,
 )
-from app.models.mapping.models import MappingRequest, MappingResult
-from app.models.extract.models import ExtractRequest, ExtractResult
-from app.models.adjust.models import AdjustRequest, AdjustResult
-from app.models.fill.models import FillRequest, FillResult
-from app.models.review.models import ReviewRequest, ReviewResult
 
 
 class IngestServicePort(Protocol):

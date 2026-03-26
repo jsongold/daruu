@@ -8,18 +8,11 @@ Tests the agent contracts and their proposal/response validation:
 Uses mock implementations to validate the contract interfaces.
 """
 
-from datetime import datetime
 from uuid import uuid4
 
 import pytest
-
 from app.models import BBox, FieldModel, FieldType
-from app.models.mapping import (
-    FollowupQuestion,
-    MappingItem,
-    SourceField,
-    TargetField,
-)
+
 # Agent protocol interfaces - imported for type reference only
 # Actual implementations are mocked in tests
 from app.services.structure_labelling.domain.models import (
@@ -31,8 +24,6 @@ from app.services.structure_labelling.domain.models import (
     TableCandidate,
     TextBlock,
 )
-from app.services.mapping.domain import MappingCandidate, MappingReason
-
 
 # ============================================================================
 # Mock Agent Implementations
@@ -69,14 +60,16 @@ class MockFieldLabellingAgent:
         context: dict | None = None,
     ) -> tuple[list[LinkedField], list[StructureEvidence]]:
         """Mock label-to-box linking."""
-        self.calls.append({
-            "page": page,
-            "label_candidates": label_candidates,
-            "box_candidates": box_candidates,
-            "table_candidates": table_candidates,
-            "text_blocks": text_blocks,
-            "context": context,
-        })
+        self.calls.append(
+            {
+                "page": page,
+                "label_candidates": label_candidates,
+                "box_candidates": box_candidates,
+                "table_candidates": table_candidates,
+                "text_blocks": text_blocks,
+                "context": context,
+            }
+        )
 
         if self.should_fail:
             raise RuntimeError("Mock agent failure")
@@ -150,12 +143,14 @@ class MockValueExtractionAgent:
         evidence: list[dict] | None = None,
     ) -> dict:
         """Mock value extraction."""
-        self.calls.append({
-            "field": field,
-            "ocr_tokens": ocr_tokens,
-            "pdf_text": pdf_text,
-            "evidence": evidence,
-        })
+        self.calls.append(
+            {
+                "field": field,
+                "ocr_tokens": ocr_tokens,
+                "pdf_text": pdf_text,
+                "evidence": evidence,
+            }
+        )
 
         if self.should_fail:
             raise RuntimeError("Mock extraction failure")
@@ -200,12 +195,14 @@ class MockMappingAgent:
         user_rules: dict | None = None,
     ) -> dict:
         """Mock mapping generation."""
-        self.calls.append({
-            "source_fields": source_fields,
-            "target_fields": target_fields,
-            "template_history": template_history,
-            "user_rules": user_rules,
-        })
+        self.calls.append(
+            {
+                "source_fields": source_fields,
+                "target_fields": target_fields,
+                "template_history": template_history,
+                "user_rules": user_rules,
+            }
+        )
 
         if self.should_fail:
             raise RuntimeError("Mock mapping failure")
@@ -220,12 +217,14 @@ class MockMappingAgent:
         # Generate mappings for matching fields
         mappings = []
         for src, tgt in zip(source_fields, target_fields):
-            mappings.append({
-                "source_field_id": src.id,
-                "target_field_id": tgt.id,
-                "confidence": self.confidence,
-                "transform": None,
-            })
+            mappings.append(
+                {
+                    "source_field_id": src.id,
+                    "target_field_id": tgt.id,
+                    "confidence": self.confidence,
+                    "transform": None,
+                }
+            )
 
         return {
             "mappings": mappings,
@@ -383,9 +382,7 @@ class TestFieldLabellingAgentProposals:
     """Test FieldLabellingAgent contract validation."""
 
     @pytest.mark.asyncio
-    async def test_returns_linked_fields(
-        self, sample_label_candidates, sample_box_candidates
-    ):
+    async def test_returns_linked_fields(self, sample_label_candidates, sample_box_candidates):
         """Test agent returns linked fields for label-box pairs."""
         agent = MockFieldLabellingAgent(confidence=0.85)
 
@@ -399,9 +396,7 @@ class TestFieldLabellingAgentProposals:
             context=None,
         )
 
-        assert len(fields) == min(
-            len(sample_label_candidates), len(sample_box_candidates)
-        )
+        assert len(fields) == min(len(sample_label_candidates), len(sample_box_candidates))
         assert len(evidence) == len(fields)
 
     @pytest.mark.asyncio
@@ -430,9 +425,7 @@ class TestFieldLabellingAgentProposals:
             assert 0.0 <= field.confidence <= 1.0
 
     @pytest.mark.asyncio
-    async def test_evidence_references_field(
-        self, sample_label_candidates, sample_box_candidates
-    ):
+    async def test_evidence_references_field(self, sample_label_candidates, sample_box_candidates):
         """Test that evidence correctly references field."""
         agent = MockFieldLabellingAgent()
 
@@ -505,9 +498,7 @@ class TestFieldLabellingAgentProposals:
         assert evidence == []
 
     @pytest.mark.asyncio
-    async def test_records_call_details(
-        self, sample_label_candidates, sample_box_candidates
-    ):
+    async def test_records_call_details(self, sample_label_candidates, sample_box_candidates):
         """Test that agent records call details for auditing."""
         agent = MockFieldLabellingAgent()
 
@@ -620,9 +611,7 @@ class TestMappingAgentProposals:
     """Test MappingAgent contract validation."""
 
     @pytest.mark.asyncio
-    async def test_returns_mappings(
-        self, sample_source_fields, sample_target_fields
-    ):
+    async def test_returns_mappings(self, sample_source_fields, sample_target_fields):
         """Test agent returns mappings for fields."""
         agent = MockMappingAgent(confidence=0.9)
 
@@ -653,9 +642,7 @@ class TestMappingAgentProposals:
             assert 0.0 <= mapping["confidence"] <= 1.0
 
     @pytest.mark.asyncio
-    async def test_returns_empty_for_no_matches(
-        self, sample_source_fields, sample_target_fields
-    ):
+    async def test_returns_empty_for_no_matches(self, sample_source_fields, sample_target_fields):
         """Test agent returns empty mappings when no matches found."""
         agent = MockMappingAgent(return_none=True)
 
@@ -667,14 +654,10 @@ class TestMappingAgentProposals:
         assert result["mappings"] == []
 
     @pytest.mark.asyncio
-    async def test_uses_template_history(
-        self, sample_source_fields, sample_target_fields
-    ):
+    async def test_uses_template_history(self, sample_source_fields, sample_target_fields):
         """Test agent uses template history when provided."""
         agent = MockMappingAgent()
-        template_history = [
-            {"source": "Name", "target": "Full Name", "frequency": 10}
-        ]
+        template_history = [{"source": "Name", "target": "Full Name", "frequency": 10}]
 
         await agent.generate_mappings(
             source_fields=sample_source_fields,
@@ -685,9 +668,7 @@ class TestMappingAgentProposals:
         assert agent.calls[0]["template_history"] == template_history
 
     @pytest.mark.asyncio
-    async def test_uses_user_rules(
-        self, sample_source_fields, sample_target_fields
-    ):
+    async def test_uses_user_rules(self, sample_source_fields, sample_target_fields):
         """Test agent uses user rules when provided."""
         agent = MockMappingAgent()
         user_rules = {"Name": "Full Name"}
@@ -735,9 +716,7 @@ class TestAgentErrorHandling:
             await agent.extract_value(field=sample_field_model)
 
     @pytest.mark.asyncio
-    async def test_mapping_agent_failure(
-        self, sample_source_fields, sample_target_fields
-    ):
+    async def test_mapping_agent_failure(self, sample_source_fields, sample_target_fields):
         """Test handling of mapping agent failure."""
         agent = MockMappingAgent(should_fail=True)
 

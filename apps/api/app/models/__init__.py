@@ -1,5 +1,11 @@
 """Pydantic models for the API."""
 
+from app.models.annotation import (
+    AnnotationBBox,
+    AnnotationPairCreate,
+    AnnotationPairModel,
+    AnnotationPairsResponse,
+)
 from app.models.common import (
     ApiResponse,
     BBox,
@@ -35,6 +41,14 @@ from app.models.health import (
     HealthResponse,
     ReadinessResponse,
 )
+from app.models.ingest import (
+    IngestError,
+    IngestErrorCode,
+    IngestRequest,
+    IngestResult,
+    PageMeta,
+    RenderedPage,
+)
 from app.models.job import (
     Activity,
     ActivityAction,
@@ -54,24 +68,6 @@ from app.models.job import (
     RunRequest,
     RunResponse,
 )
-from app.models.orchestrator import (
-    NextAction,
-    NextActionType,
-    OrchestratorConfig,
-    PipelineStage,
-    StageResult,
-    get_next_stage,
-    get_stage_index,
-    PIPELINE_SEQUENCE,
-)
-from app.models.ingest import (
-    IngestError,
-    IngestErrorCode,
-    IngestRequest,
-    IngestResult,
-    PageMeta,
-    RenderedPage,
-)
 from app.models.mapping import (
     FollowupQuestion,
     MappingItem,
@@ -80,6 +76,16 @@ from app.models.mapping import (
     SourceField,
     TargetField,
     UserRule,
+)
+from app.models.orchestrator import (
+    PIPELINE_SEQUENCE,
+    NextAction,
+    NextActionType,
+    OrchestratorConfig,
+    PipelineStage,
+    StageResult,
+    get_next_stage,
+    get_stage_index,
 )
 from app.models.review import (
     ConfidenceUpdate,
@@ -96,14 +102,10 @@ from app.models.task import (
     TaskStatus,
     TaskStatusResponse,
 )
-from app.models.annotation import (
-    AnnotationBBox,
-    AnnotationPairCreate,
-    AnnotationPairModel,
-    AnnotationPairsResponse,
-)
 from app.models.template import (
     FieldType as TemplateFieldType,
+)
+from app.models.template import (
     RuleType,
     Template,
     TemplateBbox,
