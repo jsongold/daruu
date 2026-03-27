@@ -250,6 +250,25 @@ class FillContext(BaseModel):
     model_config = {"frozen": True}
 
 
+class MapContext(BaseModel):
+    fields: list[FormField] = Field(default_factory=list)
+    text_blocks: list[TextBlock] = Field(default_factory=list)
+    confirmed_annotations: list[Annotation] = Field(default_factory=list)
+    top_k: int = 7
+    model_config = {"frozen": True}
+
+
+class RulesContext(BaseModel):
+    fields: list[FormField] = Field(default_factory=list)
+    text_blocks: list[TextBlock] = Field(default_factory=list)
+    model_config = {"frozen": True}
+
+
+class AskContext(BaseModel):
+    rules: list[RuleItem] = Field(default_factory=list)
+    model_config = {"frozen": True}
+
+
 class MapResult(BaseModel):
     document_id: str
     maps: list[FieldLabelMap]

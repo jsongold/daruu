@@ -4,24 +4,19 @@ import base64
 import difflib
 import json
 import logging
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Generator
 from uuid import uuid4
 
 import fitz  # PyMuPDF
 from app.config import get_settings
 from app.infrastructure.supabase.client import get_supabase_client
 from app.context import ContextService
-from app.prompts import (
-    FILL_SYSTEM_PROMPT,
-    MAP_SYSTEM_PROMPT,
-    UNDERSTAND_SYSTEM_PROMPT,
-    build_fill_prompt,
-    build_fill_prompt_v2,
-    build_map_prompt,
-    build_understand_prompt,
-)
+from app.prompts import AskPrompt, FillPrompt, MapPrompt, RulesPrompt
 from app.models import (
+    AskContext,
     Annotation,
     BBox,
     Conversation,
@@ -32,11 +27,13 @@ from app.models import (
     Form,
     FormField,
     HistoryMessage,
+    MapContext,
     MapResult,
     MapRun,
     Mapping,
     Mode,
     RuleItem,
+    RulesContext,
     RuleType,
     Rules,
     TextBlock,
@@ -44,6 +41,20 @@ from app.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@contextmanager
+def _log_step(step: str, **ctx: object) -> Generator[None, None, None]:
+    """Context manager that logs start/success/error for a named step."""
+    label = " ".join(f"{k}={v}" for k, v in ctx.items())
+    logger.info("%s started: %s", step, label)
+    try:
+        yield
+        logger.info("%s succeeded: %s", step, label)
+    except Exception as e:
+        logger.error("%s failed: %s | %s", step, label, e)
+        raise
+
 
 _FIELD_TYPE_MAP: dict[str, FieldType] = {
     "text": FieldType.TEXT,
@@ -365,11 +376,14 @@ class SessionService:
         ).eq("id", session_id).execute()
 
     def add_history(self, session_id: str, role: str, content: str) -> None:
+        self.add_history_batch(session_id, [(role, content)])
+
+    def add_history_batch(self, session_id: str, messages: list[tuple[str, str]]) -> None:
         ctx = self.get(session_id)
         if ctx is None:
-            logger.warning("Session %s not found for add_history", session_id)
+            logger.warning("Session %s not found for add_history_batch", session_id)
             return
-        updated = list(ctx.history) + [HistoryMessage(role=role, content=content)]
+        updated = list(ctx.history) + [HistoryMessage(role=r, content=c) for r, c in messages]
         supabase = get_supabase_client()
         supabase.table("sessions").update(
             {
@@ -421,7 +435,8 @@ class UnderstandService:
             raise ValueError("Session has no associated document")
 
         fields, text_blocks = self._document_service.get_fields_and_text_blocks(ctx.document_id)
-        prompt = build_understand_prompt(fields, text_blocks)
+        rules_ctx = RulesContext(fields=fields, text_blocks=text_blocks)
+        prompt = RulesPrompt.build(rules_ctx)
 
         from openai import OpenAI
         client = OpenAI(api_key=settings.openai_api_key)
@@ -429,8 +444,8 @@ class UnderstandService:
         response = client.chat.completions.create(
             model=settings.openai_model,
             messages=[
-                {"role": "system", "content": UNDERSTAND_SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
+                {"role": "system", "content": prompt.system},
+                {"role": "user", "content": prompt.user},
             ],
             response_format={"type": "json_object"},
         )
@@ -625,30 +640,26 @@ class MapService:
         fields, text_blocks = doc_service.get_fields_and_text_blocks(document_id)
         annotations = AnnotationService().list_by_document(document_id)
 
-        prompt = build_map_prompt(fields, text_blocks, annotations)
-        logger.info("Map prompt: document=%s fields=%d prompt_chars=%d", document_id, len(fields), len(prompt))
-
+        map_ctx = MapContext(fields=fields, text_blocks=text_blocks, confirmed_annotations=annotations)
+        prompt = MapPrompt.build(map_ctx)
         from openai import OpenAI
-        import time
         client = OpenAI(api_key=settings.openai_api_key)
-        t0 = time.monotonic()
-        response = client.chat.completions.create(
-            model=settings.openai_model,
-            messages=[
-                {"role": "system", "content": MAP_SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ],
-            response_format={"type": "json_object"},
-            max_tokens=4096,
-        )
-        logger.info("Map LLM done: document=%s elapsed=%.1fs", document_id, time.monotonic() - t0)
+
+        with _log_step("map.llm", document=document_id, fields=len(fields), prompt_chars=len(prompt.user)):
+            response = client.chat.completions.create(
+                model=settings.openai_model,
+                messages=[
+                    {"role": "system", "content": prompt.system},
+                    {"role": "user", "content": prompt.user},
+                ],
+                response_format={"type": "json_object"},
+            )
 
         raw = response.choices[0].message.content or "{}"
-        try:
+        with _log_step("map.parse", document=document_id):
             parsed = json.loads(raw)
             items = parsed.get("results", [])
-        except Exception:
-            items = []
+            logger.info("map.parse items=%d raw_chars=%d", len(items), len(raw))
 
         field_map = {f.id: f for f in fields}
         now = datetime.now(timezone.utc)
@@ -669,8 +680,12 @@ class MapService:
                 created_at=now,
             ))
 
+        if not results:
+            logger.warning("map.save skipped: document=%s items=%d fields=%d (no matches)", document_id, len(items), len(fields))
+            return results
+
         supabase = get_supabase_client()
-        if results:
+        with _log_step("map.save", document=document_id, rows=len(results)):
             supabase.table("field_label_maps").insert([
                 {
                     "id": r.id,
@@ -720,27 +735,19 @@ class MapService:
             )
             return self._parse_map_rows(result.data if hasattr(result, "data") else [])
 
-        # Find the latest run's created_at, then fetch all rows for it
-        latest = (
-            supabase.table("field_label_maps")
-            .select("created_at")
-            .eq("document_id", document_id)
-            .order("created_at", desc=True)
-            .limit(1)
-            .execute()
-        )
-        rows = latest.data if hasattr(latest, "data") else []
-        if not rows:
-            return []
-        latest_ts = rows[0]["created_at"]
+        # Fetch all rows ordered by created_at desc, filter to latest run client-side
         result = (
             supabase.table("field_label_maps")
             .select("*")
             .eq("document_id", document_id)
-            .eq("created_at", latest_ts)
+            .order("created_at", desc=True)
             .execute()
         )
-        return self._parse_map_rows(result.data if hasattr(result, "data") else [])
+        rows = result.data if hasattr(result, "data") else []
+        if not rows:
+            return []
+        latest_ts = rows[0]["created_at"]
+        return self._parse_map_rows([r for r in rows if r.get("created_at") == latest_ts])
 
     def list_runs(self, document_id: str) -> list[MapRun]:
         """Return one summary per past run, newest first."""
@@ -866,24 +873,23 @@ class FillService:
             raise ValueError("No document associated with session")
 
         fill_context = self._build_context(ctx, user_message)
-        prompt = build_fill_prompt_v2(fill_context)
+        prompt = FillPrompt.build(fill_context)
 
         from openai import OpenAI
 
         client = OpenAI(api_key=settings.openai_api_key)
-        self._session_service.add_history(session_id, "user", prompt)
 
         response = client.chat.completions.create(
             model=settings.openai_model,
             messages=[
-                {"role": "system", "content": FILL_SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
+                {"role": "system", "content": prompt.system},
+                {"role": "user", "content": prompt.user},
             ],
             response_format={"type": "json_object"},
         )
 
         content = response.choices[0].message.content or "{}"
-        self._session_service.add_history(session_id, "agent", content)
+        self._session_service.add_history_batch(session_id, [("user", prompt.user), ("agent", content)])
 
         result = json.loads(content)
 
@@ -902,14 +908,12 @@ class FillService:
         if ctx is None:
             raise ValueError(f"Session {session_id} not found")
 
+        ask_ctx = AskContext(rules=list(ctx.rules.items))
+        prompt = AskPrompt.build(ask_ctx)
+        parsed = json.loads(prompt.user)
         questions = [
-            {
-                "field_id": None,
-                "question": item.question,
-                "options": list(item.options),
-            }
-            for item in ctx.rules.items
-            if item.type == RuleType.CONDITIONAL and item.question
+            {"field_id": None, **q}
+            for q in parsed["questions"]
         ]
         return {"questions": questions}
 
