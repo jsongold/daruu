@@ -16,9 +16,16 @@ from app.main import app
 
 @pytest.fixture(autouse=True)
 def reset_repositories() -> None:
-    """Reset all in-memory repositories before each test."""
-    import app.infrastructure.repositories.memory_repository as repo_module
-    from app.infrastructure.repositories import factory
+    """Reset all in-memory repositories before each test.
+
+    Skipped silently when old repository modules are unavailable
+    (e.g. on the simple-version branch).
+    """
+    try:
+        import app.infrastructure.repositories.memory_repository as repo_module
+        from app.infrastructure.repositories import factory
+    except (ImportError, ModuleNotFoundError):
+        return
 
     # Clear factory singletons
     factory.clear_repository_singletons()

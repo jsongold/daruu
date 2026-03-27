@@ -19,6 +19,7 @@ BUCKET_DOCUMENTS = "documents"
 BUCKET_PREVIEWS = "previews"
 BUCKET_CROPS = "crops"
 BUCKET_OUTPUTS = "outputs"
+BUCKET_RULEBOOKS = "rulebooks"
 
 
 @dataclass

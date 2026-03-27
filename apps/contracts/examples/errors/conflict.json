@@ -1,9 +1,0 @@
-{
-  "$schema": "../../schemas/error.json#/definitions/ConflictErrorResponse",
-  "_description": "Conflict error when trying to run an already running job",
-  "success": false,
-  "error": {
-    "code": "CONFLICT",
-    "message": "Job is already running"
-  }
-}

@@ -100,10 +100,6 @@ def get_supabase_config() -> SupabaseConfig:
     return SupabaseConfig(
         url=settings.supabase_url,
         secret_key=settings.supabase_secret_key,
-        bucket_documents=settings.storage_bucket_documents,
-        bucket_previews=settings.storage_bucket_previews,
-        bucket_crops=settings.storage_bucket_crops,
-        bucket_outputs=settings.storage_bucket_outputs,
     )
 
 
