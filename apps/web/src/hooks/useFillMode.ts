@@ -1,7 +1,7 @@
 import { useCallback } from "react"
 import { formClient } from "../api/formClient"
 import type { AgentQuestion, FormField, Mode } from "../api/formClient"
-import type { ActivityEntry } from "../components/InfoChat"
+import type { ChatWindow } from "../lib/ChatWindow"
 
 interface Args {
   sessionId: string | null
@@ -13,7 +13,7 @@ interface Args {
   setAskHistory: React.Dispatch<React.SetStateAction<Array<{ role: string; content: string }>>>
   setPendingQuestions: React.Dispatch<React.SetStateAction<AgentQuestion[]>>
   setError: (msg: string | null) => void
-  addActivity: (role: ActivityEntry["role"], text: string) => void
+  chatWindow: ChatWindow
 }
 
 export function useFillMode({
@@ -26,7 +26,7 @@ export function useFillMode({
   setAskHistory,
   setPendingQuestions,
   setError,
-  addActivity,
+  chatWindow,
 }: Args) {
   const handleFill = useCallback(
     async (userMessage?: string) => {
@@ -37,7 +37,9 @@ export function useFillMode({
 
       if (userMessage) {
         setAskHistory((prev) => [...prev, { role: "user", content: userMessage }])
-        addActivity("user", userMessage)
+        chatWindow.add("user", userMessage)
+      } else {
+        chatWindow.add("system", "Fill started...")
       }
 
       try {
@@ -52,15 +54,16 @@ export function useFillMode({
           )
           for (const item of result.fields) {
             const fieldName = fields.find((f) => f.id === item.field_id)?.name ?? item.field_id
-            addActivity("system", `Filled "${fieldName}" = "${item.value}"`)
+            chatWindow.add("agent", `Filled "${fieldName}" = "${item.value}"`)
           }
+          chatWindow.add("system", `Fill complete: ${result.fields.length} fields filled`)
         }
 
         if (result.ask.length > 0) {
           setPendingQuestions(result.ask)
           const combinedQuestion = result.ask.map((q) => q.question).join("\n")
           setAskHistory((prev) => [...prev, { role: "agent", content: combinedQuestion }])
-          addActivity("agent", combinedQuestion)
+          chatWindow.add("agent", combinedQuestion)
           setIsFilling(false)
           setMode("preview")
           return
@@ -69,13 +72,15 @@ export function useFillMode({
         setPendingQuestions([])
         setMode("preview")
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Fill failed")
+        const msg = err instanceof Error ? err.message : "Fill failed"
+        setError(msg)
+        chatWindow.add("system", `Fill failed: ${msg}`)
         setMode("preview")
       } finally {
         setIsFilling(false)
       }
     },
-    [sessionId, fields, setFields, setMode, setIsFilling, setAskHistory, setPendingQuestions, setError, addActivity]
+    [sessionId, fields, setFields, setMode, setIsFilling, setAskHistory, setPendingQuestions, setError, chatWindow]
   )
 
   const handleAskReply = useCallback(

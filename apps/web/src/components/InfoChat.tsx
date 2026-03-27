@@ -1,15 +1,9 @@
 import { useRef, useEffect } from "react"
 import { ChatBubble } from "./ChatBubble"
 import { ChatInput } from "./ChatInput"
+export type { ActivityRole, ActivityEntry } from "../lib/ChatWindow"
 
-export type ActivityRole = "user" | "agent" | "system"
-
-export interface ActivityEntry {
-  id: string
-  role: ActivityRole
-  text: string
-  timestamp: string
-}
+import type { ActivityEntry } from "../lib/ChatWindow"
 
 interface Props {
   entries: ActivityEntry[]

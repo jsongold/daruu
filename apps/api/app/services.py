@@ -11,17 +11,20 @@ from uuid import uuid4
 import fitz  # PyMuPDF
 from app.config import get_settings
 from app.infrastructure.supabase.client import get_supabase_client
+from app.context import ContextService
 from app.prompts import (
     FILL_SYSTEM_PROMPT,
     MAP_SYSTEM_PROMPT,
     UNDERSTAND_SYSTEM_PROMPT,
     build_fill_prompt,
+    build_fill_prompt_v2,
     build_map_prompt,
     build_understand_prompt,
 )
 from app.models import (
     Annotation,
     BBox,
+    Conversation,
     ContextWindow,
     CreateAnnotationRequest,
     FieldLabelMap,
@@ -30,6 +33,7 @@ from app.models import (
     FormField,
     HistoryMessage,
     MapResult,
+    MapRun,
     Mapping,
     Mode,
     RuleItem,
@@ -289,7 +293,7 @@ class AnnotationService:
 class SessionService:
     """Manages ContextWindow sessions in Supabase."""
 
-    def create(self, document_id: str, user_info: UserInfo, rules: Rules) -> ContextWindow:
+    def create(self, document_id: str | None, user_info: UserInfo, rules: Rules) -> ContextWindow:
         session_id = str(uuid4())
         now = datetime.now(timezone.utc)
 
@@ -347,7 +351,14 @@ class SessionService:
             logger.error("Failed to parse session %s: %s", session_id, e)
             return None
 
+    def update_document(self, session_id: str, document_id: str) -> None:
+        supabase = get_supabase_client()
+        supabase.table("sessions").update(
+            {"document_id": document_id, "updated_at": datetime.now(timezone.utc).isoformat()}
+        ).eq("id", session_id).execute()
+
     def update_mode(self, session_id: str, mode: Mode) -> None:
+        logger.info("Mode transition: session=%s mode=%s", session_id, mode.value)
         supabase = get_supabase_client()
         supabase.table("sessions").update(
             {"mode": mode.value, "updated_at": datetime.now(timezone.utc).isoformat()}
@@ -615,9 +626,12 @@ class MapService:
         annotations = AnnotationService().list_by_document(document_id)
 
         prompt = build_map_prompt(fields, text_blocks, annotations)
+        logger.info("Map prompt: document=%s fields=%d prompt_chars=%d", document_id, len(fields), len(prompt))
 
         from openai import OpenAI
+        import time
         client = OpenAI(api_key=settings.openai_api_key)
+        t0 = time.monotonic()
         response = client.chat.completions.create(
             model=settings.openai_model,
             messages=[
@@ -625,13 +639,14 @@ class MapService:
                 {"role": "user", "content": prompt},
             ],
             response_format={"type": "json_object"},
+            max_tokens=4096,
         )
+        logger.info("Map LLM done: document=%s elapsed=%.1fs", document_id, time.monotonic() - t0)
 
         raw = response.choices[0].message.content or "{}"
         try:
             parsed = json.loads(raw)
-            # LLM may return {"results": [...]} or a bare array wrapped in a key
-            items = parsed if isinstance(parsed, list) else parsed.get("results", parsed.get("fields", []))
+            items = parsed.get("results", [])
         except Exception:
             items = []
 
@@ -654,9 +669,7 @@ class MapService:
                 created_at=now,
             ))
 
-        # Persist: delete old auto maps, insert new ones
         supabase = get_supabase_client()
-        supabase.table("field_label_maps").delete().eq("document_id", document_id).eq("source", "auto").execute()
         if results:
             supabase.table("field_label_maps").insert([
                 {
@@ -675,16 +688,7 @@ class MapService:
 
         return results
 
-    def list_by_document(self, document_id: str) -> list[FieldLabelMap]:
-        supabase = get_supabase_client()
-        result = (
-            supabase.table("field_label_maps")
-            .select("*")
-            .eq("document_id", document_id)
-            .order("created_at", desc=True)
-            .execute()
-        )
-        rows = result.data if hasattr(result, "data") else []
+    def _parse_map_rows(self, rows: list[dict]) -> list[FieldLabelMap]:
         maps: list[FieldLabelMap] = []
         for row in rows:
             try:
@@ -703,6 +707,117 @@ class MapService:
                 logger.warning("Failed to parse field_label_map row %s: %s", row.get("id"), e)
         return maps
 
+    def list_by_document(self, document_id: str, created_at: str | None = None) -> list[FieldLabelMap]:
+        """Return maps for a document. If created_at is given, return that run; otherwise return the latest run."""
+        supabase = get_supabase_client()
+        if created_at:
+            result = (
+                supabase.table("field_label_maps")
+                .select("*")
+                .eq("document_id", document_id)
+                .eq("created_at", created_at)
+                .execute()
+            )
+            return self._parse_map_rows(result.data if hasattr(result, "data") else [])
+
+        # Find the latest run's created_at, then fetch all rows for it
+        latest = (
+            supabase.table("field_label_maps")
+            .select("created_at")
+            .eq("document_id", document_id)
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        rows = latest.data if hasattr(latest, "data") else []
+        if not rows:
+            return []
+        latest_ts = rows[0]["created_at"]
+        result = (
+            supabase.table("field_label_maps")
+            .select("*")
+            .eq("document_id", document_id)
+            .eq("created_at", latest_ts)
+            .execute()
+        )
+        return self._parse_map_rows(result.data if hasattr(result, "data") else [])
+
+    def list_runs(self, document_id: str) -> list[MapRun]:
+        """Return one summary per past run, newest first."""
+        supabase = get_supabase_client()
+        result = (
+            supabase.table("field_label_maps")
+            .select("created_at, label_text")
+            .eq("document_id", document_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        rows = result.data if hasattr(result, "data") else []
+
+        # Group by created_at
+        from collections import defaultdict
+        groups: dict[str, list] = defaultdict(list)
+        for row in rows:
+            ts = row.get("created_at")
+            if ts:
+                groups[ts].append(row)
+
+        runs: list[MapRun] = []
+        for ts in sorted(groups.keys(), reverse=True):
+            group = groups[ts]
+            runs.append(MapRun(
+                created_at=datetime.fromisoformat(ts),
+                field_count=len(group),
+                identified_count=sum(1 for r in group if r.get("label_text")),
+            ))
+        return runs
+
+
+class ConversationService:
+    """Persists and retrieves activity log entries for a session."""
+
+    def add(self, session_id: str, role: str, content: str) -> Conversation:
+        conv = Conversation(
+            id=str(uuid4()),
+            session_id=session_id,
+            role=role,
+            content=content,
+            created_at=datetime.now(timezone.utc),
+        )
+        supabase = get_supabase_client()
+        supabase.table("conversations").insert({
+            "id": conv.id,
+            "session_id": conv.session_id,
+            "role": conv.role,
+            "content": conv.content,
+            "created_at": conv.created_at.isoformat(),
+        }).execute()
+        return conv
+
+    def list_by_session(self, session_id: str) -> list[Conversation]:
+        supabase = get_supabase_client()
+        result = (
+            supabase.table("conversations")
+            .select("*")
+            .eq("session_id", session_id)
+            .order("created_at")
+            .execute()
+        )
+        rows = result.data if hasattr(result, "data") else []
+        convs: list[Conversation] = []
+        for row in rows:
+            try:
+                convs.append(Conversation(
+                    id=row["id"],
+                    session_id=row["session_id"],
+                    role=row["role"],
+                    content=row["content"],
+                    created_at=datetime.fromisoformat(row["created_at"]) if row.get("created_at") else None,
+                ))
+            except Exception as e:
+                logger.warning("Failed to parse conversation row %s: %s", row.get("id"), e)
+        return convs
+
 
 class FillService:
     """Drives the fill pipeline: build prompt, call OpenAI."""
@@ -710,12 +825,35 @@ class FillService:
     def __init__(self) -> None:
         self._session_service = SessionService()
         self._annotation_service = AnnotationService()
+        self._mapping_service = MappingService()
         self._map_service = MapService()
+        self._context_service = ContextService()
+
+    def _build_context(self, ctx: ContextWindow, user_message: str | None = None):
+        """Gather all data and delegate to ContextService."""
+        doc_id = ctx.document_id or ""
+        doc_service = DocumentService()
+        fields, text_blocks = doc_service.get_fields_and_text_blocks(doc_id)
+        annotations = self._annotation_service.list_by_document(doc_id)
+        field_label_maps = self._map_service.list_by_document(doc_id)
+        mappings = self._mapping_service.list_by_session(ctx.session_id)
+
+        return self._context_service.build(
+            form_fields=fields,
+            text_blocks=text_blocks,
+            annotations=annotations,
+            field_label_maps=field_label_maps,
+            mappings=mappings,
+            user_info=ctx.user_info.data,
+            rules=list(ctx.rules.items),
+            history=list(ctx.history),
+            user_message=user_message,
+        )
 
     def fill(
         self, session_id: str, user_message: str | None = None
     ) -> dict:
-        """Run fill and return {fields: [{field_id, value}], ask: [{field_id, question, options}]}."""
+        """Run fill and return {fields: [{field_id, value}], ask: []}."""
         settings = get_settings()
 
         if not settings.openai_api_key:
@@ -724,18 +862,11 @@ class FillService:
         ctx = self._session_service.get(session_id)
         if ctx is None:
             raise ValueError(f"Session {session_id} not found")
+        if not ctx.document_id:
+            raise ValueError("No document associated with session")
 
-        if ctx.form is None and ctx.document_id:
-            fields, _ = DocumentService().get_fields_and_text_blocks(ctx.document_id)
-            ctx = ContextWindow(
-                **{**ctx.model_dump(), "form": Form(id=ctx.document_id, document_id=ctx.document_id, fields=fields, page_count=1)}
-            )
-        if ctx.form is None:
-            raise ValueError("No form associated with session")
-
-        annotations = self._annotation_service.list_by_document(ctx.document_id or "")
-        field_label_maps = self._map_service.list_by_document(ctx.document_id or "")
-        prompt = build_fill_prompt(ctx, annotations, field_label_maps, user_message)
+        fill_context = self._build_context(ctx, user_message)
+        prompt = build_fill_prompt_v2(fill_context)
 
         from openai import OpenAI
 
@@ -763,7 +894,7 @@ class FillService:
             if field_id and value is not None:
                 filled.append({"field_id": field_id, "value": str(value)})
 
-        return {"fields": filled}
+        return {"fields": filled, "ask": []}
 
     def ask(self, session_id: str) -> dict:
         """Return pre-classified conditional questions from the rulebook. No LLM call."""

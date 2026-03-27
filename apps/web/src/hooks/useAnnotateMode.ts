@@ -1,6 +1,7 @@
 import { useCallback } from "react"
 import { formClient } from "../api/formClient"
 import type { FormField, TextBlock, Annotation, Mode } from "../api/formClient"
+import type { ChatWindow } from "../lib/ChatWindow"
 
 interface Args {
   mode: Mode
@@ -12,6 +13,7 @@ interface Args {
   setSelectedFieldId: (id: string | null) => void
   setIsLoading: (v: boolean) => void
   setError: (msg: string | null) => void
+  chatWindow: ChatWindow
 }
 
 export function useAnnotateMode({
@@ -24,6 +26,7 @@ export function useAnnotateMode({
   setSelectedFieldId,
   setIsLoading,
   setError,
+  chatWindow,
 }: Args) {
   const handleLabelClick = useCallback(
     (block: TextBlock) => {
@@ -58,13 +61,16 @@ export function useAnnotateMode({
         setAnnotations((prev) => [...prev, annotation])
         setSelectedLabelId(null)
         setSelectedFieldId(null)
+        chatWindow.add("system", `Annotated "${labelBlock.text}" → "${field.name}"`)
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to create annotation")
+        const msg = err instanceof Error ? err.message : "Failed to create annotation"
+        setError(msg)
+        chatWindow.add("system", `Annotation failed: ${msg}`)
       } finally {
         setIsLoading(false)
       }
     },
-    [mode, selectedLabelId, documentId, textBlocks, setAnnotations, setSelectedLabelId, setSelectedFieldId, setIsLoading, setError]
+    [mode, selectedLabelId, documentId, textBlocks, setAnnotations, setSelectedLabelId, setSelectedFieldId, setIsLoading, setError, chatWindow]
   )
 
   const handleDeleteAnnotation = useCallback(
@@ -73,11 +79,14 @@ export function useAnnotateMode({
       try {
         await formClient.deleteAnnotation(id)
         setAnnotations((prev) => prev.filter((a) => a.id !== id))
+        chatWindow.add("system", "Annotation deleted")
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to delete annotation")
+        const msg = err instanceof Error ? err.message : "Failed to delete annotation"
+        setError(msg)
+        chatWindow.add("system", `Annotation delete failed: ${msg}`)
       }
     },
-    [setAnnotations, setError]
+    [setAnnotations, setError, chatWindow]
   )
 
   return { handleLabelClick, handleFieldClick, handleDeleteAnnotation }

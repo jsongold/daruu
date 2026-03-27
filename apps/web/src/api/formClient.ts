@@ -79,6 +79,12 @@ export interface MapResult {
   maps: FieldLabelMap[]
 }
 
+export interface MapRun {
+  created_at: string
+  field_count: number
+  identified_count: number
+}
+
 export interface ContextWindow {
   session_id: string
   document_id: string | null
@@ -155,15 +161,18 @@ export const formClient = {
     get(`/api/documents/${documentId}/fields`),
 
   createSession: (
-    documentId: string,
+    documentId?: string,
     userInfo?: UserInfo,
     rules?: Rules
   ): Promise<ContextWindow> =>
     post("/api/sessions", {
-      document_id: documentId,
+      document_id: documentId ?? null,
       user_info: userInfo ?? { data: {} },
       rules: rules ?? { items: [] },
     }),
+
+  updateSessionDocument: (sessionId: string, documentId: string): Promise<ContextWindow> =>
+    patch(`/api/sessions/${sessionId}/document`, { document_id: documentId }),
 
   getSession: (sessionId: string): Promise<ContextWindow> =>
     get(`/api/sessions/${sessionId}`),
@@ -204,4 +213,10 @@ export const formClient = {
 
   updateRules: (sessionId: string, items: string[]): Promise<ContextWindow> =>
     patch(`/api/sessions/${sessionId}/rules`, { items }),
+
+  addConversation: (sessionId: string, role: string, content: string): Promise<void> =>
+    post(`/api/conversations`, { session_id: sessionId, role, content }),
+
+  listConversations: (sessionId: string): Promise<Array<{ id: string; session_id: string; role: string; content: string; created_at: string | null }>> =>
+    get(`/api/conversations/${sessionId}`),
 }

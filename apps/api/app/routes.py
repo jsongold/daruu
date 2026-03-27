@@ -2,21 +2,26 @@
 
 import logging
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from typing import Optional
+
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 
 from app.models import (
     Annotation,
+    Conversation,
     ContextWindow,
     CreateAnnotationRequest,
     CreateSessionRequest,
     FieldsResponse,
     FillRequest,
     MapResult,
+    MapRun,
     RuleItem,
     UploadDocumentResponse,
 )
 from app.services import (
     AnnotationService,
+    ConversationService,
     DocumentService,
     FillService,
     MapService,
@@ -34,6 +39,7 @@ session_service = SessionService()
 map_service = MapService()
 fill_service = FillService()
 understand_service = UnderstandService()
+conversation_service = ConversationService()
 
 
 @router.post("/documents", response_model=UploadDocumentResponse)
@@ -88,6 +94,21 @@ async def create_session(req: CreateSessionRequest) -> ContextWindow:
     return ctx
 
 
+@router.patch("/sessions/{session_id}/document", response_model=ContextWindow)
+async def update_session_document(session_id: str, body: dict) -> ContextWindow:
+    """Attach a document to an existing session."""
+    document_id = body.get("document_id")
+    if not document_id:
+        raise HTTPException(status_code=422, detail="document_id is required")
+    if session_service.get(session_id) is None:
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+    try:
+        session_service.update_document(session_id, document_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    return session_service.get(session_id)  # type: ignore[return-value]
+
+
 @router.patch("/sessions/{session_id}/user-info", response_model=ContextWindow)
 async def update_user_info(session_id: str, body: dict) -> ContextWindow:
     """Merge key/value pairs into session user_info.data."""
@@ -109,6 +130,31 @@ async def get_session(session_id: str) -> ContextWindow:
     if ctx is None:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
     return ctx
+
+
+@router.post("/conversations", response_model=Conversation, status_code=201)
+async def add_conversation(body: dict) -> Conversation:
+    """Append an activity entry to a session's conversation log."""
+    session_id = body.get("session_id")
+    role = body.get("role")
+    content = body.get("content")
+    if not session_id or not role or not content:
+        raise HTTPException(status_code=422, detail="session_id, role, and content are required")
+    try:
+        return conversation_service.add(session_id, role, content)
+    except Exception as e:
+        logger.error("add_conversation error for session %s: %s", session_id, e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.get("/conversations/{session_id}", response_model=list[Conversation])
+async def list_conversations(session_id: str) -> list[Conversation]:
+    """Return all conversation entries for a session, ordered by time."""
+    try:
+        return conversation_service.list_by_session(session_id)
+    except Exception as e:
+        logger.error("list_conversations error for session %s: %s", session_id, e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/annotations", response_model=Annotation)
@@ -145,6 +191,7 @@ async def delete_annotation(annotation_id: str) -> None:
 @router.post("/map/{document_id}", response_model=MapResult)
 async def run_map(document_id: str) -> MapResult:
     """Run spatial + LLM field label identification for a document."""
+    logger.info("Mode triggered: MAP document=%s", document_id)
     try:
         maps = map_service.run(document_id)
     except ValueError as e:
@@ -157,11 +204,21 @@ async def run_map(document_id: str) -> MapResult:
     return MapResult(document_id=document_id, maps=maps)
 
 
-@router.get("/map/{document_id}", response_model=MapResult)
-async def get_map(document_id: str) -> MapResult:
-    """Get the latest field label maps for a document."""
+@router.get("/map/{document_id}/runs", response_model=list[MapRun])
+async def list_map_runs(document_id: str) -> list[MapRun]:
+    """List all past map runs for a document, newest first."""
     try:
-        maps = map_service.list_by_document(document_id)
+        return map_service.list_runs(document_id)
+    except Exception as e:
+        logger.error("Failed to list map runs for document %s: %s", document_id, e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.get("/map/{document_id}", response_model=MapResult)
+async def get_map(document_id: str, created_at: Optional[str] = Query(default=None)) -> MapResult:
+    """Get field label maps for a document. Defaults to the latest run; pass created_at to load a specific run."""
+    try:
+        maps = map_service.list_by_document(document_id, created_at=created_at)
     except Exception as e:
         logger.error("Failed to get maps for document %s: %s", document_id, e)
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -171,6 +228,7 @@ async def get_map(document_id: str) -> MapResult:
 @router.post("/fill")
 async def fill(req: FillRequest) -> dict:
     """Fill form fields using LLM."""
+    logger.info("Mode triggered: FILL session=%s", req.session_id)
     try:
         return fill_service.fill(req.session_id, req.user_message)
     except ValueError as e:
@@ -183,6 +241,7 @@ async def fill(req: FillRequest) -> dict:
 @router.post("/sessions/{session_id}/understand", response_model=ContextWindow)
 async def understand(session_id: str) -> ContextWindow:
     """LLM analyzes the document and extracts filling rules into the session."""
+    logger.info("Mode triggered: RULES session=%s", session_id)
     try:
         understand_service.understand(session_id)
     except ValueError as e:
@@ -216,6 +275,7 @@ async def update_rules(session_id: str, body: dict) -> ContextWindow:
 @router.post("/ask")
 async def ask(req: FillRequest) -> dict:
     """Agent asks clarifying questions."""
+    logger.info("Mode triggered: ASK session=%s", req.session_id)
     try:
         return fill_service.ask(req.session_id)
     except ValueError as e:

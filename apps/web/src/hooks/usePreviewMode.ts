@@ -1,7 +1,7 @@
 import { useCallback } from "react"
 import { formClient } from "../api/formClient"
 import type { AgentQuestion, Mode } from "../api/formClient"
-import type { ActivityEntry } from "../components/InfoChat"
+import type { ChatWindow } from "../lib/ChatWindow"
 
 interface Args {
   sessionId: string | null
@@ -10,7 +10,7 @@ interface Args {
   setPendingQuestions: React.Dispatch<React.SetStateAction<AgentQuestion[]>>
   setAskHistory: React.Dispatch<React.SetStateAction<Array<{ role: string; content: string }>>>
   setError: (msg: string | null) => void
-  addActivity: (role: ActivityEntry["role"], text: string) => void
+  chatWindow: ChatWindow
 }
 
 export function usePreviewMode({
@@ -20,15 +20,15 @@ export function usePreviewMode({
   setPendingQuestions,
   setAskHistory,
   setError,
-  addActivity,
+  chatWindow,
 }: Args) {
   const handleSendInfo = useCallback(
     async (text: string) => {
       if (!sessionId) return
-      addActivity("user", text)
+      chatWindow.add("user", text)
       await formClient.updateUserInfo(sessionId, { note: text })
     },
-    [sessionId, addActivity]
+    [sessionId, chatWindow]
   )
 
   const handleAsk = useCallback(async () => {
@@ -36,23 +36,26 @@ export function usePreviewMode({
     setIsAsking(true)
     setMode("ask")
     setError(null)
+    chatWindow.add("system", "Ask started...")
     try {
       const result = await formClient.ask(sessionId)
       if (result.questions.length > 0) {
         setPendingQuestions(result.questions)
         const combinedQuestion = result.questions.map((q) => q.question).join("\n")
         setAskHistory((prev) => [...prev, { role: "agent", content: combinedQuestion }])
-        addActivity("agent", combinedQuestion)
+        chatWindow.add("agent", combinedQuestion)
       } else {
-        addActivity("system", "No questions needed -- all fields have sufficient context.")
+        chatWindow.add("system", "No questions needed -- all fields have sufficient context.")
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Ask failed")
+      const msg = err instanceof Error ? err.message : "Ask failed"
+      setError(msg)
+      chatWindow.add("system", `Ask failed: ${msg}`)
     } finally {
       setIsAsking(false)
       setMode("preview")
     }
-  }, [sessionId, setIsAsking, setMode, setPendingQuestions, setAskHistory, setError, addActivity])
+  }, [sessionId, setIsAsking, setMode, setPendingQuestions, setAskHistory, setError, chatWindow])
 
   return { handleSendInfo, handleAsk }
 }

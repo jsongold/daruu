@@ -3,7 +3,7 @@
 import json
 import math
 
-from app.models import Annotation, ContextWindow, FieldLabelMap, FormField, Mapping, RuleType, TextBlock
+from app.models import Annotation, ContextWindow, FieldLabelMap, FillContext, FormField, Mapping, RuleType, TextBlock
 
 UNDERSTAND_SYSTEM_PROMPT = """\
 You are a document analysis assistant for PDF forms.
@@ -62,9 +62,8 @@ Your task: match each form field to its most relevant text label from the provid
 - Checkbox labels may be to the RIGHT of the checkbox
 
 ## Output format
-Return ONLY a JSON array. No markdown, no explanation, no code fences.
-Each element:
-{"field_id":"<id>","label":"<label text or null>","semantic_key":"<snake_case>","confidence":<0-100>}
+Return ONLY a JSON object with a "results" key. No markdown, no explanation, no code fences.
+{"results": [{"field_id":"<id>","label":"<label text or null>","semantic_key":"<snake_case>","confidence":<0-100>}, ...]}
 
 ## Fields
 - field_id: exact field ID from input
@@ -227,6 +226,11 @@ def build_fill_prompt(
         parts.append(f"User response to previous question:\n{user_message}")
 
     return "\n\n".join(parts)
+
+
+def build_fill_prompt_v2(fill_context: FillContext) -> str:
+    """Build user prompt from structured FillContext. Used with ContextService."""
+    return json.dumps(fill_context.model_dump(mode="json"), ensure_ascii=False)
 
 
 def build_understand_prompt(fields: list[FormField], text_blocks: list[TextBlock]) -> str:

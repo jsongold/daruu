@@ -125,6 +125,15 @@ class HistoryMessage(BaseModel):
     model_config = {"frozen": True}
 
 
+class Conversation(BaseModel):
+    id: str
+    session_id: str
+    role: str  # "user" | "agent" | "system"
+    content: str
+    created_at: datetime | None = None
+    model_config = {"frozen": True}
+
+
 class ContextWindow(BaseModel):
     session_id: str = Field(default_factory=lambda: str(uuid4()))
     document_id: str | None = None
@@ -162,7 +171,7 @@ class FieldsResponse(BaseModel):
 
 
 class CreateSessionRequest(BaseModel):
-    document_id: str
+    document_id: str | None = None
     user_info: UserInfo = Field(default_factory=UserInfo)
     rules: Rules = Field(default_factory=Rules)
 
@@ -188,6 +197,56 @@ class FieldLabelMap(BaseModel):
     confidence: int = 0
     source: str = "auto"
     created_at: datetime | None = None
+    model_config = {"frozen": True}
+
+
+class MapRun(BaseModel):
+    created_at: datetime
+    field_count: int
+    identified_count: int
+    model_config = {"frozen": True}
+
+
+class EnrichedField(BaseModel):
+    field_id: str
+    name: str
+    type: str
+    label: str | None = None
+    semantic_key: str | None = None
+    confidence: int = 0
+    confirmed: bool = False
+    current_value: str | None = None
+    inferred_value: str | None = None
+    nearby_text: list[str] = Field(default_factory=list)
+    model_config = {"frozen": True}
+
+
+class FieldSection(BaseModel):
+    section_hint: str | None = None
+    fields: list[EnrichedField] = Field(default_factory=list)
+    model_config = {"frozen": True}
+
+
+class PageContext(BaseModel):
+    page: int
+    sections: list[FieldSection] = Field(default_factory=list)
+    model_config = {"frozen": True}
+
+
+class AlreadyFilledField(BaseModel):
+    field_id: str
+    label: str | None = None
+    value: str
+    model_config = {"frozen": True}
+
+
+class FillContext(BaseModel):
+    pages: list[PageContext] = Field(default_factory=list)
+    user_info: dict[str, str] = Field(default_factory=dict)
+    rules: list[RuleItem] = Field(default_factory=list)
+    history: list[HistoryMessage] = Field(default_factory=list)
+    already_filled: list[AlreadyFilledField] = Field(default_factory=list)
+    user_message: str | None = None
     model_config = {"frozen": True}
 
 
