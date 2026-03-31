@@ -1,0 +1,3 @@
+ALTER TABLE prompt_logs
+  ADD COLUMN started_at TIMESTAMPTZ,
+  ADD COLUMN ended_at   TIMESTAMPTZ;
