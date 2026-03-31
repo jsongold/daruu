@@ -1,8 +1,7 @@
-"""Business logic services: FormService, AnnotationService, SessionService, MappingService, MapService, FillService."""
+"""Business logic services: FormService, AnnotationService, ConversationService, MappingService, MapService, FillService."""
 
 import base64
 import difflib
-import hashlib
 import json
 import logging
 from contextlib import contextmanager
@@ -20,7 +19,7 @@ from app.models import (
     AskContext,
     Annotation,
     BBox,
-    Conversation,
+    Message,
     ContextWindow,
     CreateAnnotationRequest,
     FieldLabelMap,
@@ -69,8 +68,8 @@ def _save_prompt_log(
     system_chars: int,
     user_chars: int,
     started_at: datetime,
-    session_id: str | None = None,
     conversation_id: str | None = None,
+    message_id: str | None = None,
     system_prompt: str | None = None,
     user_prompt: str | None = None,
 ) -> str | None:
@@ -78,8 +77,8 @@ def _save_prompt_log(
     try:
         supabase = get_supabase_client()
         response = supabase.table("prompt_logs").insert({
-            "session_id": session_id,
             "conversation_id": conversation_id,
+            "message_id": message_id,
             "type": type,
             "prompt_template": prompt_template,
             "model": model,
@@ -200,9 +199,7 @@ class FormService:
                     height=(widget.rect.y1 - widget.rect.y0) / page_h,
                 )
                 field_name = widget.field_name or f"field_{len(fields)}"
-                stable_id = hashlib.md5(
-                    f"{form_id}:{page_num}:{field_name}".encode()
-                ).hexdigest()
+                stable_id = str(len(fields))
                 fields.append(
                     FormField(
                         id=stable_id,
@@ -389,17 +386,17 @@ class AnnotationService:
                 logger.warning("Failed to revert form_schema after annotation delete: %s", e)
 
 
-class SessionService:
-    """Manages ContextWindow sessions in Supabase."""
+class ConversationService:
+    """Manages ContextWindow conversations in Supabase."""
 
     def create(self, form_id: str | None, user_info: UserInfo, rules: Rules) -> ContextWindow:
-        session_id = str(uuid4())
+        conversation_id = str(uuid4())
         now = datetime.now(timezone.utc)
 
         supabase = get_supabase_client()
-        supabase.table("sessions").insert(
+        supabase.table("conversations").insert(
             {
-                "id": session_id,
+                "id": conversation_id,
                 "form_id": form_id,
                 "user_info": user_info.model_dump(),
                 "mode": Mode.PREVIEW.value,
@@ -411,7 +408,7 @@ class SessionService:
         ).execute()
 
         return ContextWindow(
-            session_id=session_id,
+            conversation_id=conversation_id,
             form_id=form_id,
             user_info=user_info,
             rules=rules,
@@ -420,10 +417,10 @@ class SessionService:
             updated_at=now,
         )
 
-    def get(self, session_id: str) -> ContextWindow | None:
+    def get(self, conversation_id: str) -> ContextWindow | None:
         supabase = get_supabase_client()
         result = (
-            supabase.table("sessions").select("*").eq("id", session_id).execute()
+            supabase.table("conversations").select("*").eq("id", conversation_id).execute()
         )
         rows = result.data if hasattr(result, "data") else []
         if not rows:
@@ -437,7 +434,7 @@ class SessionService:
             form_values: dict[str, str] = row.get("form_values") or {}
 
             return ContextWindow(
-                session_id=row["id"],
+                conversation_id=row["id"],
                 form_id=row.get("form_id"),
                 user_info=user_info,
                 rules=rules,
@@ -449,63 +446,63 @@ class SessionService:
                 updated_at=datetime.fromisoformat(row["updated_at"]) if row.get("updated_at") else None,
             )
         except Exception as e:
-            logger.error("Failed to parse session %s: %s", session_id, e)
+            logger.error("Failed to parse conversation %s: %s", conversation_id, e)
             return None
 
-    def update_form(self, session_id: str, form_id: str) -> None:
+    def update_form(self, conversation_id: str, form_id: str) -> None:
         supabase = get_supabase_client()
-        supabase.table("sessions").update(
+        supabase.table("conversations").update(
             {"form_id": form_id, "updated_at": datetime.now(timezone.utc).isoformat()}
-        ).eq("id", session_id).execute()
+        ).eq("id", conversation_id).execute()
 
-    def update_mode(self, session_id: str, mode: Mode) -> None:
-        logger.info("Mode transition: session=%s mode=%s", session_id, mode.value)
+    def update_mode(self, conversation_id: str, mode: Mode) -> None:
+        logger.info("Mode transition: conversation=%s mode=%s", conversation_id, mode.value)
         supabase = get_supabase_client()
-        supabase.table("sessions").update(
+        supabase.table("conversations").update(
             {"mode": mode.value, "updated_at": datetime.now(timezone.utc).isoformat()}
-        ).eq("id", session_id).execute()
+        ).eq("id", conversation_id).execute()
 
-    def add_history(self, session_id: str, role: str, content: str) -> None:
-        self.add_history_batch(session_id, [(role, content)])
+    def add_history(self, conversation_id: str, role: str, content: str) -> None:
+        self.add_history_batch(conversation_id, [(role, content)])
 
-    def add_history_batch(self, session_id: str, messages: list[tuple[str, str]]) -> None:
-        ctx = self.get(session_id)
+    def add_history_batch(self, conversation_id: str, messages: list[tuple[str, str]]) -> None:
+        ctx = self.get(conversation_id)
         if ctx is None:
-            logger.warning("Session %s not found for add_history_batch", session_id)
+            logger.warning("Conversation %s not found for add_history_batch", conversation_id)
             return
         updated = list(ctx.history) + [HistoryMessage(role=r, content=c) for r, c in messages]
         supabase = get_supabase_client()
-        supabase.table("sessions").update(
+        supabase.table("conversations").update(
             {
                 "history": [m.model_dump() for m in updated],
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }
-        ).eq("id", session_id).execute()
+        ).eq("id", conversation_id).execute()
 
-    def update_user_info(self, session_id: str, data: dict) -> None:
-        """Merge new key/value pairs into session user_info.data."""
-        ctx = self.get(session_id)
+    def update_user_info(self, conversation_id: str, data: dict) -> None:
+        """Merge new key/value pairs into conversation user_info.data."""
+        ctx = self.get(conversation_id)
         if ctx is None:
             return
         merged = {**ctx.user_info.data, **data}
         supabase = get_supabase_client()
-        supabase.table("sessions").update(
+        supabase.table("conversations").update(
             {"user_info": {"data": merged}, "updated_at": datetime.now(timezone.utc).isoformat()}
-        ).eq("id", session_id).execute()
+        ).eq("id", conversation_id).execute()
 
-    def update_form_values(self, session_id: str, new_values: dict[str, str]) -> None:
-        """Merge new field_id→value pairs into session form_values."""
-        ctx = self.get(session_id)
+    def update_form_values(self, conversation_id: str, new_values: dict[str, str]) -> None:
+        """Merge new field_id->value pairs into conversation form_values."""
+        ctx = self.get(conversation_id)
         if ctx is None:
             return
         merged = {**ctx.form_values, **new_values}
         supabase = get_supabase_client()
-        supabase.table("sessions").update(
+        supabase.table("conversations").update(
             {"form_values": merged, "updated_at": datetime.now(timezone.utc).isoformat()}
-        ).eq("id", session_id).execute()
+        ).eq("id", conversation_id).execute()
 
-    def update_rules(self, session_id: str, rule_items: list["RuleItem"], rulebook_url: str | None = None) -> None:
-        """Replace session rules with a new list of RuleItem objects."""
+    def update_rules(self, conversation_id: str, rule_items: list["RuleItem"], rulebook_url: str | None = None) -> None:
+        """Replace conversation rules with a new list of RuleItem objects."""
         supabase = get_supabase_client()
         payload: dict = {
             "rules": {"items": [i.model_dump() for i in rule_items]},
@@ -513,27 +510,27 @@ class SessionService:
         }
         if rulebook_url is not None:
             payload["rulebook_url"] = rulebook_url
-        supabase.table("sessions").update(payload).eq("id", session_id).execute()
+        supabase.table("conversations").update(payload).eq("id", conversation_id).execute()
 
 
 class UnderstandService:
     """Analyzes a form and extracts filling rules via LLM."""
 
     def __init__(self) -> None:
-        self._session_service = SessionService()
+        self._conversation_service = ConversationService()
         self._form_service = FormService()
 
-    def understand(self, session_id: str) -> None:
-        """Run LLM analysis on the form and persist extracted rules to the session."""
+    def understand(self, conversation_id: str) -> None:
+        """Run LLM analysis on the form and persist extracted rules to the conversation."""
         settings = get_settings()
         if not settings.openai_api_key:
             raise ValueError("OpenAI not configured")
 
-        ctx = self._session_service.get(session_id)
+        ctx = self._conversation_service.get(conversation_id)
         if ctx is None:
-            raise ValueError(f"Session {session_id} not found")
+            raise ValueError(f"Conversation {conversation_id} not found")
         if not ctx.form_id:
-            raise ValueError("Session has no associated form")
+            raise ValueError("Conversation has no associated form")
 
         fields, text_blocks = self._form_service.get_fields_and_text_blocks(ctx.form_id)
         rules_ctx = RulesContext(fields=fields, text_blocks=text_blocks)
@@ -550,7 +547,7 @@ class UnderstandService:
             system_chars=len(prompt.system),
             user_chars=len(prompt.user),
             started_at=started_at,
-            session_id=session_id,
+            conversation_id=conversation_id,
             system_prompt=prompt.system,
             user_prompt=prompt.user,
         )
@@ -597,7 +594,7 @@ class UnderstandService:
             except Exception as e:
                 logger.warning("Failed to upload rulebook to storage: %s", e)
 
-        self._session_service.update_rules(session_id, rule_items, rulebook_url)
+        self._conversation_service.update_rules(conversation_id, rule_items, rulebook_url)
 
         # Persist rules globally to form_rules and link to form_schema
         if ctx.form_id:
@@ -619,7 +616,7 @@ class MappingService:
     """Maps annotations to form fields using fuzzy matching + optional LLM fallback."""
 
     def map(
-        self, session_id: str, form: Form, annotations: list[Annotation]
+        self, conversation_id: str, form: Form, annotations: list[Annotation]
     ) -> list[Mapping]:
         mappings: list[Mapping] = []
 
@@ -637,7 +634,7 @@ class MappingService:
 
             if best_field and best_ratio > 0.6:
                 mapping = self._save_mapping(
-                    session_id=session_id,
+                    conversation_id=conversation_id,
                     annotation_id=annotation.id,
                     field_id=best_field.id,
                     confidence=best_ratio,
@@ -646,7 +643,7 @@ class MappingService:
                 mappings.append(mapping)
             else:
                 # Try LLM fallback if configured
-                llm_mapping = self._llm_map(session_id, annotation, form)
+                llm_mapping = self._llm_map(conversation_id, annotation, form)
                 if llm_mapping:
                     mappings.append(llm_mapping)
 
@@ -654,7 +651,7 @@ class MappingService:
 
     def _save_mapping(
         self,
-        session_id: str,
+        conversation_id: str,
         annotation_id: str,
         field_id: str,
         inferred_value: str | None = None,
@@ -663,7 +660,7 @@ class MappingService:
     ) -> Mapping:
         mapping = Mapping(
             id=str(uuid4()),
-            session_id=session_id,
+            conversation_id=conversation_id,
             annotation_id=annotation_id,
             field_id=field_id,
             inferred_value=inferred_value,
@@ -675,7 +672,7 @@ class MappingService:
         supabase.table("form_mappings").insert(
             {
                 "id": mapping.id,
-                "session_id": mapping.session_id,
+                "conversation_id": mapping.conversation_id,
                 "annotation_id": mapping.annotation_id,
                 "field_id": mapping.field_id,
                 "inferred_value": mapping.inferred_value,
@@ -687,7 +684,7 @@ class MappingService:
         return mapping
 
     def _llm_map(
-        self, session_id: str, annotation: Annotation, form: Form
+        self, conversation_id: str, annotation: Annotation, form: Form
     ) -> Mapping | None:
         settings = get_settings()
         if not settings.openai_api_key:
@@ -711,7 +708,7 @@ class MappingService:
                 system_chars=0,
                 user_chars=len(prompt),
                 started_at=started_at,
-                session_id=session_id,
+                conversation_id=conversation_id,
                 user_prompt=prompt,
             )
 
@@ -730,7 +727,7 @@ class MappingService:
             matched_field = next((f for f in form.fields if f.name == matched_name), None)
             if matched_field and confidence > 0.5:
                 return self._save_mapping(
-                    session_id=session_id,
+                    conversation_id=conversation_id,
                     annotation_id=annotation.id,
                     field_id=matched_field.id,
                     confidence=confidence,
@@ -741,12 +738,12 @@ class MappingService:
 
         return None
 
-    def list_by_session(self, session_id: str) -> list[Mapping]:
+    def list_by_conversation(self, conversation_id: str) -> list[Mapping]:
         supabase = get_supabase_client()
         result = (
             supabase.table("form_mappings")
             .select("*")
-            .eq("session_id", session_id)
+            .eq("conversation_id", conversation_id)
             .execute()
         )
         rows = result.data if hasattr(result, "data") else []
@@ -756,7 +753,7 @@ class MappingService:
                 mappings.append(
                     Mapping(
                         id=row["id"],
-                        session_id=row["session_id"],
+                        conversation_id=row["conversation_id"],
                         annotation_id=row["annotation_id"],
                         field_id=row["field_id"],
                         inferred_value=row.get("inferred_value"),
@@ -775,7 +772,7 @@ class MappingService:
 class MapService:
     """Identifies which text label belongs to each form field using spatial analysis + LLM."""
 
-    def run(self, form_id: str) -> list[FieldLabelMap]:
+    def run(self, form_id: str, conversation_id: str | None = None) -> list[FieldLabelMap]:
         """Run spatial candidate filtering + LLM to identify field labels, persist results."""
         settings = get_settings()
         if not settings.openai_api_key:
@@ -785,7 +782,12 @@ class MapService:
         fields, text_blocks = form_service.get_fields_and_text_blocks(form_id)
         annotations = AnnotationService().list_by_form(form_id)
 
-        map_ctx = MapContext(fields=fields, text_blocks=text_blocks, confirmed_annotations=annotations)
+        existing_heuristic = self._get_heuristic_maps(form_id)
+        map_ctx = MapContext(
+            fields=fields, text_blocks=text_blocks,
+            confirmed_annotations=annotations,
+            heuristic_maps=existing_heuristic,
+        )
         prompt = MapPrompt.build(map_ctx)
         from openai import OpenAI
         client = OpenAI(api_key=settings.openai_api_key)
@@ -798,6 +800,7 @@ class MapService:
             system_chars=len(prompt.system),
             user_chars=len(prompt.user),
             started_at=started_at,
+            conversation_id=conversation_id,
             system_prompt=prompt.system,
             user_prompt=prompt.user,
         )
@@ -868,6 +871,103 @@ class MapService:
             logger.warning("Failed to update form_schema from map: %s", e)
 
         return results
+
+    def run_heuristic(self, form_id: str) -> list[FieldLabelMap]:
+        """Assign labels to fields using spatial heuristics only (no LLM)."""
+        from app.spatial import direction_score, is_decoration, score_to_confidence
+
+        form_service = FormService()
+        fields, text_blocks = form_service.get_fields_and_text_blocks(form_id)
+
+        valid_blocks = [b for b in text_blocks if not is_decoration(b.text)]
+
+        fields_by_page: dict[int, list] = {}
+        for f in fields:
+            fields_by_page.setdefault(f.page, []).append(f)
+        blocks_by_page: dict[int, list] = {}
+        for b in valid_blocks:
+            blocks_by_page.setdefault(b.page, []).append(b)
+
+        scored_pairs: list[tuple[float, str, object, object]] = []
+        for page, page_fields in fields_by_page.items():
+            page_blocks = blocks_by_page.get(page, [])
+            for field in page_fields:
+                if field.bbox is None:
+                    continue
+                fb = (field.bbox.x, field.bbox.y, field.bbox.width, field.bbox.height)
+                for block in page_blocks:
+                    bb = (block.bbox.x, block.bbox.y, block.bbox.width, block.bbox.height)
+                    score, direction = direction_score(fb, bb)
+                    scored_pairs.append((score, direction, field, block))
+
+        scored_pairs.sort(key=lambda t: t[0])
+
+        assigned_fields: set[str] = set()
+        assigned_labels: set[str] = set()
+        results: list[FieldLabelMap] = []
+        now = datetime.now(timezone.utc)
+
+        for score, _dir, field, block in scored_pairs:
+            if field.id in assigned_fields or block.id in assigned_labels:
+                continue
+            confidence = score_to_confidence(score)
+            if confidence < 5:
+                continue
+            assigned_fields.add(field.id)
+            assigned_labels.add(block.id)
+            results.append(FieldLabelMap(
+                id=str(uuid4()),
+                form_id=form_id,
+                field_id=field.id,
+                field_name=field.name,
+                label_text=block.text,
+                semantic_key=None,
+                confidence=confidence,
+                source="heuristic",
+                created_at=now,
+            ))
+
+        if not results:
+            logger.warning("heuristic_map.save skipped: form=%s fields=%d blocks=%d (no matches)",
+                           form_id, len(fields), len(valid_blocks))
+            return results
+
+        supabase = get_supabase_client()
+        with _log_step("heuristic_map.save", form=form_id, rows=len(results)):
+            supabase.table("field_label_maps").insert([
+                {
+                    "id": r.id,
+                    "form_id": r.form_id,
+                    "field_id": r.field_id,
+                    "field_name": r.field_name,
+                    "label_text": r.label_text,
+                    "semantic_key": r.semantic_key,
+                    "confidence": r.confidence,
+                    "source": r.source,
+                    "created_at": r.created_at.isoformat() if r.created_at else None,
+                }
+                for r in results
+            ]).execute()
+
+        try:
+            FormSchemaService().upsert_from_map(form_id, results, form_name=None)
+        except Exception as e:
+            logger.warning("Failed to update form_schema from heuristic map: %s", e)
+
+        return results
+
+    def _get_heuristic_maps(self, form_id: str) -> list[FieldLabelMap]:
+        """Retrieve existing heuristic map results for a form."""
+        supabase = get_supabase_client()
+        result = (
+            supabase.table("field_label_maps")
+            .select("*")
+            .eq("form_id", form_id)
+            .eq("source", "heuristic")
+            .execute()
+        )
+        rows = result.data if hasattr(result, "data") else []
+        return self._parse_map_rows(rows)
 
     def _parse_map_rows(self, rows: list[dict]) -> list[FieldLabelMap]:
         maps: list[FieldLabelMap] = []
@@ -946,50 +1046,50 @@ class MapService:
         return runs
 
 
-class ConversationService:
-    """Persists and retrieves activity log entries for a session."""
+class MessageService:
+    """Persists and retrieves activity log entries for a conversation."""
 
-    def add(self, session_id: str, role: str, content: str) -> Conversation:
-        conv = Conversation(
+    def add(self, conversation_id: str, role: str, content: str) -> Message:
+        msg = Message(
             id=str(uuid4()),
-            session_id=session_id,
+            conversation_id=conversation_id,
             role=role,
             content=content,
             created_at=datetime.now(timezone.utc),
         )
         supabase = get_supabase_client()
-        supabase.table("conversations").insert({
-            "id": conv.id,
-            "session_id": conv.session_id,
-            "role": conv.role,
-            "content": conv.content,
-            "created_at": conv.created_at.isoformat(),
+        supabase.table("messages").insert({
+            "id": msg.id,
+            "conversation_id": msg.conversation_id,
+            "role": msg.role,
+            "content": msg.content,
+            "created_at": msg.created_at.isoformat(),
         }).execute()
-        return conv
+        return msg
 
-    def list_by_session(self, session_id: str) -> list[Conversation]:
+    def list_by_conversation(self, conversation_id: str) -> list[Message]:
         supabase = get_supabase_client()
         result = (
-            supabase.table("conversations")
+            supabase.table("messages")
             .select("*")
-            .eq("session_id", session_id)
+            .eq("conversation_id", conversation_id)
             .order("created_at")
             .execute()
         )
         rows = result.data if hasattr(result, "data") else []
-        convs: list[Conversation] = []
+        messages: list[Message] = []
         for row in rows:
             try:
-                convs.append(Conversation(
+                messages.append(Message(
                     id=row["id"],
-                    session_id=row["session_id"],
+                    conversation_id=row["conversation_id"],
                     role=row["role"],
                     content=row["content"],
                     created_at=datetime.fromisoformat(row["created_at"]) if row.get("created_at") else None,
                 ))
             except Exception as e:
-                logger.warning("Failed to parse conversation row %s: %s", row.get("id"), e)
-        return convs
+                logger.warning("Failed to parse message row %s: %s", row.get("id"), e)
+        return messages
 
 
 class FormRulesService:
@@ -1001,7 +1101,7 @@ class FormRulesService:
         rule_items: list[RuleItem],
         description: str | None = None,
         rulebook_text: str | None = None,
-        conversation_id: str | None = None,
+        message_id: str | None = None,
     ) -> FormRules:
         """Create or update the global rules for a form."""
         supabase = get_supabase_client()
@@ -1019,8 +1119,8 @@ class FormRulesService:
                 payload["description"] = description
             if rulebook_text is not None:
                 payload["rulebook_text"] = rulebook_text
-            if conversation_id is not None:
-                payload["conversation_id"] = conversation_id
+            if message_id is not None:
+                payload["message_id"] = message_id
             supabase.table("form_rules").update(payload).eq("form_id", form_id).execute()
             return FormRules(
                 id=existing.id,
@@ -1028,7 +1128,7 @@ class FormRulesService:
                 description=description if description is not None else existing.description,
                 rulebook_text=rulebook_text if rulebook_text is not None else existing.rulebook_text,
                 rules=rule_items,
-                conversation_id=conversation_id or existing.conversation_id,
+                message_id=message_id or existing.message_id,
             )
 
         row_id = str(uuid4())
@@ -1038,7 +1138,7 @@ class FormRulesService:
             "description": description,
             "rulebook_text": rulebook_text,
             "rules": rules_json,
-            "conversation_id": conversation_id,
+            "message_id": message_id,
             "created_at": now,
             "updated_at": now,
         }).execute()
@@ -1049,7 +1149,7 @@ class FormRulesService:
             description=description,
             rulebook_text=rulebook_text,
             rules=rule_items,
-            conversation_id=conversation_id,
+            message_id=message_id,
         )
 
     def get(self, form_id: str) -> FormRules | None:
@@ -1084,7 +1184,7 @@ class FormRulesService:
             description=row.get("description"),
             rulebook_text=row.get("rulebook_text"),
             rules=rule_items,
-            conversation_id=row.get("conversation_id"),
+            message_id=row.get("message_id"),
             created_at=datetime.fromisoformat(row["created_at"]) if row.get("created_at") else None,
             updated_at=datetime.fromisoformat(row["updated_at"]) if row.get("updated_at") else None,
         )
@@ -1093,7 +1193,7 @@ class FormRulesService:
 class FormSchemaService:
     """Manages the global form_schema table (one row per form, JSONB field array)."""
 
-    _LABEL_PRIORITY = {"annotation": 0, "map_manual": 1, "map_auto": 2, "pdf_extract": 3}
+    _LABEL_PRIORITY = {"annotation": 0, "map_manual": 1, "map_auto": 2, "map_heuristic": 3, "pdf_extract": 4}
 
     def ensure_schema(self, form_id: str) -> FormSchema:
         """Seed form_schema row from PDF extraction if it does not exist.
@@ -1238,7 +1338,7 @@ class FormSchemaService:
 
         for m in maps:
             existing = existing_by_id.get(m.field_id)
-            source = "map_manual" if m.source == "manual" else "map_auto"
+            source = "map_manual" if m.source == "manual" else ("map_heuristic" if m.source == "heuristic" else "map_auto")
 
             if existing is None:
                 existing_by_id[m.field_id] = FormSchemaField(
@@ -1311,7 +1411,7 @@ class FormSchemaService:
         fields: list[FormSchemaField],
         form_name: str | None = None,
         updated_by: str | None = None,
-        conversation_id: str | None = None,
+        message_id: str | None = None,
     ) -> None:
         """Persist the schema JSONB array to the DB."""
         supabase = get_supabase_client()
@@ -1323,8 +1423,8 @@ class FormSchemaService:
             payload["form_name"] = form_name
         if updated_by is not None:
             payload["updated_by"] = updated_by
-        if conversation_id is not None:
-            payload["conversation_id"] = conversation_id
+        if message_id is not None:
+            payload["message_id"] = message_id
 
         supabase.table("form_schema").update(payload).eq("form_id", form_id).execute()
 
@@ -1365,7 +1465,7 @@ class FillService:
     """Drives the fill pipeline: build prompt, call OpenAI."""
 
     def __init__(self) -> None:
-        self._session_service = SessionService()
+        self._conversation_service = ConversationService()
         self._annotation_service = AnnotationService()
         self._mapping_service = MappingService()
         self._map_service = MapService()
@@ -1392,7 +1492,7 @@ class FillService:
         fields, _text_blocks = form_service.get_fields_and_text_blocks(form_id)
         annotations = self._annotation_service.list_by_form(form_id)
         field_label_maps = self._map_service.list_by_form(form_id)
-        mappings = self._mapping_service.list_by_session(ctx.session_id)
+        mappings = self._mapping_service.list_by_conversation(ctx.conversation_id)
 
         return self._context_service.build_legacy(
             form_fields=fields,
@@ -1405,7 +1505,7 @@ class FillService:
         )
 
     def fill(
-        self, session_id: str, ask_answers: dict[str, str] | None = None
+        self, conversation_id: str, ask_answers: dict[str, str] | None = None
     ) -> dict:
         """Run fill and return {fields: [{field_id, value}], ask: []}.
 
@@ -1416,11 +1516,11 @@ class FillService:
         if not settings.openai_api_key:
             raise ValueError("OpenAI not configured")
 
-        ctx = self._session_service.get(session_id)
+        ctx = self._conversation_service.get(conversation_id)
         if ctx is None:
-            raise ValueError(f"Session {session_id} not found")
+            raise ValueError(f"Conversation {conversation_id} not found")
         if not ctx.form_id:
-            raise ValueError("No form associated with session")
+            raise ValueError("No form associated with conversation")
 
         # Check for unanswered conditional questions first
         unanswered = self._context_service.get_unanswered_questions(
@@ -1451,7 +1551,7 @@ class FillService:
             system_chars=len(prompt.system),
             user_chars=len(prompt.user),
             started_at=started_at,
-            session_id=session_id,
+            conversation_id=conversation_id,
             system_prompt=prompt.system,
             user_prompt=prompt.user,
         )
@@ -1467,13 +1567,13 @@ class FillService:
         _end_prompt_log(prompt_log_id, datetime.now(timezone.utc))
 
         content = response.choices[0].message.content or ""
-        self._session_service.add_history_batch(session_id, [("user", prompt.user), ("agent", content)])
+        self._conversation_service.add_history_batch(conversation_id, [("user", prompt.user), ("agent", content)])
 
         filled = FillPrompt.parse(content, index_to_field_id)
 
         if filled:
             values_map = {item["field_id"]: item["value"] for item in filled}
-            self._session_service.update_form_values(session_id, values_map)
+            self._conversation_service.update_form_values(conversation_id, values_map)
 
             # Write fill results back to form_schema
             form_id = ctx.form_id or ""
@@ -1488,11 +1588,11 @@ class FillService:
 
         return {"fields": filled, "ask": []}
 
-    def ask(self, session_id: str) -> dict:
+    def ask(self, conversation_id: str) -> dict:
         """Return pre-classified conditional questions from the rulebook. No LLM call."""
-        ctx = self._session_service.get(session_id)
+        ctx = self._conversation_service.get(conversation_id)
         if ctx is None:
-            raise ValueError(f"Session {session_id} not found")
+            raise ValueError(f"Conversation {conversation_id} not found")
 
         ask_ctx = AskContext(rules=list(ctx.rules.items))
         prompt = AskPrompt.build(ask_ctx)

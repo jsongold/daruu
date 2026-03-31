@@ -1,14 +1,9 @@
 import { useParams, useNavigate } from "react-router-dom"
 import { ModeBar } from "../components/ModeBar"
 import { PdfViewer } from "../components/PdfViewer"
-import { AnnotatePanel } from "../components/AnnotatePanel"
-import { EditPanel } from "../components/EditPanel"
-import { AskPanel } from "../components/AskPanel"
 import { AskQuestionModal } from "../components/AskQuestionModal"
-import { MapPanel } from "../components/MapPanel"
 import { ActivityLog } from "../components/InfoChat"
-import { RulesPanel } from "../components/RulesPanel"
-import { FieldSidebar } from "../components/FieldSidebar"
+import { LeftPanel } from "../components/LeftPanel"
 import { HeaderActions } from "../components/HeaderActions"
 import { useFormSession } from "../hooks/useFormSession"
 import { useAnnotateMode } from "../hooks/useAnnotateMode"
@@ -16,13 +11,12 @@ import { useMapMode } from "../hooks/useMapMode"
 import { useRulesMode } from "../hooks/useRulesMode"
 import { useFillMode } from "../hooks/useFillMode"
 import { usePreviewMode } from "../hooks/usePreviewMode"
-import type { Mode } from "../api/formClient"
 
 export function FormPage() {
-  const { sessionId: urlSessionId } = useParams<{ sessionId: string }>()
+  const { conversationId: urlConversationId } = useParams<{ conversationId: string }>()
   const navigate = useNavigate()
 
-  const s = useFormSession(urlSessionId, navigate)
+  const s = useFormSession(urlConversationId, navigate)
 
   const { handleLabelClick, handleFieldClick, handleDeleteAnnotation } = useAnnotateMode({
     mode: s.mode,
@@ -39,6 +33,7 @@ export function FormPage() {
 
   const { handleRunMap } = useMapMode({
     formId: s.formId,
+    conversationId: s.conversationId,
     setFieldLabelMaps: s.setFieldLabelMaps,
     setIsMapping: s.setIsMapping,
     setError: s.setError,
@@ -46,7 +41,7 @@ export function FormPage() {
   })
 
   const { handleUnderstand, handleSaveRules } = useRulesMode({
-    sessionId: s.sessionId,
+    conversationId: s.conversationId,
     setRulesItems: s.setRulesItems,
     setMode: s.setMode,
     setIsUnderstanding: s.setIsUnderstanding,
@@ -55,7 +50,7 @@ export function FormPage() {
   })
 
   const { handleFill, handleAskReply, handleModalSubmit, handleModalClose } = useFillMode({
-    sessionId: s.sessionId,
+    conversationId: s.conversationId,
     fields: s.fields,
     pendingQuestions: s.pendingQuestions,
     setFields: s.setFields,
@@ -68,7 +63,7 @@ export function FormPage() {
   })
 
   const { handleSendInfo, handleAsk } = usePreviewMode({
-    sessionId: s.sessionId,
+    conversationId: s.conversationId,
     setIsAsking: s.setIsAsking,
     setMode: s.setMode,
     setPendingQuestions: s.setPendingQuestions,
@@ -77,32 +72,9 @@ export function FormPage() {
     chatWindow: s.chatWindow,
   })
 
-  const rightPanel: Record<Mode, React.ReactNode> = {
-    preview: (
-      <ActivityLog entries={s.activityLog} onSend={handleSendInfo} disabled={!s.sessionId || s.isFilling} />
-    ),
-    edit: <EditPanel fields={s.fields} onValueChange={s.handleValueChange} />,
-    annotate: (
-      <AnnotatePanel
-        annotations={s.annotations}
-        selectedLabelId={s.selectedLabelId}
-        selectedFieldId={s.selectedFieldId}
-        onDelete={handleDeleteAnnotation}
-      />
-    ),
-    map: (
-      <MapPanel maps={s.fieldLabelMaps} onRunMap={handleRunMap} isLoading={s.isMapping} disabled={!s.formId} />
-    ),
-    fill: (
-      <AskPanel history={s.askHistory} onReply={handleAskReply} mode={s.mode} isLoading={s.isFilling || s.isAsking} />
-    ),
-    ask: (
-      <AskPanel history={s.askHistory} onReply={handleAskReply} mode={s.mode} isLoading={s.isFilling || s.isAsking} />
-    ),
-    rules: (
-      <RulesPanel rules={s.rulesItems} isLoading={s.isUnderstanding} onSave={handleSaveRules} />
-    ),
-  }
+  // handleSaveRules and handleAskReply retained for future use
+  void handleSaveRules
+  void handleAskReply
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
@@ -118,13 +90,15 @@ export function FormPage() {
 
         <HeaderActions
           formId={s.formId}
-          sessionId={s.sessionId}
+          conversationId={s.conversationId}
           isLoading={s.isLoading}
           isFilling={s.isFilling}
           isAsking={s.isAsking}
+          isMapping={s.isMapping}
           isUnderstanding={s.isUnderstanding}
           error={s.error}
           onUnderstand={handleUnderstand}
+          onMap={handleRunMap}
           onAsk={handleAsk}
           onFill={() => handleFill()}
           onUploadClick={() => s.fileInputRef.current?.click()}
@@ -139,12 +113,17 @@ export function FormPage() {
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        <FieldSidebar
+        <LeftPanel
+          mode={s.mode}
           fields={s.fields}
           annotations={s.annotations}
           fieldLabelMaps={s.fieldLabelMaps}
+          selectedLabelId={s.selectedLabelId}
+          selectedFieldId={s.selectedFieldId}
           currentPage={s.currentPage}
           formId={s.formId}
+          onValueChange={s.handleValueChange}
+          onDeleteAnnotation={handleDeleteAnnotation}
         />
 
         <main
@@ -174,7 +153,11 @@ export function FormPage() {
         </main>
 
         <aside className="w-64 bg-white border-l border-gray-200 overflow-hidden flex flex-col shrink-0">
-          {rightPanel[s.mode]}
+          <ActivityLog
+            entries={s.activityLog}
+            onSend={handleSendInfo}
+            disabled={!s.conversationId || s.isFilling}
+          />
         </aside>
       </div>
 
