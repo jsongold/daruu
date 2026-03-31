@@ -38,7 +38,7 @@ export interface Annotation {
 
 export interface Mapping {
   id: string
-  session_id: string
+  conversation_id: string
   annotation_id: string
   field_id: string
   inferred_value: string | null
@@ -86,7 +86,7 @@ export interface MapRun {
 }
 
 export interface ContextWindow {
-  session_id: string
+  conversation_id: string
   form_id: string | null
   form: Form | null
   user_info: UserInfo
@@ -179,25 +179,26 @@ export const formClient = {
   ): Promise<{ fields: FormField[]; text_blocks: TextBlock[]; page_count: number }> =>
     get(`/api/forms/${formId}/fields`),
 
-  createSession: (
+  createConversation: (
     formId?: string,
     userInfo?: UserInfo,
     rules?: Rules
   ): Promise<ContextWindow> =>
-    post("/api/sessions", {
+    post("/api/conversations", {
       form_id: formId ?? null,
       user_info: userInfo ?? { data: {} },
       rules: rules ?? { items: [] },
     }),
 
-  updateSessionForm: (sessionId: string, formId: string): Promise<ContextWindow> =>
-    patch(`/api/sessions/${sessionId}/form`, { form_id: formId }),
+  updateConversationForm: (conversationId: string, formId: string): Promise<ContextWindow> =>
+    patch(`/api/conversations/${conversationId}/form`, { form_id: formId }),
 
-  getSession: (sessionId: string): Promise<ContextWindow> =>
-    get(`/api/sessions/${sessionId}`),
+  getConversation: (conversationId: string): Promise<ContextWindow> =>
+    get(`/api/conversations/${conversationId}`),
 
-  updateUserInfo: (sessionId: string, data: Record<string, string>): Promise<ContextWindow> =>
-    patch(`/api/sessions/${sessionId}/user-info`, data),
+  updateUserInfo: (conversationId: string, data: Record<string, string>): Promise<ContextWindow> =>
+    patch(`/api/conversations/${conversationId}/user-info`, data),
+
   createAnnotation: (data: {
     form_id: string
     label_text: string
@@ -215,27 +216,29 @@ export const formClient = {
   deleteAnnotation: (annotationId: string): Promise<void> =>
     del(`/api/annotations/${annotationId}`),
 
-  runMap: (formId: string): Promise<MapResult> =>
-    post(`/api/map/${formId}`, {}),
+  runMap: (formId: string, conversationId?: string): Promise<MapResult> => {
+    const qs = conversationId ? `?conversation_id=${conversationId}` : ""
+    return post(`/api/map/${formId}${qs}`, {})
+  },
 
   getMap: (formId: string): Promise<MapResult> =>
     get(`/api/map/${formId}`),
 
-  fill: (sessionId: string, askAnswers?: Record<string, string>): Promise<FillResult> =>
-    post(`/api/fill`, { session_id: sessionId, ask_answers: askAnswers }),
+  fill: (conversationId: string, askAnswers?: Record<string, string>): Promise<FillResult> =>
+    post(`/api/fill`, { conversation_id: conversationId, ask_answers: askAnswers }),
 
-  ask: (sessionId: string): Promise<AskResult> =>
-    post(`/api/ask`, { session_id: sessionId }),
+  ask: (conversationId: string): Promise<AskResult> =>
+    post(`/api/ask`, { conversation_id: conversationId }),
 
-  understand: (sessionId: string): Promise<ContextWindow> =>
-    post(`/api/sessions/${sessionId}/understand`, {}),
+  understand: (conversationId: string): Promise<ContextWindow> =>
+    post(`/api/conversations/${conversationId}/understand`, {}),
 
-  updateRules: (sessionId: string, items: string[]): Promise<ContextWindow> =>
-    patch(`/api/sessions/${sessionId}/rules`, { items }),
+  updateRules: (conversationId: string, items: string[]): Promise<ContextWindow> =>
+    patch(`/api/conversations/${conversationId}/rules`, { items }),
 
-  addConversation: (sessionId: string, role: string, content: string): Promise<void> =>
-    post(`/api/conversations`, { session_id: sessionId, role, content }),
+  addMessage: (conversationId: string, role: string, content: string): Promise<void> =>
+    post(`/api/messages`, { conversation_id: conversationId, role, content }),
 
-  listConversations: (sessionId: string): Promise<Array<{ id: string; session_id: string; role: string; content: string; created_at: string | null }>> =>
-    get(`/api/conversations/${sessionId}`),
+  listMessages: (conversationId: string): Promise<Array<{ id: string; conversation_id: string; role: string; content: string; created_at: string | null }>> =>
+    get(`/api/messages/${conversationId}`),
 }

@@ -79,7 +79,7 @@ class Annotation(BaseModel):
 
 class Mapping(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
-    session_id: str
+    conversation_id: str
     annotation_id: str
     field_id: str
     inferred_value: str | None = None
@@ -126,9 +126,9 @@ class HistoryMessage(BaseModel):
     model_config = {"frozen": True}
 
 
-class Conversation(BaseModel):
+class Message(BaseModel):
     id: str
-    session_id: str
+    conversation_id: str
     role: str  # "user" | "agent" | "system"
     content: str
     created_at: datetime | None = None
@@ -137,8 +137,8 @@ class Conversation(BaseModel):
 
 class PromptLog(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
-    session_id: str | None = None
-    conversation_id: str | None = None
+    conversation_id: str
+    message_id: str | None = None
     type: str  # "map" | "understand" | "fill" | "mapping_fallback"
     prompt_template: str  # class name: "MapPrompt" | "RulesPrompt" | "FillPrompt" | "inline"
     model: str
@@ -160,7 +160,7 @@ class PromptRaw(BaseModel):
 
 
 class ContextWindow(BaseModel):
-    session_id: str = Field(default_factory=lambda: str(uuid4()))
+    conversation_id: str = Field(default_factory=lambda: str(uuid4()))
     form_id: str | None = None
     form: Form | None = None
     user_info: UserInfo = Field(default_factory=UserInfo)
@@ -196,7 +196,7 @@ class FieldsResponse(BaseModel):
     page_count: int = 1
 
 
-class CreateSessionRequest(BaseModel):
+class CreateConversationRequest(BaseModel):
     form_id: str | None = None
     user_info: UserInfo = Field(default_factory=UserInfo)
     rules: Rules = Field(default_factory=Rules)
@@ -286,6 +286,7 @@ class MapContext(BaseModel):
     fields: list[FormField] = Field(default_factory=list)
     text_blocks: list[TextBlock] = Field(default_factory=list)
     confirmed_annotations: list[Annotation] = Field(default_factory=list)
+    heuristic_maps: list[FieldLabelMap] = Field(default_factory=list)
     top_k: int = 7
     model_config = {"frozen": True}
 
@@ -326,7 +327,7 @@ class FormRules(BaseModel):
     description: str | None = None
     rulebook_text: str | None = None
     rules: list[RuleItem] = Field(default_factory=list)
-    conversation_id: str | None = None
+    message_id: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
     model_config = {"frozen": True}
@@ -349,7 +350,7 @@ class FormSchemaRow(BaseModel):
     form_rules_id: str | None = None
     fields: list[FormSchemaField] = Field(default_factory=list, alias="schema")
     embedding: list[float] | None = None
-    conversation_id: str | None = None
+    message_id: str | None = None
     updated_by: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -362,11 +363,11 @@ class MapResult(BaseModel):
 
 
 class RunMappingRequest(BaseModel):
-    session_id: str
+    conversation_id: str
 
 
 class FillRequest(BaseModel):
-    session_id: str
+    conversation_id: str
     ask_answers: dict[str, str] | None = None  # resolved question -> answer pairs
 
 

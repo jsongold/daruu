@@ -8,10 +8,10 @@ from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 
 from app.models import (
     Annotation,
-    Conversation,
+    Message,
     ContextWindow,
     CreateAnnotationRequest,
-    CreateSessionRequest,
+    CreateConversationRequest,
     FieldsResponse,
     FillRequest,
     FormSchema,
@@ -22,12 +22,12 @@ from app.models import (
 )
 from app.services import (
     AnnotationService,
-    ConversationService,
+    MessageService,
     FormSchemaService,
     FormService,
     FillService,
     MapService,
-    SessionService,
+    ConversationService,
     UnderstandService,
 )
 
@@ -37,11 +37,11 @@ router = APIRouter(prefix="/api")
 
 doc_service = FormService()
 annotation_service = AnnotationService()
-session_service = SessionService()
+conversation_service = ConversationService()
 map_service = MapService()
 fill_service = FillService()
 understand_service = UnderstandService()
-conversation_service = ConversationService()
+message_service = MessageService()
 form_schema_service = FormSchemaService()
 
 
@@ -54,6 +54,12 @@ async def upload_form(file: UploadFile = File(...)) -> UploadFormResponse:
     except Exception as e:
         logger.error("Failed to upload form: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+    try:
+        map_service.run_heuristic(form.form_id)
+    except Exception as e:
+        logger.warning("Heuristic map failed for %s: %s", form.form_id, e)
+
     return UploadFormResponse(form_id=form.form_id, form=form)
 
 
@@ -86,77 +92,77 @@ async def get_form_fields(form_id: str) -> FieldsResponse:
     return FieldsResponse(form_id=form_id, fields=fields, text_blocks=text_blocks, page_count=page_count)
 
 
-@router.post("/sessions", response_model=ContextWindow)
-async def create_session(req: CreateSessionRequest) -> ContextWindow:
-    """Create a new fill session for a form."""
+@router.post("/conversations", response_model=ContextWindow)
+async def create_conversation(req: CreateConversationRequest) -> ContextWindow:
+    """Create a new conversation for a form."""
     try:
-        ctx = session_service.create(req.form_id, req.user_info, req.rules)
+        ctx = conversation_service.create(req.form_id, req.user_info, req.rules)
     except Exception as e:
-        logger.error("Failed to create session: %s", e)
+        logger.error("Failed to create conversation: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e
     return ctx
 
 
-@router.patch("/sessions/{session_id}/form", response_model=ContextWindow)
-async def update_session_form(session_id: str, body: dict) -> ContextWindow:
-    """Attach a form to an existing session."""
+@router.patch("/conversations/{conversation_id}/form", response_model=ContextWindow)
+async def update_conversation_form(conversation_id: str, body: dict) -> ContextWindow:
+    """Attach a form to an existing conversation."""
     form_id = body.get("form_id")
     if not form_id:
         raise HTTPException(status_code=422, detail="form_id is required")
-    if session_service.get(session_id) is None:
-        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+    if conversation_service.get(conversation_id) is None:
+        raise HTTPException(status_code=404, detail=f"Conversation {conversation_id} not found")
     try:
-        session_service.update_form(session_id, form_id)
+        conversation_service.update_form(conversation_id, form_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
-    return session_service.get(session_id)  # type: ignore[return-value]
+    return conversation_service.get(conversation_id)  # type: ignore[return-value]
 
 
-@router.patch("/sessions/{session_id}/user-info", response_model=ContextWindow)
-async def update_user_info(session_id: str, body: dict) -> ContextWindow:
-    """Merge key/value pairs into session user_info.data."""
-    ctx = session_service.get(session_id)
+@router.patch("/conversations/{conversation_id}/user-info", response_model=ContextWindow)
+async def update_user_info(conversation_id: str, body: dict) -> ContextWindow:
+    """Merge key/value pairs into conversation user_info.data."""
+    ctx = conversation_service.get(conversation_id)
     if ctx is None:
-        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+        raise HTTPException(status_code=404, detail=f"Conversation {conversation_id} not found")
     try:
-        session_service.update_user_info(session_id, body)
+        conversation_service.update_user_info(conversation_id, body)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
-    updated = session_service.get(session_id)
+    updated = conversation_service.get(conversation_id)
     return updated  # type: ignore[return-value]
 
 
-@router.get("/sessions/{session_id}", response_model=ContextWindow)
-async def get_session(session_id: str) -> ContextWindow:
-    """Retrieve a session by ID."""
-    ctx = session_service.get(session_id)
+@router.get("/conversations/{conversation_id}", response_model=ContextWindow)
+async def get_conversation(conversation_id: str) -> ContextWindow:
+    """Retrieve a conversation by ID."""
+    ctx = conversation_service.get(conversation_id)
     if ctx is None:
-        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+        raise HTTPException(status_code=404, detail=f"Conversation {conversation_id} not found")
     return ctx
 
 
-@router.post("/conversations", response_model=Conversation, status_code=201)
-async def add_conversation(body: dict) -> Conversation:
-    """Append an activity entry to a session's conversation log."""
-    session_id = body.get("session_id")
+@router.post("/messages", response_model=Message, status_code=201)
+async def add_message(body: dict) -> Message:
+    """Append an activity entry to a conversation's message log."""
+    conversation_id = body.get("conversation_id")
     role = body.get("role")
     content = body.get("content")
-    if not session_id or not role or not content:
-        raise HTTPException(status_code=422, detail="session_id, role, and content are required")
+    if not conversation_id or not role or not content:
+        raise HTTPException(status_code=422, detail="conversation_id, role, and content are required")
     try:
-        return conversation_service.add(session_id, role, content)
+        return message_service.add(conversation_id, role, content)
     except Exception as e:
-        logger.error("add_conversation error for session %s: %s", session_id, e)
+        logger.error("add_message error for conversation %s: %s", conversation_id, e)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@router.get("/conversations/{session_id}", response_model=list[Conversation])
-async def list_conversations(session_id: str) -> list[Conversation]:
-    """Return all conversation entries for a session, ordered by time."""
+@router.get("/messages/{conversation_id}", response_model=list[Message])
+async def list_messages(conversation_id: str) -> list[Message]:
+    """Return all message entries for a conversation, ordered by time."""
     try:
-        return conversation_service.list_by_session(session_id)
+        return message_service.list_by_conversation(conversation_id)
     except Exception as e:
-        logger.error("list_conversations error for session %s: %s", session_id, e)
+        logger.error("list_messages error for conversation %s: %s", conversation_id, e)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -192,11 +198,11 @@ async def delete_annotation(annotation_id: str) -> None:
 
 
 @router.post("/map/{form_id}", response_model=MapResult)
-async def run_map(form_id: str) -> MapResult:
+async def run_map(form_id: str, conversation_id: Optional[str] = Query(None)) -> MapResult:
     """Run spatial + LLM field label identification for a form."""
     logger.info("Mode triggered: MAP form=%s", form_id)
     try:
-        maps = map_service.run(form_id)
+        maps = map_service.run(form_id, conversation_id=conversation_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except FileNotFoundError as e:
@@ -231,48 +237,48 @@ async def get_map(form_id: str, created_at: Optional[str] = Query(default=None))
 @router.post("/fill")
 async def fill(req: FillRequest) -> dict:
     """Fill form fields using LLM."""
-    logger.info("Mode triggered: FILL session=%s", req.session_id)
+    logger.info("Mode triggered: FILL conversation=%s", req.conversation_id)
     try:
-        return fill_service.fill(req.session_id, req.ask_answers)
+        return fill_service.fill(req.conversation_id, req.ask_answers)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
-        logger.error("Fill error for session %s: %s", req.session_id, e)
+        logger.error("Fill error for conversation %s: %s", req.conversation_id, e)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@router.post("/sessions/{session_id}/understand", response_model=ContextWindow)
-async def understand(session_id: str) -> ContextWindow:
-    """LLM analyzes the form and extracts filling rules into the session."""
-    logger.info("Mode triggered: RULES session=%s", session_id)
+@router.post("/conversations/{conversation_id}/understand", response_model=ContextWindow)
+async def understand(conversation_id: str) -> ContextWindow:
+    """LLM analyzes the form and extracts filling rules into the conversation."""
+    logger.info("Mode triggered: RULES conversation=%s", conversation_id)
     try:
-        understand_service.understand(session_id)
+        understand_service.understand(conversation_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
-        logger.error("Understand error for session %s: %s", session_id, e)
+        logger.error("Understand error for conversation %s: %s", conversation_id, e)
         raise HTTPException(status_code=500, detail=str(e)) from e
-    ctx = session_service.get(session_id)
+    ctx = conversation_service.get(conversation_id)
     if ctx is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail="Conversation not found")
     return ctx
 
 
-@router.patch("/sessions/{session_id}/rules", response_model=ContextWindow)
-async def update_rules(session_id: str, body: dict) -> ContextWindow:
-    """Replace session rules with a manually edited list of RuleItem objects."""
-    if session_service.get(session_id) is None:
-        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+@router.patch("/conversations/{conversation_id}/rules", response_model=ContextWindow)
+async def update_rules(conversation_id: str, body: dict) -> ContextWindow:
+    """Replace conversation rules with a manually edited list of RuleItem objects."""
+    if conversation_service.get(conversation_id) is None:
+        raise HTTPException(status_code=404, detail=f"Conversation {conversation_id} not found")
     raw_items = body.get("items", [])
     if not isinstance(raw_items, list):
         raise HTTPException(status_code=422, detail="'items' must be a list")
     try:
         rule_items = [RuleItem(**i) for i in raw_items]
-        session_service.update_rules(session_id, rule_items)
+        conversation_service.update_rules(conversation_id, rule_items)
     except Exception as e:
-        logger.error("update_rules error for session %s: %s", session_id, e)
+        logger.error("update_rules error for conversation %s: %s", conversation_id, e)
         raise HTTPException(status_code=422, detail=str(e)) from e
-    return session_service.get(session_id)  # type: ignore[return-value]
+    return conversation_service.get(conversation_id)  # type: ignore[return-value]
 
 
 @router.get("/forms/{form_id}/schema", response_model=FormSchema)
@@ -293,11 +299,11 @@ async def get_form_schema(form_id: str) -> FormSchema:
 @router.post("/ask")
 async def ask(req: FillRequest) -> dict:
     """Agent asks clarifying questions."""
-    logger.info("Mode triggered: ASK session=%s", req.session_id)
+    logger.info("Mode triggered: ASK conversation=%s", req.conversation_id)
     try:
-        return fill_service.ask(req.session_id)
+        return fill_service.ask(req.conversation_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
-        logger.error("Ask error for session %s: %s", req.session_id, e)
+        logger.error("Ask error for conversation %s: %s", req.conversation_id, e)
         raise HTTPException(status_code=500, detail=str(e)) from e
