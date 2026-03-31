@@ -14,6 +14,7 @@ from app.models import (
     RuleType,
     TextBlock,
 )
+from app.spatial import direction_score as _direction_score
 
 
 # ---------------------------------------------------------------------------
@@ -30,41 +31,6 @@ def _to_ivb(bbox_normalized: tuple[float, float, float, float]) -> tuple[int, in
     return x1, y1, x2, y2
 
 
-def _direction_score(field_bbox: tuple[float, float, float, float], label_bbox: tuple[float, float, float, float]) -> tuple[float, str]:
-    """Compute spatial distance score and direction from label to field."""
-    fx, fy, fw, fh = field_bbox
-    lx, ly, lw, lh = label_bbox
-
-    # Center points
-    fcx, fcy = fx + fw / 2, fy + fh / 2
-    lcx, lcy = lx + lw / 2, ly + lh / 2
-
-    # Check overlap
-    overlap = (lx < fx + fw and lx + lw > fx and ly < fy + fh and ly + lh > fy)
-    if overlap:
-        return 0.0, "overlap"
-
-    base_dist = math.sqrt((fcx - lcx) ** 2 + (fcy - lcy) ** 2)
-    dx = fcx - lcx  # positive = label is to the left of field
-    dy = fcy - lcy  # positive = label is above field
-
-    if abs(dx) >= abs(dy):
-        direction = "left" if dx > 0 else "right"
-    else:
-        direction = "above" if dy > 0 else "below"
-
-    multipliers = {"left": 0.8, "above": 0.9,
-                   "right": 2.0, "below": 1.5, "overlap": 0.5}
-    score = base_dist * multipliers[direction]
-
-    # Vertical alignment bonus: same row -> x0.7
-    avg_height = (fh + lh) / 2
-    if avg_height > 0 and abs(fcy - lcy) < avg_height * 0.5:
-        score *= 0.7
-
-    return score, direction
-
-
 # ---------------------------------------------------------------------------
 # Private user-prompt builders
 # ---------------------------------------------------------------------------
@@ -74,6 +40,7 @@ def _build_map_user(
     text_blocks: list[TextBlock],
     confirmed_annotations: list[Annotation],
     top_k: int,
+    heuristic_maps: list | None = None,
 ) -> str:
     """Build the Map mode user prompt with spatial candidate data in IVB format."""
     pages: dict[int, list[FormField]] = {}
@@ -133,6 +100,14 @@ def _build_map_user(
                     f'- "{ann.label_text}" [{l_ivb[0]},{l_ivb[1]},{l_ivb[2]},{l_ivb[3]}] '
                     f'-> {ann.field_id} [{f_ivb[0]},{f_ivb[1]},{f_ivb[2]},{f_ivb[3]}]'
                 )
+
+    if heuristic_maps:
+        lines.append(
+            "\n## Heuristic spatial matches (verify and correct)")
+        for m in heuristic_maps:
+            if m.label_text:
+                lines.append(
+                    f'- {m.field_id} -> "{m.label_text}" (confidence={m.confidence})')
 
     return "\n".join(lines)
 
@@ -285,8 +260,11 @@ Return ONLY a JSON object. No markdown, no explanation, no code fences.
 
     @staticmethod
     def build(ctx: MapContext) -> Prompt:
-        user = _build_map_user(ctx.fields, ctx.text_blocks,
-                               ctx.confirmed_annotations, ctx.top_k)
+        user = _build_map_user(
+            ctx.fields, ctx.text_blocks,
+            ctx.confirmed_annotations, ctx.top_k,
+            heuristic_maps=ctx.heuristic_maps,
+        )
         return Prompt(system=MapPrompt.SYSTEM, user=user)
 
 

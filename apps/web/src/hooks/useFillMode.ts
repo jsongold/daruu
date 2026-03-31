@@ -4,7 +4,7 @@ import type { AgentQuestion, FormField, Mode } from "../api/formClient"
 import type { ChatWindow } from "../lib/ChatWindow"
 
 interface Args {
-  sessionId: string | null
+  conversationId: string | null
   fields: FormField[]
   pendingQuestions: AgentQuestion[]
   setFields: React.Dispatch<React.SetStateAction<FormField[]>>
@@ -17,7 +17,7 @@ interface Args {
 }
 
 export function useFillMode({
-  sessionId,
+  conversationId,
   fields,
   pendingQuestions,
   setFields,
@@ -30,7 +30,7 @@ export function useFillMode({
 }: Args) {
   const handleFill = useCallback(
     async (askAnswers?: Record<string, string>) => {
-      if (!sessionId) return
+      if (!conversationId) return
       setIsFilling(true)
       setMode("fill")
       setError(null)
@@ -46,7 +46,7 @@ export function useFillMode({
       }
 
       try {
-        const result = await formClient.fill(sessionId, askAnswers)
+        const result = await formClient.fill(conversationId, askAnswers)
 
         if (result.fields.length > 0) {
           // Update fields from schema if available, otherwise patch from fields array
@@ -97,7 +97,7 @@ export function useFillMode({
         setIsFilling(false)
       }
     },
-    [sessionId, fields, setFields, setMode, setIsFilling, setAskHistory, setPendingQuestions, setError, chatWindow]
+    [conversationId, fields, setFields, setMode, setIsFilling, setAskHistory, setPendingQuestions, setError, chatWindow]
   )
 
   const handleAskReply = useCallback(

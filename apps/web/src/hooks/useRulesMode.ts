@@ -4,7 +4,7 @@ import type { Mode } from "../api/formClient"
 import type { ChatWindow } from "../lib/ChatWindow"
 
 interface Args {
-  sessionId: string | null
+  conversationId: string | null
   setRulesItems: React.Dispatch<React.SetStateAction<string[]>>
   setMode: (mode: Mode) => void
   setIsUnderstanding: (v: boolean) => void
@@ -13,7 +13,7 @@ interface Args {
 }
 
 export function useRulesMode({
-  sessionId,
+  conversationId,
   setRulesItems,
   setMode,
   setIsUnderstanding,
@@ -21,15 +21,14 @@ export function useRulesMode({
   chatWindow,
 }: Args) {
   const handleUnderstand = useCallback(async () => {
-    if (!sessionId) return
+    if (!conversationId) return
     setIsUnderstanding(true)
     setError(null)
     chatWindow.add("system", "Understand started...")
     try {
-      const ctx = await formClient.understand(sessionId)
+      const ctx = await formClient.understand(conversationId)
       const count = ctx.rules?.items?.length ?? 0
-      setRulesItems(ctx.rules?.items ?? [])
-      setMode("rules")
+      setRulesItems((ctx.rules?.items ?? []).map((r: any) => typeof r === "string" ? r : r.rule_text ?? ""))
       chatWindow.add("system", `Understand complete: ${count} rules extracted`)
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Understand failed"
@@ -38,14 +37,14 @@ export function useRulesMode({
     } finally {
       setIsUnderstanding(false)
     }
-  }, [sessionId, setRulesItems, setMode, setIsUnderstanding, setError, chatWindow])
+  }, [conversationId, setRulesItems, setMode, setIsUnderstanding, setError, chatWindow])
 
   const handleSaveRules = useCallback(
     async (items: string[]) => {
-      if (!sessionId) return
+      if (!conversationId) return
       try {
-        const ctx = await formClient.updateRules(sessionId, items)
-        setRulesItems(ctx.rules?.items ?? [])
+        const ctx = await formClient.updateRules(conversationId, items)
+        setRulesItems((ctx.rules?.items ?? []).map((r: any) => typeof r === "string" ? r : r.rule_text ?? ""))
         chatWindow.add("system", `Rules saved: ${items.length} rules`)
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Failed to save rules"
@@ -53,7 +52,7 @@ export function useRulesMode({
         chatWindow.add("system", `Rules save failed: ${msg}`)
       }
     },
-    [sessionId, setRulesItems, setError, chatWindow]
+    [conversationId, setRulesItems, setError, chatWindow]
   )
 
   return { handleUnderstand, handleSaveRules }

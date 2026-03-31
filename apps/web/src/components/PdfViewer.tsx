@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import type { FormField, TextBlock, Mode, BBox } from "../api/formClient"
 
 interface Props {
@@ -10,6 +10,7 @@ interface Props {
   selectedFieldId: string | null
   onLabelClick: (block: TextBlock) => void
   onFieldClick: (field: FormField) => void
+  onValueChange?: (fieldId: string, value: string) => void
   page: number
   totalPages: number
   onPageChange: (page: number) => void
@@ -35,6 +36,7 @@ export function PdfViewer({
   selectedFieldId,
   onLabelClick,
   onFieldClick,
+  onValueChange,
   page,
   totalPages,
   onPageChange,
@@ -42,6 +44,8 @@ export function PdfViewer({
   onToggleIncludePage,
 }: Props) {
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(null)
+  const [editingFieldId, setEditingFieldId] = useState<string | null>(null)
+  const editInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!imageUrl) {
@@ -98,20 +102,52 @@ export function PdfViewer({
                   ? "border-green-400/50"
                   : "border-gray-300/50"
 
+              const isEditing = mode === "edit" && editingFieldId === field.id
+
               return (
                 <div
                   key={field.id}
                   className={`absolute border-2 cursor-pointer transition-colors ${borderColor}`}
                   style={bboxStyle(field.bbox)}
-                  onClick={() => onFieldClick(field)}
+                  onClick={() => {
+                    if (mode === "edit" && onValueChange) {
+                      setEditingFieldId(field.id)
+                      setTimeout(() => editInputRef.current?.focus(), 0)
+                    } else {
+                      onFieldClick(field)
+                    }
+                  }}
                   title={field.name}
                 >
-                  {field.value && (
-                    <span className="absolute inset-0 flex items-center px-0.5 text-[10px] text-green-800 overflow-hidden whitespace-nowrap">
-                      {field.value}
-                    </span>
+                  {isEditing ? (
+                    <input
+                      ref={editInputRef}
+                      type="text"
+                      defaultValue={field.value ?? ""}
+                      onBlur={(e) => {
+                        onValueChange!(field.id, e.target.value)
+                        setEditingFieldId(null)
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          onValueChange!(field.id, e.currentTarget.value)
+                          setEditingFieldId(null)
+                        } else if (e.key === "Escape") {
+                          setEditingFieldId(null)
+                        }
+                      }}
+                      className="absolute inset-0 w-full h-full text-[10px] text-green-800 bg-white/80 px-0.5 outline-none border-none"
+                    />
+                  ) : (
+                    <>
+                      {field.value && (
+                        <span className="absolute inset-0 flex items-center px-0.5 text-[10px] text-green-800 overflow-hidden whitespace-nowrap">
+                          {field.value}
+                        </span>
+                      )}
+                    </>
                   )}
-                  {mode === "edit" && (
+                  {mode === "edit" && !isEditing && (
                     <span className="absolute -top-4 left-0 text-[9px] bg-orange-100 px-1 text-orange-700 whitespace-nowrap max-w-[120px] truncate">
                       {field.name}
                     </span>

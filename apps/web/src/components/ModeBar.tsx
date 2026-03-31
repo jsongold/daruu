@@ -9,14 +9,14 @@ interface Props {
 const MODE_LABELS: Record<Mode, string> = {
   preview: "Preview",
   edit: "Edit",
-  annotate: "Annotate",
+  annotate: "Annotate/Map",
   map: "Map",
   fill: "Fill",
   ask: "Ask",
   rules: "Rules",
 }
 
-const USER_MODES: Mode[] = ["preview", "edit", "annotate", "map", "rules"]
+const USER_MODES: Mode[] = ["edit", "annotate"]
 
 export function ModeBar({ mode, onChange, disabled }: Props) {
   return (

@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 
 interface Props {
   onSend: (text: string) => void | Promise<void>
@@ -17,20 +17,40 @@ export function ChatInput({
 }: Props) {
   const [input, setInput] = useState("")
   const [sending, setSending] = useState(false)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const isLoading = externalLoading || sending
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const submit = async () => {
     const text = input.trim()
     if (!text || disabled || isLoading) return
     setInput("")
+    if (textareaRef.current) textareaRef.current.style.height = "auto"
     setSending(true)
     try {
       await onSend(text)
     } finally {
       setSending(false)
     }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    await submit()
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault()
+      submit()
+    }
+  }
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInput(e.target.value)
+    const el = e.target
+    el.style.height = "auto"
+    el.style.height = `${Math.min(el.scrollHeight, 120)}px`
   }
 
   const inputClass = [
@@ -45,13 +65,15 @@ export function ChatInput({
 
   return (
     <form onSubmit={handleSubmit} className="p-2 border-t border-gray-200 flex gap-2">
-      <input
-        type="text"
+      <textarea
+        ref={textareaRef}
+        rows={1}
         value={input}
-        onChange={(e) => setInput(e.target.value)}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
         placeholder={isLoading ? "Waiting..." : placeholder}
         disabled={disabled || isLoading}
-        className={inputClass}
+        className={`${inputClass} resize-none overflow-y-auto`}
       />
       <button
         type="submit"
