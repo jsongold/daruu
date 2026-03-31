@@ -14,15 +14,17 @@ from app.models import (
     CreateSessionRequest,
     FieldsResponse,
     FillRequest,
+    FormSchema,
     MapResult,
     MapRun,
     RuleItem,
-    UploadDocumentResponse,
+    UploadFormResponse,
 )
 from app.services import (
     AnnotationService,
     ConversationService,
-    DocumentService,
+    FormSchemaService,
+    FormService,
     FillService,
     MapService,
     SessionService,
@@ -33,77 +35,78 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api")
 
-doc_service = DocumentService()
+doc_service = FormService()
 annotation_service = AnnotationService()
 session_service = SessionService()
 map_service = MapService()
 fill_service = FillService()
 understand_service = UnderstandService()
 conversation_service = ConversationService()
+form_schema_service = FormSchemaService()
 
 
-@router.post("/documents", response_model=UploadDocumentResponse)
-async def upload_document(file: UploadFile = File(...)) -> UploadDocumentResponse:
-    """Upload a PDF document and extract its form fields."""
+@router.post("/forms", response_model=UploadFormResponse)
+async def upload_form(file: UploadFile = File(...)) -> UploadFormResponse:
+    """Upload a PDF form and extract its fields."""
     file_bytes = await file.read()
     try:
-        form = doc_service.upload_pdf(file_bytes, file.filename or "document.pdf")
+        form = doc_service.upload_pdf(file_bytes, file.filename or "form.pdf")
     except Exception as e:
-        logger.error("Failed to upload document: %s", e)
+        logger.error("Failed to upload form: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e
-    return UploadDocumentResponse(document_id=form.document_id, form=form)
+    return UploadFormResponse(form_id=form.form_id, form=form)
 
 
-@router.get("/documents/{document_id}/pages/{page}")
-async def get_page_preview(document_id: str, page: int) -> dict:
+@router.get("/forms/{form_id}/pages/{page}")
+async def get_page_preview(form_id: str, page: int) -> dict:
     """Render a PDF page and return it as a base64 data URL."""
     try:
-        image_url = doc_service.get_page_preview_base64(document_id, page)
+        image_url = doc_service.get_page_preview_base64(form_id, page)
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
-        logger.error("Failed to render page %d for document %s: %s", page, document_id, e)
+        logger.error("Failed to render page %d for form %s: %s", page, form_id, e)
         raise HTTPException(status_code=500, detail=str(e)) from e
-    return {"document_id": document_id, "page": page, "image_url": image_url}
+    return {"form_id": form_id, "page": page, "image_url": image_url}
 
 
-@router.get("/documents/{document_id}/fields", response_model=FieldsResponse)
-async def get_document_fields(document_id: str) -> FieldsResponse:
-    """Extract form fields and text blocks from a PDF document."""
+@router.get("/forms/{form_id}/fields", response_model=FieldsResponse)
+async def get_form_fields(form_id: str) -> FieldsResponse:
+    """Extract form fields and text blocks from a PDF form."""
     try:
-        fields, text_blocks = doc_service.get_fields_and_text_blocks(document_id)
-        page_count = doc_service.get_page_count(document_id)
+        fields, text_blocks = doc_service.get_fields_and_text_blocks(form_id)
+        page_count = doc_service.get_page_count(form_id)
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
-        logger.error("Failed to extract fields for document %s: %s", document_id, e)
+        logger.error("Failed to extract fields for form %s: %s", form_id, e)
         raise HTTPException(status_code=500, detail=str(e)) from e
-    return FieldsResponse(document_id=document_id, fields=fields, text_blocks=text_blocks, page_count=page_count)
+    return FieldsResponse(form_id=form_id, fields=fields, text_blocks=text_blocks, page_count=page_count)
 
 
 @router.post("/sessions", response_model=ContextWindow)
 async def create_session(req: CreateSessionRequest) -> ContextWindow:
-    """Create a new fill session for a document."""
+    """Create a new fill session for a form."""
     try:
-        ctx = session_service.create(req.document_id, req.user_info, req.rules)
+        ctx = session_service.create(req.form_id, req.user_info, req.rules)
     except Exception as e:
         logger.error("Failed to create session: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e
     return ctx
 
 
-@router.patch("/sessions/{session_id}/document", response_model=ContextWindow)
-async def update_session_document(session_id: str, body: dict) -> ContextWindow:
-    """Attach a document to an existing session."""
-    document_id = body.get("document_id")
-    if not document_id:
-        raise HTTPException(status_code=422, detail="document_id is required")
+@router.patch("/sessions/{session_id}/form", response_model=ContextWindow)
+async def update_session_form(session_id: str, body: dict) -> ContextWindow:
+    """Attach a form to an existing session."""
+    form_id = body.get("form_id")
+    if not form_id:
+        raise HTTPException(status_code=422, detail="form_id is required")
     if session_service.get(session_id) is None:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
     try:
-        session_service.update_document(session_id, document_id)
+        session_service.update_form(session_id, form_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
     return session_service.get(session_id)  # type: ignore[return-value]
@@ -168,13 +171,13 @@ async def create_annotation(req: CreateAnnotationRequest) -> Annotation:
     return annotation
 
 
-@router.get("/annotations/{document_id}", response_model=list[Annotation])
-async def list_annotations(document_id: str) -> list[Annotation]:
-    """List all annotations for a document."""
+@router.get("/annotations/{form_id}", response_model=list[Annotation])
+async def list_annotations(form_id: str) -> list[Annotation]:
+    """List all annotations for a form."""
     try:
-        return annotation_service.list_by_document(document_id)
+        return annotation_service.list_by_form(form_id)
     except Exception as e:
-        logger.error("Failed to list annotations for document %s: %s", document_id, e)
+        logger.error("Failed to list annotations for form %s: %s", form_id, e)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -188,41 +191,41 @@ async def delete_annotation(annotation_id: str) -> None:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@router.post("/map/{document_id}", response_model=MapResult)
-async def run_map(document_id: str) -> MapResult:
-    """Run spatial + LLM field label identification for a document."""
-    logger.info("Mode triggered: MAP document=%s", document_id)
+@router.post("/map/{form_id}", response_model=MapResult)
+async def run_map(form_id: str) -> MapResult:
+    """Run spatial + LLM field label identification for a form."""
+    logger.info("Mode triggered: MAP form=%s", form_id)
     try:
-        maps = map_service.run(document_id)
+        maps = map_service.run(form_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
-        logger.error("Map error for document %s: %s", document_id, e)
+        logger.error("Map error for form %s: %s", form_id, e)
         raise HTTPException(status_code=500, detail=str(e)) from e
-    return MapResult(document_id=document_id, maps=maps)
+    return MapResult(form_id=form_id, maps=maps)
 
 
-@router.get("/map/{document_id}/runs", response_model=list[MapRun])
-async def list_map_runs(document_id: str) -> list[MapRun]:
-    """List all past map runs for a document, newest first."""
+@router.get("/map/{form_id}/runs", response_model=list[MapRun])
+async def list_map_runs(form_id: str) -> list[MapRun]:
+    """List all past map runs for a form, newest first."""
     try:
-        return map_service.list_runs(document_id)
+        return map_service.list_runs(form_id)
     except Exception as e:
-        logger.error("Failed to list map runs for document %s: %s", document_id, e)
+        logger.error("Failed to list map runs for form %s: %s", form_id, e)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@router.get("/map/{document_id}", response_model=MapResult)
-async def get_map(document_id: str, created_at: Optional[str] = Query(default=None)) -> MapResult:
-    """Get field label maps for a document. Defaults to the latest run; pass created_at to load a specific run."""
+@router.get("/map/{form_id}", response_model=MapResult)
+async def get_map(form_id: str, created_at: Optional[str] = Query(default=None)) -> MapResult:
+    """Get field label maps for a form. Defaults to the latest run; pass created_at to load a specific run."""
     try:
-        maps = map_service.list_by_document(document_id, created_at=created_at)
+        maps = map_service.list_by_form(form_id, created_at=created_at)
     except Exception as e:
-        logger.error("Failed to get maps for document %s: %s", document_id, e)
+        logger.error("Failed to get maps for form %s: %s", form_id, e)
         raise HTTPException(status_code=500, detail=str(e)) from e
-    return MapResult(document_id=document_id, maps=maps)
+    return MapResult(form_id=form_id, maps=maps)
 
 
 @router.post("/fill")
@@ -230,7 +233,7 @@ async def fill(req: FillRequest) -> dict:
     """Fill form fields using LLM."""
     logger.info("Mode triggered: FILL session=%s", req.session_id)
     try:
-        return fill_service.fill(req.session_id, req.user_message)
+        return fill_service.fill(req.session_id, req.ask_answers)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
@@ -240,7 +243,7 @@ async def fill(req: FillRequest) -> dict:
 
 @router.post("/sessions/{session_id}/understand", response_model=ContextWindow)
 async def understand(session_id: str) -> ContextWindow:
-    """LLM analyzes the document and extracts filling rules into the session."""
+    """LLM analyzes the form and extracts filling rules into the session."""
     logger.info("Mode triggered: RULES session=%s", session_id)
     try:
         understand_service.understand(session_id)
@@ -270,6 +273,21 @@ async def update_rules(session_id: str, body: dict) -> ContextWindow:
         logger.error("update_rules error for session %s: %s", session_id, e)
         raise HTTPException(status_code=422, detail=str(e)) from e
     return session_service.get(session_id)  # type: ignore[return-value]
+
+
+@router.get("/forms/{form_id}/schema", response_model=FormSchema)
+async def get_form_schema(form_id: str) -> FormSchema:
+    """Return the consolidated form schema (field labels, semantic keys, etc.)."""
+    try:
+        schema = form_schema_service.get(form_id)
+        if schema is None:
+            schema = form_schema_service.ensure_schema(form_id)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        logger.error("Failed to get form schema for %s: %s", form_id, e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    return schema
 
 
 @router.post("/ask")

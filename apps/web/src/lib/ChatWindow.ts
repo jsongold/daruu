@@ -23,6 +23,16 @@ export class ChatWindow {
     this._notify()
   }
 
+  /** Add multiple entries and notify only once. */
+  addBatch(items: Array<{ role: ActivityRole; text: string }>): void {
+    const now = new Date().toISOString()
+    this._entries = [
+      ...this._entries,
+      ...items.map((item) => ({ id: crypto.randomUUID(), role: item.role, text: item.text, timestamp: now })),
+    ]
+    this._notify()
+  }
+
   /** Bulk-load persisted entries without triggering re-persist. */
   load(entries: ActivityEntry[]): void {
     this._entries = [...entries]

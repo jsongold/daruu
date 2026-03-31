@@ -1,5 +1,5 @@
 interface Props {
-  documentId: string | null
+  formId: string | null
   sessionId: string | null
   isLoading: boolean
   isFilling: boolean
@@ -19,7 +19,7 @@ function Spinner() {
 }
 
 export function HeaderActions({
-  documentId, sessionId,
+  formId, sessionId,
   isLoading, isFilling, isAsking, isUnderstanding,
   error,
   onUnderstand, onAsk, onFill, onUploadClick,
@@ -62,7 +62,7 @@ export function HeaderActions({
         disabled={busy}
         className="px-3 py-1.5 text-xs bg-gray-800 text-white rounded hover:bg-gray-700 disabled:opacity-50"
       >
-        {isLoading ? "Loading..." : documentId ? "Replace PDF" : "Upload PDF"}
+        {isLoading ? "Loading..." : formId ? "Replace PDF" : "Upload PDF"}
       </button>
     </div>
   )

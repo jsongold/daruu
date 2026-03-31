@@ -1,7 +1,8 @@
-"""Business logic services: DocumentService, AnnotationService, SessionService, MappingService, MapService, FillService."""
+"""Business logic services: FormService, AnnotationService, SessionService, MappingService, MapService, FillService."""
 
 import base64
 import difflib
+import hashlib
 import json
 import logging
 from contextlib import contextmanager
@@ -26,12 +27,16 @@ from app.models import (
     FieldType,
     Form,
     FormField,
+    FormRules,
+    FormSchema,
+    FormSchemaField,
     HistoryMessage,
     MapContext,
     MapResult,
     MapRun,
     Mapping,
     Mode,
+    PromptLog,
     RuleItem,
     RulesContext,
     RuleType,
@@ -54,6 +59,60 @@ def _log_step(step: str, **ctx: object) -> Generator[None, None, None]:
     except Exception as e:
         logger.error("%s failed: %s | %s", step, label, e)
         raise
+
+
+def _save_prompt_log(
+    *,
+    type: str,
+    prompt_template: str,
+    model: str,
+    system_chars: int,
+    user_chars: int,
+    started_at: datetime,
+    session_id: str | None = None,
+    conversation_id: str | None = None,
+    system_prompt: str | None = None,
+    user_prompt: str | None = None,
+) -> str | None:
+    """Persist a prompt log entry to Supabase before the LLM call. Returns row id or None on failure."""
+    try:
+        supabase = get_supabase_client()
+        response = supabase.table("prompt_logs").insert({
+            "session_id": session_id,
+            "conversation_id": conversation_id,
+            "type": type,
+            "prompt_template": prompt_template,
+            "model": model,
+            "system_chars": system_chars,
+            "user_chars": user_chars,
+            "started_at": started_at.isoformat(),
+        }).execute()
+
+        prompt_log_id: str = response.data[0]["id"]
+
+        if system_prompt is not None or user_prompt is not None:
+            supabase.table("prompt_raw").insert({
+                "prompt_log_id": prompt_log_id,
+                "system_prompt": system_prompt or "",
+                "user_prompt": user_prompt or "",
+            }).execute()
+
+        return prompt_log_id
+    except Exception as e:
+        logger.warning("Failed to save prompt log: %s", e)
+        return None
+
+
+def _end_prompt_log(prompt_log_id: str | None, ended_at: datetime) -> None:
+    """Update ended_at on a prompt_log row after a successful LLM call. Non-fatal."""
+    if prompt_log_id is None:
+        return
+    try:
+        get_supabase_client().table("prompt_logs").update(
+            {"ended_at": ended_at.isoformat()}
+        ).eq("id", prompt_log_id).execute()
+    except Exception as e:
+        logger.warning("Failed to update prompt_log ended_at: %s", e)
 
 
 _FIELD_TYPE_MAP: dict[str, FieldType] = {
@@ -82,28 +141,28 @@ def _dict_to_bbox(d: dict | None) -> BBox | None:
     return BBox(x=d["x"], y=d["y"], width=d["width"], height=d["height"])
 
 
-class DocumentService:
-    """Handles PDF upload, preview, and field extraction."""
+class FormService:
+    """Handles PDF form upload, preview, and field extraction."""
 
     def upload_pdf(self, file_bytes: bytes, filename: str) -> Form:
         settings = get_settings()
-        doc_id = str(uuid4())
+        form_id = str(uuid4())
         upload_dir = Path(settings.upload_dir)
         upload_dir.mkdir(parents=True, exist_ok=True)
-        file_path = upload_dir / f"{doc_id}.pdf"
+        file_path = upload_dir / f"{form_id}.pdf"
         file_path.write_bytes(file_bytes)
 
         doc = fitz.open(stream=file_bytes, filetype="pdf")
         page_count = len(doc)
-        fields = self._extract_fields(doc, doc_id)
+        fields = self._extract_fields(doc, form_id)
         doc.close()
 
         supabase = get_supabase_client()
-        supabase.table("documents").insert(
+        supabase.table("forms").insert(
             {
-                "id": doc_id,
+                "id": form_id,
                 "ref": str(file_path),
-                "document_type": "target",
+                "form_type": "target",
                 "meta": {
                     "filename": filename,
                     "page_count": page_count,
@@ -115,13 +174,20 @@ class DocumentService:
 
         form = Form(
             id=str(uuid4()),
-            document_id=doc_id,
+            form_id=form_id,
             fields=fields,
             page_count=page_count,
         )
+
+        # Seed form_schema with baseline field data from PDF extraction
+        try:
+            FormSchemaService().ensure_schema(form_id)
+        except Exception as e:
+            logger.warning("Failed to seed form_schema for %s: %s", form_id, e)
+
         return form
 
-    def _extract_fields(self, doc: fitz.Document, document_id: str) -> list[FormField]:
+    def _extract_fields(self, doc: fitz.Document, form_id: str) -> list[FormField]:
         fields: list[FormField] = []
         for page_num, page in enumerate(doc, start=1):
             page_w = page.rect.width or 1.0
@@ -133,10 +199,14 @@ class DocumentService:
                     width=(widget.rect.x1 - widget.rect.x0) / page_w,
                     height=(widget.rect.y1 - widget.rect.y0) / page_h,
                 )
+                field_name = widget.field_name or f"field_{len(fields)}"
+                stable_id = hashlib.md5(
+                    f"{form_id}:{page_num}:{field_name}".encode()
+                ).hexdigest()
                 fields.append(
                     FormField(
-                        id=str(uuid4()),
-                        name=widget.field_name or f"field_{len(fields)}",
+                        id=stable_id,
+                        name=field_name,
                         field_type=_to_field_type(widget.field_type_string or ""),
                         bbox=bbox,
                         page=page_num,
@@ -145,28 +215,28 @@ class DocumentService:
                 )
         return fields
 
-    def _get_file_path(self, document_id: str) -> Path:
+    def _get_file_path(self, form_id: str) -> Path:
         settings = get_settings()
-        return Path(settings.upload_dir) / f"{document_id}.pdf"
+        return Path(settings.upload_dir) / f"{form_id}.pdf"
 
-    def get_page_count(self, document_id: str) -> int:
-        file_path = self._get_file_path(document_id)
+    def get_page_count(self, form_id: str) -> int:
+        file_path = self._get_file_path(form_id)
         if not file_path.exists():
-            raise FileNotFoundError(f"Document {document_id} not found")
+            raise FileNotFoundError(f"Form file not found: {form_id}")
         doc = fitz.open(str(file_path))
         count = len(doc)
         doc.close()
         return count
 
-    def get_page_preview_base64(self, document_id: str, page: int) -> str:
-        file_path = self._get_file_path(document_id)
+    def get_page_preview_base64(self, form_id: str, page: int) -> str:
+        file_path = self._get_file_path(form_id)
         if not file_path.exists():
-            raise FileNotFoundError(f"Document {document_id} not found")
+            raise FileNotFoundError(f"Form file not found: {form_id}")
 
         doc = fitz.open(str(file_path))
         if page < 1 or page > len(doc):
             doc.close()
-            raise ValueError(f"Page {page} out of range for document {document_id}")
+            raise ValueError(f"Page {page} out of range for form {form_id}")
 
         pdf_page = doc[page - 1]
         mat = fitz.Matrix(150 / 72, 150 / 72)  # 150 DPI
@@ -178,14 +248,14 @@ class DocumentService:
         return f"data:image/png;base64,{b64}"
 
     def get_fields_and_text_blocks(
-        self, document_id: str
+        self, form_id: str
     ) -> tuple[list[FormField], list[TextBlock]]:
-        file_path = self._get_file_path(document_id)
+        file_path = self._get_file_path(form_id)
         if not file_path.exists():
-            raise FileNotFoundError(f"Document {document_id} not found")
+            raise FileNotFoundError(f"Form file not found: {form_id}")
 
         doc = fitz.open(str(file_path))
-        fields = self._extract_fields(doc, document_id)
+        fields = self._extract_fields(doc, form_id)
         text_blocks: list[TextBlock] = []
 
         for page_num, page in enumerate(doc, start=1):
@@ -231,7 +301,7 @@ class AnnotationService:
     def create(self, req: CreateAnnotationRequest) -> Annotation:
         annotation = Annotation(
             id=str(uuid4()),
-            document_id=req.document_id,
+            form_id=req.form_id,
             label_text=req.label_text,
             label_bbox=req.label_bbox,
             label_page=req.label_page,
@@ -246,7 +316,7 @@ class AnnotationService:
         supabase.table("annotation_pairs").insert(
             {
                 "id": annotation.id,
-                "document_id": annotation.document_id,
+                "form_id": annotation.form_id,
                 "label_id": annotation.id,
                 "label_text": annotation.label_text,
                 "label_bbox": _bbox_to_dict(annotation.label_bbox),
@@ -262,14 +332,20 @@ class AnnotationService:
             }
         ).execute()
 
+        # Update form_schema with annotation label
+        try:
+            FormSchemaService().upsert_from_annotation(req.form_id, annotation)
+        except Exception as e:
+            logger.warning("Failed to update form_schema from annotation: %s", e)
+
         return annotation
 
-    def list_by_document(self, document_id: str) -> list[Annotation]:
+    def list_by_form(self, form_id: str) -> list[Annotation]:
         supabase = get_supabase_client()
         result = (
             supabase.table("annotation_pairs")
             .select("*")
-            .eq("document_id", document_id)
+            .eq("form_id", form_id)
             .execute()
         )
         rows = result.data if hasattr(result, "data") else []
@@ -279,7 +355,7 @@ class AnnotationService:
                 annotations.append(
                     Annotation(
                         id=row["id"],
-                        document_id=row["document_id"],
+                        form_id=row["form_id"],
                         label_text=row["label_text"],
                         label_bbox=BBox(**row["label_bbox"]),
                         label_page=row.get("label_page", 1),
@@ -298,13 +374,25 @@ class AnnotationService:
 
     def delete(self, annotation_id: str) -> None:
         supabase = get_supabase_client()
+
+        # Look up annotation before deleting so we can update form_schema
+        result = supabase.table("annotation_pairs").select("form_id, field_id").eq("id", annotation_id).execute()
+        rows = result.data if hasattr(result, "data") else []
+
         supabase.table("annotation_pairs").delete().eq("id", annotation_id).execute()
+
+        # Revert form_schema label to map fallback
+        if rows:
+            try:
+                FormSchemaService().remove_annotation(rows[0]["form_id"], rows[0]["field_id"])
+            except Exception as e:
+                logger.warning("Failed to revert form_schema after annotation delete: %s", e)
 
 
 class SessionService:
     """Manages ContextWindow sessions in Supabase."""
 
-    def create(self, document_id: str | None, user_info: UserInfo, rules: Rules) -> ContextWindow:
+    def create(self, form_id: str | None, user_info: UserInfo, rules: Rules) -> ContextWindow:
         session_id = str(uuid4())
         now = datetime.now(timezone.utc)
 
@@ -312,7 +400,7 @@ class SessionService:
         supabase.table("sessions").insert(
             {
                 "id": session_id,
-                "document_id": document_id,
+                "form_id": form_id,
                 "user_info": user_info.model_dump(),
                 "mode": Mode.PREVIEW.value,
                 "history": [],
@@ -324,7 +412,7 @@ class SessionService:
 
         return ContextWindow(
             session_id=session_id,
-            document_id=document_id,
+            form_id=form_id,
             user_info=user_info,
             rules=rules,
             mode=Mode.PREVIEW,
@@ -346,15 +434,17 @@ class SessionService:
             user_info = UserInfo(**row.get("user_info", {}))
             rules = Rules(**row.get("rules", {"items": []}))
             history = [HistoryMessage(**m) for m in row.get("history", [])]
+            form_values: dict[str, str] = row.get("form_values") or {}
 
             return ContextWindow(
                 session_id=row["id"],
-                document_id=row.get("document_id"),
+                form_id=row.get("form_id"),
                 user_info=user_info,
                 rules=rules,
                 rulebook_url=row.get("rulebook_url"),
                 mode=Mode(row.get("mode", Mode.PREVIEW.value)),
                 history=history,
+                form_values=form_values,
                 created_at=datetime.fromisoformat(row["created_at"]) if row.get("created_at") else None,
                 updated_at=datetime.fromisoformat(row["updated_at"]) if row.get("updated_at") else None,
             )
@@ -362,10 +452,10 @@ class SessionService:
             logger.error("Failed to parse session %s: %s", session_id, e)
             return None
 
-    def update_document(self, session_id: str, document_id: str) -> None:
+    def update_form(self, session_id: str, form_id: str) -> None:
         supabase = get_supabase_client()
         supabase.table("sessions").update(
-            {"document_id": document_id, "updated_at": datetime.now(timezone.utc).isoformat()}
+            {"form_id": form_id, "updated_at": datetime.now(timezone.utc).isoformat()}
         ).eq("id", session_id).execute()
 
     def update_mode(self, session_id: str, mode: Mode) -> None:
@@ -403,6 +493,17 @@ class SessionService:
             {"user_info": {"data": merged}, "updated_at": datetime.now(timezone.utc).isoformat()}
         ).eq("id", session_id).execute()
 
+    def update_form_values(self, session_id: str, new_values: dict[str, str]) -> None:
+        """Merge new field_id→value pairs into session form_values."""
+        ctx = self.get(session_id)
+        if ctx is None:
+            return
+        merged = {**ctx.form_values, **new_values}
+        supabase = get_supabase_client()
+        supabase.table("sessions").update(
+            {"form_values": merged, "updated_at": datetime.now(timezone.utc).isoformat()}
+        ).eq("id", session_id).execute()
+
     def update_rules(self, session_id: str, rule_items: list["RuleItem"], rulebook_url: str | None = None) -> None:
         """Replace session rules with a new list of RuleItem objects."""
         supabase = get_supabase_client()
@@ -416,14 +517,14 @@ class SessionService:
 
 
 class UnderstandService:
-    """Analyzes a document and extracts filling rules via LLM."""
+    """Analyzes a form and extracts filling rules via LLM."""
 
     def __init__(self) -> None:
         self._session_service = SessionService()
-        self._document_service = DocumentService()
+        self._form_service = FormService()
 
     def understand(self, session_id: str) -> None:
-        """Run LLM analysis on the document and persist extracted rules to the session."""
+        """Run LLM analysis on the form and persist extracted rules to the session."""
         settings = get_settings()
         if not settings.openai_api_key:
             raise ValueError("OpenAI not configured")
@@ -431,15 +532,28 @@ class UnderstandService:
         ctx = self._session_service.get(session_id)
         if ctx is None:
             raise ValueError(f"Session {session_id} not found")
-        if not ctx.document_id:
-            raise ValueError("Session has no associated document")
+        if not ctx.form_id:
+            raise ValueError("Session has no associated form")
 
-        fields, text_blocks = self._document_service.get_fields_and_text_blocks(ctx.document_id)
+        fields, text_blocks = self._form_service.get_fields_and_text_blocks(ctx.form_id)
         rules_ctx = RulesContext(fields=fields, text_blocks=text_blocks)
         prompt = RulesPrompt.build(rules_ctx)
 
         from openai import OpenAI
         client = OpenAI(api_key=settings.openai_api_key)
+
+        started_at = datetime.now(timezone.utc)
+        prompt_log_id = _save_prompt_log(
+            type="understand",
+            prompt_template="RulesPrompt",
+            model=settings.openai_model,
+            system_chars=len(prompt.system),
+            user_chars=len(prompt.user),
+            started_at=started_at,
+            session_id=session_id,
+            system_prompt=prompt.system,
+            user_prompt=prompt.user,
+        )
 
         response = client.chat.completions.create(
             model=settings.openai_model,
@@ -450,6 +564,8 @@ class UnderstandService:
             response_format={"type": "json_object"},
         )
 
+        _end_prompt_log(prompt_log_id, datetime.now(timezone.utc))
+
         content = response.choices[0].message.content or "{}"
         result = json.loads(content)
 
@@ -459,6 +575,7 @@ class UnderstandService:
             RuleItem(
                 type=RuleType(r.get("type", "format")),
                 rule_text=str(r.get("rule_text", "")),
+                field_ids=[str(fid) for fid in r.get("field_ids", [])],
                 question=r.get("question") or None,
                 options=[str(o) for o in r.get("options", [])],
             )
@@ -467,10 +584,10 @@ class UnderstandService:
         ]
 
         rulebook_url: str | None = None
-        if rulebook_text and ctx.document_id:
+        if rulebook_text and ctx.form_id:
             try:
                 supabase = get_supabase_client()
-                key = f"{ctx.document_id}/rulebook.md"
+                key = f"{ctx.form_id}/rulebook.md"
                 supabase.storage.from_("rulebooks").upload(
                     key,
                     rulebook_text.encode("utf-8"),
@@ -481,6 +598,21 @@ class UnderstandService:
                 logger.warning("Failed to upload rulebook to storage: %s", e)
 
         self._session_service.update_rules(session_id, rule_items, rulebook_url)
+
+        # Persist rules globally to form_rules and link to form_schema
+        if ctx.form_id:
+            try:
+                detected_description = result.get("description") or None
+                form_rules_service = FormRulesService()
+                form_rules = form_rules_service.upsert(
+                    form_id=ctx.form_id,
+                    rule_items=rule_items,
+                    description=detected_description,
+                    rulebook_text=rulebook_text or None,
+                )
+                FormSchemaService().link_rules(ctx.form_id, form_rules.id)
+            except Exception as e:
+                logger.warning("Failed to persist form_rules for %s: %s", ctx.form_id, e)
 
 
 class MappingService:
@@ -571,12 +703,25 @@ class MappingService:
                 f"{json.dumps(field_names)}\n\n"
                 "Respond with JSON: {\"field_name\": \"<best match>\", \"confidence\": <0.0-1.0>, \"reason\": \"<reason>\"}"
             )
+            started_at = datetime.now(timezone.utc)
+            prompt_log_id = _save_prompt_log(
+                type="mapping_fallback",
+                prompt_template="inline",
+                model=settings.openai_model,
+                system_chars=0,
+                user_chars=len(prompt),
+                started_at=started_at,
+                session_id=session_id,
+                user_prompt=prompt,
+            )
+
             response = client.chat.completions.create(
                 model=settings.openai_model,
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"},
                 max_tokens=200,
             )
+            _end_prompt_log(prompt_log_id, datetime.now(timezone.utc))
             result = json.loads(response.choices[0].message.content or "{}")
             matched_name = result.get("field_name")
             confidence = float(result.get("confidence", 0.0))
@@ -630,22 +775,34 @@ class MappingService:
 class MapService:
     """Identifies which text label belongs to each form field using spatial analysis + LLM."""
 
-    def run(self, document_id: str) -> list[FieldLabelMap]:
+    def run(self, form_id: str) -> list[FieldLabelMap]:
         """Run spatial candidate filtering + LLM to identify field labels, persist results."""
         settings = get_settings()
         if not settings.openai_api_key:
             raise ValueError("OpenAI not configured")
 
-        doc_service = DocumentService()
-        fields, text_blocks = doc_service.get_fields_and_text_blocks(document_id)
-        annotations = AnnotationService().list_by_document(document_id)
+        form_service = FormService()
+        fields, text_blocks = form_service.get_fields_and_text_blocks(form_id)
+        annotations = AnnotationService().list_by_form(form_id)
 
         map_ctx = MapContext(fields=fields, text_blocks=text_blocks, confirmed_annotations=annotations)
         prompt = MapPrompt.build(map_ctx)
         from openai import OpenAI
         client = OpenAI(api_key=settings.openai_api_key)
 
-        with _log_step("map.llm", document=document_id, fields=len(fields), prompt_chars=len(prompt.user)):
+        started_at = datetime.now(timezone.utc)
+        prompt_log_id = _save_prompt_log(
+            type="map",
+            prompt_template="MapPrompt",
+            model=settings.openai_model,
+            system_chars=len(prompt.system),
+            user_chars=len(prompt.user),
+            started_at=started_at,
+            system_prompt=prompt.system,
+            user_prompt=prompt.user,
+        )
+
+        with _log_step("map.llm", form=form_id, fields=len(fields), prompt_chars=len(prompt.user)):
             response = client.chat.completions.create(
                 model=settings.openai_model,
                 messages=[
@@ -655,11 +812,14 @@ class MapService:
                 response_format={"type": "json_object"},
             )
 
+        _end_prompt_log(prompt_log_id, datetime.now(timezone.utc))
+
         raw = response.choices[0].message.content or "{}"
-        with _log_step("map.parse", document=document_id):
+        with _log_step("map.parse", form=form_id):
             parsed = json.loads(raw)
             items = parsed.get("results", [])
-            logger.info("map.parse items=%d raw_chars=%d", len(items), len(raw))
+            detected_form_name = parsed.get("form_name") or None
+            logger.info("map.parse items=%d form_name=%s raw_chars=%d", len(items), detected_form_name, len(raw))
 
         field_map = {f.id: f for f in fields}
         now = datetime.now(timezone.utc)
@@ -670,7 +830,7 @@ class MapService:
                 continue
             results.append(FieldLabelMap(
                 id=str(uuid4()),
-                document_id=document_id,
+                form_id=form_id,
                 field_id=field_id,
                 field_name=field_map[field_id].name,
                 label_text=item.get("label"),
@@ -681,15 +841,15 @@ class MapService:
             ))
 
         if not results:
-            logger.warning("map.save skipped: document=%s items=%d fields=%d (no matches)", document_id, len(items), len(fields))
+            logger.warning("map.save skipped: form=%s items=%d fields=%d (no matches)", form_id, len(items), len(fields))
             return results
 
         supabase = get_supabase_client()
-        with _log_step("map.save", document=document_id, rows=len(results)):
+        with _log_step("map.save", form=form_id, rows=len(results)):
             supabase.table("field_label_maps").insert([
                 {
                     "id": r.id,
-                    "document_id": r.document_id,
+                    "form_id": r.form_id,
                     "field_id": r.field_id,
                     "field_name": r.field_name,
                     "label_text": r.label_text,
@@ -701,6 +861,12 @@ class MapService:
                 for r in results
             ]).execute()
 
+        # Update global form_schema with map results + form_name
+        try:
+            FormSchemaService().upsert_from_map(form_id, results, form_name=detected_form_name)
+        except Exception as e:
+            logger.warning("Failed to update form_schema from map: %s", e)
+
         return results
 
     def _parse_map_rows(self, rows: list[dict]) -> list[FieldLabelMap]:
@@ -709,7 +875,7 @@ class MapService:
             try:
                 maps.append(FieldLabelMap(
                     id=row["id"],
-                    document_id=row["document_id"],
+                    form_id=row["form_id"],
                     field_id=row["field_id"],
                     field_name=row["field_name"],
                     label_text=row.get("label_text"),
@@ -722,14 +888,14 @@ class MapService:
                 logger.warning("Failed to parse field_label_map row %s: %s", row.get("id"), e)
         return maps
 
-    def list_by_document(self, document_id: str, created_at: str | None = None) -> list[FieldLabelMap]:
-        """Return maps for a document. If created_at is given, return that run; otherwise return the latest run."""
+    def list_by_form(self, form_id: str, created_at: str | None = None) -> list[FieldLabelMap]:
+        """Return maps for a form. If created_at is given, return that run; otherwise return the latest run."""
         supabase = get_supabase_client()
         if created_at:
             result = (
                 supabase.table("field_label_maps")
                 .select("*")
-                .eq("document_id", document_id)
+                .eq("form_id", form_id)
                 .eq("created_at", created_at)
                 .execute()
             )
@@ -739,7 +905,7 @@ class MapService:
         result = (
             supabase.table("field_label_maps")
             .select("*")
-            .eq("document_id", document_id)
+            .eq("form_id", form_id)
             .order("created_at", desc=True)
             .execute()
         )
@@ -749,13 +915,13 @@ class MapService:
         latest_ts = rows[0]["created_at"]
         return self._parse_map_rows([r for r in rows if r.get("created_at") == latest_ts])
 
-    def list_runs(self, document_id: str) -> list[MapRun]:
+    def list_runs(self, form_id: str) -> list[MapRun]:
         """Return one summary per past run, newest first."""
         supabase = get_supabase_client()
         result = (
             supabase.table("field_label_maps")
             .select("created_at, label_text")
-            .eq("document_id", document_id)
+            .eq("form_id", form_id)
             .order("created_at", desc=True)
             .execute()
         )
@@ -826,6 +992,375 @@ class ConversationService:
         return convs
 
 
+class FormRulesService:
+    """Manages the global form_rules table (one row per form)."""
+
+    def upsert(
+        self,
+        form_id: str,
+        rule_items: list[RuleItem],
+        description: str | None = None,
+        rulebook_text: str | None = None,
+        conversation_id: str | None = None,
+    ) -> FormRules:
+        """Create or update the global rules for a form."""
+        supabase = get_supabase_client()
+        existing = self.get(form_id)
+
+        rules_json = [r.model_dump() for r in rule_items]
+        now = datetime.now(timezone.utc).isoformat()
+
+        if existing:
+            payload: dict = {
+                "rules": rules_json,
+                "updated_at": now,
+            }
+            if description is not None:
+                payload["description"] = description
+            if rulebook_text is not None:
+                payload["rulebook_text"] = rulebook_text
+            if conversation_id is not None:
+                payload["conversation_id"] = conversation_id
+            supabase.table("form_rules").update(payload).eq("form_id", form_id).execute()
+            return FormRules(
+                id=existing.id,
+                form_id=form_id,
+                description=description if description is not None else existing.description,
+                rulebook_text=rulebook_text if rulebook_text is not None else existing.rulebook_text,
+                rules=rule_items,
+                conversation_id=conversation_id or existing.conversation_id,
+            )
+
+        row_id = str(uuid4())
+        supabase.table("form_rules").insert({
+            "id": row_id,
+            "form_id": form_id,
+            "description": description,
+            "rulebook_text": rulebook_text,
+            "rules": rules_json,
+            "conversation_id": conversation_id,
+            "created_at": now,
+            "updated_at": now,
+        }).execute()
+
+        return FormRules(
+            id=row_id,
+            form_id=form_id,
+            description=description,
+            rulebook_text=rulebook_text,
+            rules=rule_items,
+            conversation_id=conversation_id,
+        )
+
+    def get(self, form_id: str) -> FormRules | None:
+        """Read the global rules for a form."""
+        supabase = get_supabase_client()
+        result = (
+            supabase.table("form_rules")
+            .select("*")
+            .eq("form_id", form_id)
+            .execute()
+        )
+        rows = result.data if hasattr(result, "data") else []
+        if not rows:
+            return None
+        row = rows[0]
+        raw_rules = row.get("rules", [])
+        rule_items: list[RuleItem] = []
+        for r in raw_rules:
+            try:
+                rule_items.append(RuleItem(
+                    type=RuleType(r.get("type", "format")),
+                    rule_text=str(r.get("rule_text", "")),
+                    field_ids=[str(fid) for fid in r.get("field_ids", [])],
+                    question=r.get("question"),
+                    options=[str(o) for o in r.get("options", [])],
+                ))
+            except Exception as e:
+                logger.warning("Failed to parse form_rules rule: %s", e)
+        return FormRules(
+            id=row["id"],
+            form_id=row["form_id"],
+            description=row.get("description"),
+            rulebook_text=row.get("rulebook_text"),
+            rules=rule_items,
+            conversation_id=row.get("conversation_id"),
+            created_at=datetime.fromisoformat(row["created_at"]) if row.get("created_at") else None,
+            updated_at=datetime.fromisoformat(row["updated_at"]) if row.get("updated_at") else None,
+        )
+
+
+class FormSchemaService:
+    """Manages the global form_schema table (one row per form, JSONB field array)."""
+
+    _LABEL_PRIORITY = {"annotation": 0, "map_manual": 1, "map_auto": 2, "pdf_extract": 3}
+
+    def ensure_schema(self, form_id: str) -> FormSchema:
+        """Seed form_schema row from PDF extraction if it does not exist.
+
+        If a row already exists, return it as-is.
+        """
+        existing = self.get(form_id)
+        if existing is not None:
+            return existing
+
+        form_service = FormService()
+        fields, _text_blocks = form_service.get_fields_and_text_blocks(form_id)
+
+        schema_fields = [
+            FormSchemaField(
+                field_id=f.id,
+                field_name=f.name,
+                field_type=f.field_type.value,
+                bbox=f.bbox,
+                page=f.page,
+                default_value=f.value,
+                label_text=f.name if f.name else None,
+                label_source="pdf_extract" if f.name else None,
+            )
+            for f in fields
+        ]
+
+        supabase = get_supabase_client()
+        row_id = str(uuid4())
+        supabase.table("form_schema").insert({
+            "id": row_id,
+            "form_id": form_id,
+            "schema": [sf.model_dump(mode="json") for sf in schema_fields],
+        }).execute()
+
+        return FormSchema(form_id=form_id, fields=schema_fields)
+
+    def get(self, form_id: str) -> FormSchema | None:
+        """Read the form schema for a given form."""
+        supabase = get_supabase_client()
+        result = (
+            supabase.table("form_schema")
+            .select("*")
+            .eq("form_id", form_id)
+            .execute()
+        )
+        rows = result.data if hasattr(result, "data") else []
+        if not rows:
+            return None
+        row = rows[0]
+        return self._parse_row(row)
+
+    def upsert_from_annotation(self, form_id: str, annotation: Annotation) -> None:
+        """Merge an annotation label into the schema (annotation always wins over map_auto)."""
+        schema = self.get(form_id)
+        if schema is None:
+            schema = self.ensure_schema(form_id)
+
+        found = False
+        new_fields: list[FormSchemaField] = []
+        for f in schema.fields:
+            if f.field_id == annotation.field_id:
+                found = True
+                new_fields.append(FormSchemaField(
+                    **{**f.model_dump(), **{
+                        "label_text": annotation.label_text,
+                        "label_source": "annotation",
+                        "label_bbox": annotation.label_bbox,
+                        "label_page": annotation.label_page,
+                        "is_confirmed": True,
+                    }}
+                ))
+            else:
+                new_fields.append(f)
+
+        if not found:
+            new_fields.append(FormSchemaField(
+                field_id=annotation.field_id,
+                field_name=annotation.field_name,
+                label_text=annotation.label_text,
+                label_source="annotation",
+                label_bbox=annotation.label_bbox,
+                label_page=annotation.label_page,
+                is_confirmed=True,
+            ))
+
+        self._save_schema(form_id, new_fields)
+
+    def remove_annotation(self, form_id: str, field_id: str) -> None:
+        """Revert a field's label to map fallback when its annotation is deleted."""
+        schema = self.get(form_id)
+        if schema is None:
+            return
+
+        # Check field_label_maps for fallback
+        map_service = MapService()
+        maps = map_service.list_by_form(form_id)
+        fallback = next((m for m in maps if m.field_id == field_id), None)
+
+        new_fields: list[FormSchemaField] = []
+        for f in schema.fields:
+            if f.field_id == field_id and f.label_source == "annotation":
+                if fallback:
+                    new_fields.append(FormSchemaField(
+                        **{**f.model_dump(), **{
+                            "label_text": fallback.label_text,
+                            "label_source": "map_manual" if fallback.source == "manual" else "map_auto",
+                            "label_bbox": None,
+                            "label_page": None,
+                            "semantic_key": fallback.semantic_key,
+                            "confidence": fallback.confidence,
+                            "is_confirmed": False,
+                        }}
+                    ))
+                else:
+                    new_fields.append(FormSchemaField(
+                        **{**f.model_dump(), **{
+                            "label_text": f.field_name if f.field_name else None,
+                            "label_source": "pdf_extract" if f.field_name else None,
+                            "label_bbox": None,
+                            "label_page": None,
+                            "is_confirmed": False,
+                        }}
+                    ))
+            else:
+                new_fields.append(f)
+
+        self._save_schema(form_id, new_fields)
+
+    def upsert_from_map(
+        self,
+        form_id: str,
+        maps: list[FieldLabelMap],
+        form_name: str | None = None,
+    ) -> None:
+        """Bulk update schema from a Map run. Only overwrites label if priority allows."""
+        schema = self.get(form_id)
+        if schema is None:
+            schema = self.ensure_schema(form_id)
+
+        existing_by_id = {f.field_id: f for f in schema.fields}
+
+        for m in maps:
+            existing = existing_by_id.get(m.field_id)
+            source = "map_manual" if m.source == "manual" else "map_auto"
+
+            if existing is None:
+                existing_by_id[m.field_id] = FormSchemaField(
+                    field_id=m.field_id,
+                    field_name=m.field_name,
+                    label_text=m.label_text,
+                    label_source=source,
+                    semantic_key=m.semantic_key,
+                    confidence=m.confidence,
+                )
+            else:
+                current_priority = self._LABEL_PRIORITY.get(existing.label_source or "", 99)
+                new_priority = self._LABEL_PRIORITY.get(source, 99)
+
+                updates: dict = {
+                    "semantic_key": m.semantic_key or existing.semantic_key,
+                    "confidence": m.confidence,
+                }
+                # Only overwrite label if new source has equal or higher priority
+                if new_priority <= current_priority:
+                    updates["label_text"] = m.label_text or existing.label_text
+                    updates["label_source"] = source
+
+                existing_by_id[m.field_id] = FormSchemaField(
+                    **{**existing.model_dump(), **updates}
+                )
+
+        new_fields = list(existing_by_id.values())
+        self._save_schema(form_id, new_fields, form_name=form_name)
+
+    def fill_values(self, form_id: str, values: dict[str, str]) -> FormSchema | None:
+        """Write fill results back to form_schema by updating default_value on matched fields.
+
+        Returns the updated FormSchema, or None if schema not found.
+        """
+        schema = self.get(form_id)
+        if schema is None:
+            return None
+
+        updated_fields = [
+            FormSchemaField(**{
+                **f.model_dump(),
+                "default_value": values.get(f.field_id, f.default_value),
+            })
+            for f in schema.fields
+        ]
+        self._save_schema(form_id, updated_fields, updated_by="fill")
+        return FormSchema(
+            form_id=schema.form_id,
+            form_name=schema.form_name,
+            form_rules_id=schema.form_rules_id,
+            fields=updated_fields,
+        )
+
+    def link_rules(self, form_id: str, form_rules_id: str) -> None:
+        """Set the form_rules_id FK on form_schema."""
+        schema = self.get(form_id)
+        if schema is None:
+            self.ensure_schema(form_id)
+
+        supabase = get_supabase_client()
+        supabase.table("form_schema").update({
+            "form_rules_id": form_rules_id,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }).eq("form_id", form_id).execute()
+
+    def _save_schema(
+        self,
+        form_id: str,
+        fields: list[FormSchemaField],
+        form_name: str | None = None,
+        updated_by: str | None = None,
+        conversation_id: str | None = None,
+    ) -> None:
+        """Persist the schema JSONB array to the DB."""
+        supabase = get_supabase_client()
+        payload: dict = {
+            "schema": [f.model_dump(mode="json") for f in fields],
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if form_name is not None:
+            payload["form_name"] = form_name
+        if updated_by is not None:
+            payload["updated_by"] = updated_by
+        if conversation_id is not None:
+            payload["conversation_id"] = conversation_id
+
+        supabase.table("form_schema").update(payload).eq("form_id", form_id).execute()
+
+    def _parse_row(self, row: dict) -> FormSchema:
+        """Parse a DB row into a FormSchema model."""
+        raw_schema = row.get("schema", [])
+        fields: list[FormSchemaField] = []
+        for item in raw_schema:
+            try:
+                bbox = _dict_to_bbox(item.get("bbox")) if item.get("bbox") else None
+                label_bbox = _dict_to_bbox(item.get("label_bbox")) if item.get("label_bbox") else None
+                fields.append(FormSchemaField(
+                    field_id=item["field_id"],
+                    field_name=item.get("field_name", ""),
+                    field_type=item.get("field_type", "text"),
+                    bbox=bbox,
+                    page=item.get("page", 1),
+                    default_value=item.get("default_value"),
+                    label_text=item.get("label_text"),
+                    label_source=item.get("label_source"),
+                    label_bbox=label_bbox,
+                    label_page=item.get("label_page"),
+                    semantic_key=item.get("semantic_key"),
+                    confidence=int(item.get("confidence", 0)),
+                    is_confirmed=bool(item.get("is_confirmed", False)),
+                ))
+            except Exception as e:
+                logger.warning("Failed to parse form_schema field: %s", e)
+        return FormSchema(
+            form_id=row["form_id"],
+            form_name=row.get("form_name"),
+            form_rules_id=row.get("form_rules_id"),
+            fields=fields,
+        )
+
+
 class FillService:
     """Drives the fill pipeline: build prompt, call OpenAI."""
 
@@ -836,31 +1371,46 @@ class FillService:
         self._map_service = MapService()
         self._context_service = ContextService()
 
-    def _build_context(self, ctx: ContextWindow, user_message: str | None = None):
+    def _build_context(self, ctx: ContextWindow, ask_answers: dict[str, str] | None = None):
         """Gather all data and delegate to ContextService."""
-        doc_id = ctx.document_id or ""
-        doc_service = DocumentService()
-        fields, text_blocks = doc_service.get_fields_and_text_blocks(doc_id)
-        annotations = self._annotation_service.list_by_document(doc_id)
-        field_label_maps = self._map_service.list_by_document(doc_id)
+        form_id = ctx.form_id or ""
+
+        # Read from global form_schema (single source of truth)
+        schema_service = FormSchemaService()
+        schema = schema_service.get(form_id)
+
+        if schema is not None:
+            return self._context_service.build(
+                schema_fields=schema.fields,
+                user_info=ctx.user_info.data,
+                rules=list(ctx.rules.items),
+                ask_answers=ask_answers,
+            )
+
+        # Fallback: no form_schema yet, use legacy path
+        form_service = FormService()
+        fields, _text_blocks = form_service.get_fields_and_text_blocks(form_id)
+        annotations = self._annotation_service.list_by_form(form_id)
+        field_label_maps = self._map_service.list_by_form(form_id)
         mappings = self._mapping_service.list_by_session(ctx.session_id)
 
-        return self._context_service.build(
+        return self._context_service.build_legacy(
             form_fields=fields,
-            text_blocks=text_blocks,
             annotations=annotations,
             field_label_maps=field_label_maps,
             mappings=mappings,
             user_info=ctx.user_info.data,
             rules=list(ctx.rules.items),
-            history=list(ctx.history),
-            user_message=user_message,
+            ask_answers=ask_answers,
         )
 
     def fill(
-        self, session_id: str, user_message: str | None = None
+        self, session_id: str, ask_answers: dict[str, str] | None = None
     ) -> dict:
-        """Run fill and return {fields: [{field_id, value}], ask: []}."""
+        """Run fill and return {fields: [{field_id, value}], ask: []}.
+
+        ask_answers: resolved conditional question -> answer pairs from Ask mode.
+        """
         settings = get_settings()
 
         if not settings.openai_api_key:
@@ -869,15 +1419,42 @@ class FillService:
         ctx = self._session_service.get(session_id)
         if ctx is None:
             raise ValueError(f"Session {session_id} not found")
-        if not ctx.document_id:
-            raise ValueError("No document associated with session")
+        if not ctx.form_id:
+            raise ValueError("No form associated with session")
 
-        fill_context = self._build_context(ctx, user_message)
-        prompt = FillPrompt.build(fill_context)
+        # Check for unanswered conditional questions first
+        unanswered = self._context_service.get_unanswered_questions(
+            list(ctx.rules.items), ask_answers
+        )
+        if unanswered:
+            return {
+                "fields": [],
+                "ask": [
+                    {"question": r.question, "options": list(r.options)}
+                    for r in unanswered
+                    if r.question
+                ],
+            }
+
+        fill_context = self._build_context(ctx, ask_answers)
+        prompt, index_to_field_id = FillPrompt.build(fill_context)
 
         from openai import OpenAI
 
         client = OpenAI(api_key=settings.openai_api_key)
+
+        started_at = datetime.now(timezone.utc)
+        prompt_log_id = _save_prompt_log(
+            type="fill",
+            prompt_template="FillPrompt",
+            model=settings.openai_model,
+            system_chars=len(prompt.system),
+            user_chars=len(prompt.user),
+            started_at=started_at,
+            session_id=session_id,
+            system_prompt=prompt.system,
+            user_prompt=prompt.user,
+        )
 
         response = client.chat.completions.create(
             model=settings.openai_model,
@@ -885,20 +1462,29 @@ class FillService:
                 {"role": "system", "content": prompt.system},
                 {"role": "user", "content": prompt.user},
             ],
-            response_format={"type": "json_object"},
         )
 
-        content = response.choices[0].message.content or "{}"
+        _end_prompt_log(prompt_log_id, datetime.now(timezone.utc))
+
+        content = response.choices[0].message.content or ""
         self._session_service.add_history_batch(session_id, [("user", prompt.user), ("agent", content)])
 
-        result = json.loads(content)
+        filled = FillPrompt.parse(content, index_to_field_id)
 
-        filled: list[dict] = []
-        for item in result.get("fields", []):
-            field_id = item.get("field_id")
-            value = item.get("value")
-            if field_id and value is not None:
-                filled.append({"field_id": field_id, "value": str(value)})
+        if filled:
+            values_map = {item["field_id"]: item["value"] for item in filled}
+            self._session_service.update_form_values(session_id, values_map)
+
+            # Write fill results back to form_schema
+            form_id = ctx.form_id or ""
+            schema_service = FormSchemaService()
+            updated_schema = schema_service.fill_values(form_id, values_map)
+            if updated_schema:
+                return {
+                    "fields": filled,
+                    "ask": [],
+                    "schema": updated_schema.model_dump(mode="json"),
+                }
 
         return {"fields": filled, "ask": []}
 

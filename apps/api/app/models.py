@@ -57,7 +57,7 @@ class TextBlock(BaseModel):
 
 class Form(BaseModel):
     id: str
-    document_id: str
+    form_id: str
     fields: list[FormField] = Field(default_factory=list)
     page_count: int = 1
     model_config = {"frozen": True}
@@ -65,7 +65,7 @@ class Form(BaseModel):
 
 class Annotation(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
-    document_id: str
+    form_id: str
     label_text: str
     label_bbox: BBox
     label_page: int = 1
@@ -109,6 +109,7 @@ class RuleType(str, Enum):
 class RuleItem(BaseModel):
     type: RuleType
     rule_text: str
+    field_ids: list[str] = Field(default_factory=list)
     question: str | None = None
     options: list[str] = Field(default_factory=list)
     model_config = {"frozen": True}
@@ -134,9 +135,33 @@ class Conversation(BaseModel):
     model_config = {"frozen": True}
 
 
+class PromptLog(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    session_id: str | None = None
+    conversation_id: str | None = None
+    type: str  # "map" | "understand" | "fill" | "mapping_fallback"
+    prompt_template: str  # class name: "MapPrompt" | "RulesPrompt" | "FillPrompt" | "inline"
+    model: str
+    system_chars: int = 0
+    user_chars: int = 0
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
+    created_at: datetime | None = None
+    model_config = {"frozen": True}
+
+
+class PromptRaw(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    prompt_log_id: str
+    system_prompt: str = ""
+    user_prompt: str = ""
+    created_at: datetime | None = None
+    model_config = {"frozen": True}
+
+
 class ContextWindow(BaseModel):
     session_id: str = Field(default_factory=lambda: str(uuid4()))
-    document_id: str | None = None
+    form_id: str | None = None
     form: Form | None = None
     user_info: UserInfo = Field(default_factory=UserInfo)
     annotations: list[Annotation] = Field(default_factory=list)
@@ -144,6 +169,7 @@ class ContextWindow(BaseModel):
     mode: Mode = Mode.PREVIEW
     history: list[HistoryMessage] = Field(default_factory=list)
     rules: Rules = Field(default_factory=Rules)
+    form_values: dict[str, str] = Field(default_factory=dict)
     rulebook_url: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -152,32 +178,32 @@ class ContextWindow(BaseModel):
 
 # --- Request / Response DTOs ---
 
-class UploadDocumentResponse(BaseModel):
-    document_id: str
+class UploadFormResponse(BaseModel):
+    form_id: str
     form: Form
 
 
 class PagePreviewResponse(BaseModel):
-    document_id: str
+    form_id: str
     page: int
     image_url: str
 
 
 class FieldsResponse(BaseModel):
-    document_id: str
+    form_id: str
     fields: list[FormField]
     text_blocks: list[TextBlock]
     page_count: int = 1
 
 
 class CreateSessionRequest(BaseModel):
-    document_id: str | None = None
+    form_id: str | None = None
     user_info: UserInfo = Field(default_factory=UserInfo)
     rules: Rules = Field(default_factory=Rules)
 
 
 class CreateAnnotationRequest(BaseModel):
-    document_id: str
+    form_id: str
     label_text: str
     label_bbox: BBox
     label_page: int = 1
@@ -189,7 +215,7 @@ class CreateAnnotationRequest(BaseModel):
 
 class FieldLabelMap(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
-    document_id: str
+    form_id: str
     field_id: str
     field_name: str
     label_text: str | None = None
@@ -240,13 +266,19 @@ class AlreadyFilledField(BaseModel):
     model_config = {"frozen": True}
 
 
+class FillField(BaseModel):
+    """A field that has been approved for filling (rules already resolved)."""
+    field_id: str
+    label: str | None = None
+    semantic_key: str | None = None
+    type: str = "text"
+    format_rule: str | None = None
+    model_config = {"frozen": True}
+
+
 class FillContext(BaseModel):
-    pages: list[PageContext] = Field(default_factory=list)
+    fields: list[FillField] = Field(default_factory=list)
     user_info: dict[str, str] = Field(default_factory=dict)
-    rules: list[RuleItem] = Field(default_factory=list)
-    history: list[HistoryMessage] = Field(default_factory=list)
-    already_filled: list[AlreadyFilledField] = Field(default_factory=list)
-    user_message: str | None = None
     model_config = {"frozen": True}
 
 
@@ -269,8 +301,63 @@ class AskContext(BaseModel):
     model_config = {"frozen": True}
 
 
+class FormSchemaField(BaseModel):
+    """One field entry in the form_schema JSONB array."""
+    field_id: str
+    field_name: str
+    field_type: str = "text"
+    bbox: BBox | None = None
+    page: int = 1
+    default_value: str | None = None
+    label_text: str | None = None
+    label_source: str | None = None  # 'annotation' | 'map_auto' | 'map_manual' | 'pdf_extract'
+    label_bbox: BBox | None = None
+    label_page: int | None = None
+    semantic_key: str | None = None
+    confidence: int = 0
+    is_confirmed: bool = False
+    model_config = {"frozen": True}
+
+
+class FormRules(BaseModel):
+    """Global form rules (one row per form)."""
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    form_id: str
+    description: str | None = None
+    rulebook_text: str | None = None
+    rules: list[RuleItem] = Field(default_factory=list)
+    conversation_id: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    model_config = {"frozen": True}
+
+
+class FormSchema(BaseModel):
+    """Top-level form schema: form_name + field array + FK to form_rules."""
+    form_id: str
+    form_name: str | None = None
+    form_rules_id: str | None = None
+    fields: list[FormSchemaField] = Field(default_factory=list)
+    model_config = {"frozen": True}
+
+
+class FormSchemaRow(BaseModel):
+    """DB row model for form_schema table."""
+    id: str
+    form_id: str
+    form_name: str | None = None
+    form_rules_id: str | None = None
+    fields: list[FormSchemaField] = Field(default_factory=list, alias="schema")
+    embedding: list[float] | None = None
+    conversation_id: str | None = None
+    updated_by: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    model_config = {"frozen": True, "populate_by_name": True}
+
+
 class MapResult(BaseModel):
-    document_id: str
+    form_id: str
     maps: list[FieldLabelMap]
 
 
@@ -280,7 +367,7 @@ class RunMappingRequest(BaseModel):
 
 class FillRequest(BaseModel):
     session_id: str
-    user_message: str | None = None  # for Ask mode responses
+    ask_answers: dict[str, str] | None = None  # resolved question -> answer pairs
 
 
 class FillEvent(BaseModel):

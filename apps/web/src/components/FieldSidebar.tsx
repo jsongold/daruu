@@ -5,10 +5,10 @@ interface Props {
   annotations: Annotation[]
   fieldLabelMaps: FieldLabelMap[]
   currentPage: number
-  documentId: string | null
+  formId: string | null
 }
 
-export function FieldSidebar({ fields, annotations, fieldLabelMaps, currentPage, documentId }: Props) {
+export function FieldSidebar({ fields, annotations, fieldLabelMaps, currentPage, formId }: Props) {
   const mapByField = new Map(fieldLabelMaps.map((m) => [m.field_id, m]))
 
   return (
@@ -21,7 +21,7 @@ export function FieldSidebar({ fields, annotations, fieldLabelMaps, currentPage,
       <div className="flex-1 overflow-y-auto">
         {fields.length === 0 ? (
           <p className="text-xs text-gray-400 text-center mt-8 px-3">
-            {documentId ? "No fields found." : "Upload a PDF to see fields."}
+            {formId ? "No fields found." : "Upload a PDF to see fields."}
           </p>
         ) : (
           <table className="w-full text-xs">

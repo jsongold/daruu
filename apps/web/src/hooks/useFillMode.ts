@@ -29,34 +29,51 @@ export function useFillMode({
   chatWindow,
 }: Args) {
   const handleFill = useCallback(
-    async (userMessage?: string) => {
+    async (askAnswers?: Record<string, string>) => {
       if (!sessionId) return
       setIsFilling(true)
       setMode("fill")
       setError(null)
 
-      if (userMessage) {
-        setAskHistory((prev) => [...prev, { role: "user", content: userMessage }])
-        chatWindow.add("user", userMessage)
+      if (askAnswers) {
+        const summary = Object.entries(askAnswers)
+          .map(([q, a]) => `${q}: ${a}`)
+          .join("\n")
+        setAskHistory((prev) => [...prev, { role: "user", content: summary }])
+        chatWindow.add("user", summary)
       } else {
         chatWindow.add("system", "Fill started...")
       }
 
       try {
-        const result = await formClient.fill(sessionId, userMessage)
+        const result = await formClient.fill(sessionId, askAnswers)
 
         if (result.fields.length > 0) {
-          setFields((prev) =>
-            prev.map((f) => {
-              const filled = result.fields.find((item) => item.field_id === f.id)
-              return filled ? { ...f, value: filled.value } : f
-            })
-          )
-          for (const item of result.fields) {
-            const fieldName = fields.find((f) => f.id === item.field_id)?.name ?? item.field_id
-            chatWindow.add("agent", `Filled "${fieldName}" = "${item.value}"`)
+          // Update fields from schema if available, otherwise patch from fields array
+          if (result.schema) {
+            setFields((prev) =>
+              prev.map((f) => {
+                const schemaField = result.schema!.fields.find((sf) => sf.field_id === f.id)
+                return schemaField?.default_value != null
+                  ? { ...f, value: schemaField.default_value }
+                  : f
+              })
+            )
+          } else {
+            setFields((prev) =>
+              prev.map((f) => {
+                const filled = result.fields.find((item) => item.field_id === f.id)
+                return filled ? { ...f, value: filled.value } : f
+              })
+            )
           }
-          chatWindow.add("system", `Fill complete: ${result.fields.length} fields filled`)
+          chatWindow.addBatch([
+            ...result.fields.map((item) => ({
+              role: "agent" as const,
+              text: `Filled "${fields.find((f) => f.id === item.field_id)?.name ?? item.field_id}" = "${item.value}"`,
+            })),
+            { role: "system" as const, text: `Fill complete: ${result.fields.length} fields filled` },
+          ])
         }
 
         if (result.ask.length > 0) {
@@ -85,26 +102,30 @@ export function useFillMode({
 
   const handleAskReply = useCallback(
     (message: string) => {
-      handleFill(message)
+      // Free-text reply: map each pending question to the user's message
+      const answers: Record<string, string> = {}
+      for (const q of pendingQuestions) {
+        answers[q.question] = message
+      }
+      handleFill(answers)
     },
-    [handleFill]
+    [handleFill, pendingQuestions]
   )
 
   const handleModalSubmit = useCallback(
-    (answers: Array<{ field_id: string; answer: string | null }>) => {
+    (answers: Array<{ field_id: string | null; question: string; answer: string | null }>) => {
       setPendingQuestions([])
-      const parts = answers
-        .filter((a) => a.answer !== null)
-        .map((a) => {
-          const q = pendingQuestions.find((q) => q.field_id === a.field_id)
-          return q ? `${q.question}: ${a.answer}` : a.answer
-        })
-      const userMessage = parts.join("\n")
-      if (userMessage) {
-        handleFill(userMessage)
+      const askAnswers: Record<string, string> = {}
+      for (const a of answers) {
+        if (a.answer !== null) {
+          askAnswers[a.question] = a.answer
+        }
+      }
+      if (Object.keys(askAnswers).length > 0) {
+        handleFill(askAnswers)
       }
     },
-    [pendingQuestions, handleFill, setPendingQuestions]
+    [handleFill, setPendingQuestions]
   )
 
   const handleModalClose = useCallback(() => {

@@ -25,7 +25,7 @@ export interface TextBlock {
 
 export interface Annotation {
   id: string
-  document_id: string
+  form_id: string
   label_text: string
   label_bbox: BBox
   label_page: number
@@ -48,7 +48,7 @@ export interface Mapping {
 
 export interface Form {
   id: string
-  document_id: string
+  form_id: string
   fields: FormField[]
   page_count: number
 }
@@ -65,7 +65,7 @@ export type Mode = "preview" | "edit" | "annotate" | "map" | "fill" | "ask" | "r
 
 export interface FieldLabelMap {
   id: string
-  document_id: string
+  form_id: string
   field_id: string
   field_name: string
   label_text: string | null
@@ -75,7 +75,7 @@ export interface FieldLabelMap {
 }
 
 export interface MapResult {
-  document_id: string
+  form_id: string
   maps: FieldLabelMap[]
 }
 
@@ -87,7 +87,7 @@ export interface MapRun {
 
 export interface ContextWindow {
   session_id: string
-  document_id: string | null
+  form_id: string | null
   form: Form | null
   user_info: UserInfo
   annotations: Annotation[]
@@ -95,17 +95,36 @@ export interface ContextWindow {
   mode: Mode
   history: Array<{ role: string; content: string }>
   rules: Rules
+  form_values: Record<string, string>
 }
 
 export interface AgentQuestion {
-  field_id: string
+  field_id: string | null
   question: string
   options: string[]
+}
+
+export interface FormSchemaField {
+  field_id: string
+  field_name: string
+  field_type: string
+  label_text: string | null
+  semantic_key: string | null
+  default_value: string | null
+  confidence: number
+  is_confirmed: boolean
+}
+
+export interface FormSchemaResult {
+  form_id: string
+  form_name: string | null
+  fields: FormSchemaField[]
 }
 
 export interface FillResult {
   fields: Array<{ field_id: string; value: string }>
   ask: AgentQuestion[]
+  schema?: FormSchemaResult
 }
 
 export interface AskResult {
@@ -144,35 +163,35 @@ async function del(path: string): Promise<void> {
 }
 
 export const formClient = {
-  uploadDocument: async (file: File): Promise<{ document_id: string; form: Form }> => {
+  uploadForm: async (file: File): Promise<{ form_id: string; form: Form }> => {
     const fd = new FormData()
     fd.append("file", file)
-    const res = await fetch(`${BASE}/api/documents`, { method: "POST", body: fd })
+    const res = await fetch(`${BASE}/api/forms`, { method: "POST", body: fd })
     if (!res.ok) throw new Error(await res.text())
     return res.json()
   },
 
-  getPagePreview: (documentId: string, page: number): string =>
-    `${BASE}/api/documents/${documentId}/pages/${page}`,
+  getPagePreview: (formId: string, page: number): string =>
+    `${BASE}/api/forms/${formId}/pages/${page}`,
 
   getFields: (
-    documentId: string
+    formId: string
   ): Promise<{ fields: FormField[]; text_blocks: TextBlock[]; page_count: number }> =>
-    get(`/api/documents/${documentId}/fields`),
+    get(`/api/forms/${formId}/fields`),
 
   createSession: (
-    documentId?: string,
+    formId?: string,
     userInfo?: UserInfo,
     rules?: Rules
   ): Promise<ContextWindow> =>
     post("/api/sessions", {
-      document_id: documentId ?? null,
+      form_id: formId ?? null,
       user_info: userInfo ?? { data: {} },
       rules: rules ?? { items: [] },
     }),
 
-  updateSessionDocument: (sessionId: string, documentId: string): Promise<ContextWindow> =>
-    patch(`/api/sessions/${sessionId}/document`, { document_id: documentId }),
+  updateSessionForm: (sessionId: string, formId: string): Promise<ContextWindow> =>
+    patch(`/api/sessions/${sessionId}/form`, { form_id: formId }),
 
   getSession: (sessionId: string): Promise<ContextWindow> =>
     get(`/api/sessions/${sessionId}`),
@@ -180,7 +199,7 @@ export const formClient = {
   updateUserInfo: (sessionId: string, data: Record<string, string>): Promise<ContextWindow> =>
     patch(`/api/sessions/${sessionId}/user-info`, data),
   createAnnotation: (data: {
-    document_id: string
+    form_id: string
     label_text: string
     label_bbox: BBox
     label_page: number
@@ -190,20 +209,20 @@ export const formClient = {
     field_page: number
   }): Promise<Annotation> => post("/api/annotations", data),
 
-  getAnnotations: (documentId: string): Promise<Annotation[]> =>
-    get(`/api/annotations/${documentId}`),
+  getAnnotations: (formId: string): Promise<Annotation[]> =>
+    get(`/api/annotations/${formId}`),
 
   deleteAnnotation: (annotationId: string): Promise<void> =>
     del(`/api/annotations/${annotationId}`),
 
-  runMap: (documentId: string): Promise<MapResult> =>
-    post(`/api/map/${documentId}`, {}),
+  runMap: (formId: string): Promise<MapResult> =>
+    post(`/api/map/${formId}`, {}),
 
-  getMap: (documentId: string): Promise<MapResult> =>
-    get(`/api/map/${documentId}`),
+  getMap: (formId: string): Promise<MapResult> =>
+    get(`/api/map/${formId}`),
 
-  fill: (sessionId: string, userMessage?: string): Promise<FillResult> =>
-    post(`/api/fill`, { session_id: sessionId, user_message: userMessage }),
+  fill: (sessionId: string, askAnswers?: Record<string, string>): Promise<FillResult> =>
+    post(`/api/fill`, { session_id: sessionId, ask_answers: askAnswers }),
 
   ask: (sessionId: string): Promise<AskResult> =>
     post(`/api/ask`, { session_id: sessionId }),
