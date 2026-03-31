@@ -2,7 +2,8 @@ import { useState } from "react"
 import type { AgentQuestion } from "../api/formClient"
 
 interface Answer {
-  field_id: string
+  field_id: string | null
+  question: string
   answer: string | null
 }
 
@@ -14,13 +15,13 @@ interface Props {
 
 export function AskQuestionModal({ questions, onSubmit, onClose }: Props) {
   const [currentIndex, setCurrentIndex] = useState(0)
-  const [answers, setAnswers] = useState<Record<string, string | null>>({})
+  const [answers, setAnswers] = useState<Record<number, string | null>>({})
   const [otherText, setOtherText] = useState("")
   const [showOtherInput, setShowOtherInput] = useState(false)
 
   const question = questions[currentIndex]
   const total = questions.length
-  const answered = answers[question.field_id]
+  const answered = answers[currentIndex]
 
   const goTo = (index: number) => {
     setCurrentIndex(index)
@@ -29,11 +30,11 @@ export function AskQuestionModal({ questions, onSubmit, onClose }: Props) {
   }
 
   const selectOption = (option: string) => {
-    setAnswers((prev) => ({ ...prev, [question.field_id]: option }))
+    setAnswers((prev) => ({ ...prev, [currentIndex]: option }))
     setShowOtherInput(false)
     setOtherText("")
     // Auto-advance to next unanswered question
-    const next = findNextUnanswered(currentIndex, { ...answers, [question.field_id]: option })
+    const next = findNextUnanswered(currentIndex, { ...answers, [currentIndex]: option })
     if (next !== null) setTimeout(() => goTo(next), 150)
   }
 
@@ -44,34 +45,35 @@ export function AskQuestionModal({ questions, onSubmit, onClose }: Props) {
   const submitOther = () => {
     const text = otherText.trim()
     if (!text) return
-    setAnswers((prev) => ({ ...prev, [question.field_id]: text }))
+    setAnswers((prev) => ({ ...prev, [currentIndex]: text }))
     setShowOtherInput(false)
     setOtherText("")
-    const next = findNextUnanswered(currentIndex, { ...answers, [question.field_id]: text })
+    const next = findNextUnanswered(currentIndex, { ...answers, [currentIndex]: text })
     if (next !== null) setTimeout(() => goTo(next), 150)
   }
 
   const skipCurrent = () => {
-    setAnswers((prev) => ({ ...prev, [question.field_id]: null }))
+    setAnswers((prev) => ({ ...prev, [currentIndex]: null }))
     setShowOtherInput(false)
     setOtherText("")
-    const next = findNextUnanswered(currentIndex, { ...answers, [question.field_id]: null })
+    const next = findNextUnanswered(currentIndex, { ...answers, [currentIndex]: null })
     if (next !== null) goTo(next)
   }
 
-  const findNextUnanswered = (from: number, currentAnswers: Record<string, string | null>): number | null => {
+  const findNextUnanswered = (from: number, currentAnswers: Record<number, string | null>): number | null => {
     for (let i = from + 1; i < questions.length; i++) {
-      if (!(questions[i].field_id in currentAnswers)) return i
+      if (!(i in currentAnswers)) return i
     }
     return null
   }
 
-  const allAnswered = questions.every((q) => q.field_id in answers)
+  const allAnswered = questions.every((_, i) => i in answers)
 
   const handleSubmit = () => {
-    const result: Answer[] = questions.map((q) => ({
+    const result: Answer[] = questions.map((q, i) => ({
       field_id: q.field_id,
-      answer: answers[q.field_id] ?? null,
+      question: q.question,
+      answer: answers[i] ?? null,
     }))
     onSubmit(result)
   }
@@ -193,7 +195,7 @@ export function AskQuestionModal({ questions, onSubmit, onClose }: Props) {
         {/* Progress dots */}
         {total > 1 && (
           <div className="flex justify-center gap-1.5 pb-4 pt-2">
-            {questions.map((q, i) => (
+            {questions.map((_, i) => (
               <button
                 key={i}
                 onClick={() => goTo(i)}
@@ -201,7 +203,7 @@ export function AskQuestionModal({ questions, onSubmit, onClose }: Props) {
                   "w-1.5 h-1.5 rounded-full transition-colors",
                   i === currentIndex
                     ? "bg-white"
-                    : q.field_id in answers
+                    : i in answers
                     ? "bg-blue-500"
                     : "bg-white/20",
                 ].join(" ")}

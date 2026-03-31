@@ -4,7 +4,7 @@ import type { FieldLabelMap } from "../api/formClient"
 import type { ChatWindow } from "../lib/ChatWindow"
 
 interface Args {
-  documentId: string | null
+  formId: string | null
   setFieldLabelMaps: React.Dispatch<React.SetStateAction<FieldLabelMap[]>>
   setIsMapping: (v: boolean) => void
   setError: (msg: string | null) => void
@@ -12,19 +12,19 @@ interface Args {
 }
 
 export function useMapMode({
-  documentId,
+  formId,
   setFieldLabelMaps,
   setIsMapping,
   setError,
   chatWindow,
 }: Args) {
   const handleRunMap = useCallback(async () => {
-    if (!documentId) return
+    if (!formId) return
     setIsMapping(true)
     setError(null)
     chatWindow.add("system", "Map started...")
     try {
-      const result = await formClient.runMap(documentId)
+      const result = await formClient.runMap(formId)
       setFieldLabelMaps(result.maps)
       const identified = result.maps.filter((m) => m.label_text).length
       chatWindow.add("system", `Map complete: ${identified}/${result.maps.length} fields identified`)
@@ -35,7 +35,7 @@ export function useMapMode({
     } finally {
       setIsMapping(false)
     }
-  }, [documentId, setFieldLabelMaps, setIsMapping, setError, chatWindow])
+  }, [formId, setFieldLabelMaps, setIsMapping, setError, chatWindow])
 
   return { handleRunMap }
 }

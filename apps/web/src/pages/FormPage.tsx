@@ -27,7 +27,7 @@ export function FormPage() {
   const { handleLabelClick, handleFieldClick, handleDeleteAnnotation } = useAnnotateMode({
     mode: s.mode,
     selectedLabelId: s.selectedLabelId,
-    documentId: s.documentId,
+    formId: s.formId,
     textBlocks: s.textBlocks,
     setAnnotations: s.setAnnotations,
     setSelectedLabelId: s.setSelectedLabelId,
@@ -38,7 +38,7 @@ export function FormPage() {
   })
 
   const { handleRunMap } = useMapMode({
-    documentId: s.documentId,
+    formId: s.formId,
     setFieldLabelMaps: s.setFieldLabelMaps,
     setIsMapping: s.setIsMapping,
     setError: s.setError,
@@ -91,7 +91,7 @@ export function FormPage() {
       />
     ),
     map: (
-      <MapPanel maps={s.fieldLabelMaps} onRunMap={handleRunMap} isLoading={s.isMapping} disabled={!s.documentId} />
+      <MapPanel maps={s.fieldLabelMaps} onRunMap={handleRunMap} isLoading={s.isMapping} disabled={!s.formId} />
     ),
     fill: (
       <AskPanel history={s.askHistory} onReply={handleAskReply} mode={s.mode} isLoading={s.isFilling || s.isAsking} />
@@ -109,15 +109,15 @@ export function FormPage() {
       <header className="flex items-center justify-between px-4 py-2 bg-white border-b border-gray-200 shadow-sm">
         <div className="flex items-center gap-3">
           <h1 className="font-bold text-gray-800 text-sm">daru-pdf</h1>
-          {s.documentId && (
-            <span className="text-xs text-gray-400 font-mono truncate max-w-[160px]">{s.documentId}</span>
+          {s.formId && (
+            <span className="text-xs text-gray-400 font-mono truncate max-w-[160px]">{s.formId}</span>
           )}
         </div>
 
-        <ModeBar mode={s.mode} onChange={s.handleModeChange} disabled={!s.documentId} />
+        <ModeBar mode={s.mode} onChange={s.handleModeChange} disabled={!s.formId} />
 
         <HeaderActions
-          documentId={s.documentId}
+          formId={s.formId}
           sessionId={s.sessionId}
           isLoading={s.isLoading}
           isFilling={s.isFilling}
@@ -144,7 +144,7 @@ export function FormPage() {
           annotations={s.annotations}
           fieldLabelMaps={s.fieldLabelMaps}
           currentPage={s.currentPage}
-          documentId={s.documentId}
+          formId={s.formId}
         />
 
         <main

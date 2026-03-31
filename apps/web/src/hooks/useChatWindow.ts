@@ -18,9 +18,10 @@ export function useChatWindow(sessionId: string | null): {
 
       // Persist only entries added after load() — those beyond persistedCount
       if (sessionId && current.length > persistedCount.current) {
-        const latest = current[current.length - 1]
-        if (latest) {
-          formClient.addConversation(sessionId, latest.role, latest.text).catch(() => {})
+        const newEntries = current.slice(persistedCount.current)
+        persistedCount.current = current.length
+        for (const entry of newEntries) {
+          formClient.addConversation(sessionId, entry.role, entry.text).catch(() => {})
         }
       }
     })
@@ -30,8 +31,8 @@ export function useChatWindow(sessionId: string | null): {
   useEffect(() => {
     const originalLoad = chatWindow.load.bind(chatWindow)
     chatWindow.load = (loaded: ActivityEntry[]) => {
-      originalLoad(loaded)
       persistedCount.current = loaded.length
+      originalLoad(loaded)
     }
   }, [chatWindow])
 

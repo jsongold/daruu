@@ -7,13 +7,11 @@ from app.models import (
     Annotation,
     BBox,
     FillContext,
+    FillField,
     FieldType,
     FormField,
     HistoryMessage,
     MapContext,
-    PageContext,
-    FieldSection,
-    EnrichedField,
     Prompt,
     RuleItem,
     RulesContext,
@@ -43,34 +41,54 @@ def _block(text: str = "label", page: int = 1) -> TextBlock:
 
 
 class TestFillPrompt:
-    def test_build_returns_prompt(self):
+    def test_build_returns_prompt_and_index(self):
         ctx = FillContext(
-            pages=[PageContext(page=1, sections=[
-                FieldSection(fields=[
-                    EnrichedField(field_id="f1", name="Text1", type="text", label="name"),
-                ]),
-            ])],
-            user_info={"name": "Tanaka"},
-            rules=[],
-            history=[],
+            fields=[FillField(field_id="f1", label="name", semantic_key="full_name", type="text")],
+            user_info={"k": "Tanaka"},
         )
-        result = FillPrompt.build(ctx)
-        assert isinstance(result, Prompt)
-        assert "form-filling assistant" in result.system
-        parsed = json.loads(result.user)
-        assert parsed["user_info"]["name"] == "Tanaka"
+        prompt, idx_map = FillPrompt.build(ctx)
+        assert isinstance(prompt, Prompt)
+        assert "Form-fill" in prompt.system
+        assert "input\nTanaka\n" in prompt.user
+        assert "form_schema\n0|name|full_name" in prompt.user
+        assert idx_map == ["f1"]
 
-    def test_build_includes_rules_and_history(self):
+    def test_build_includes_format_rule_and_type(self):
         ctx = FillContext(
-            pages=[],
-            user_info={},
-            rules=[RuleItem(type=RuleType.FORMAT, rule_text="dates in wareki")],
-            history=[HistoryMessage(role="user", content="hello")],
+            fields=[FillField(field_id="f1", label="date", semantic_key="birth_date", type="date", format_rule="YYYY/MM/DD")],
+            user_info={"birthday": "1990-01-15"},
         )
-        result = FillPrompt.build(ctx)
-        parsed = json.loads(result.user)
-        assert len(parsed["rules"]) == 1
-        assert len(parsed["history"]) == 1
+        prompt, idx_map = FillPrompt.build(ctx)
+        assert "0|date|birth_date|date|YYYY/MM/DD" in prompt.user
+
+    def test_build_omits_default_type(self):
+        ctx = FillContext(
+            fields=[FillField(field_id="f1", label="name", semantic_key="full_name", type="text")],
+            user_info={},
+        )
+        prompt, _ = FillPrompt.build(ctx)
+        # text type should not appear
+        assert "0|name|full_name" in prompt.user
+        assert "text" not in prompt.user.split("\n")[-1]
+
+    def test_parse_basic(self):
+        content = "0:Tanaka\n1:1990-01-15\n"
+        result = FillPrompt.parse(content, ["field-uuid-0", "field-uuid-1"])
+        assert result == [
+            {"field_id": "field-uuid-0", "value": "Tanaka"},
+            {"field_id": "field-uuid-1", "value": "1990-01-15"},
+        ]
+
+    def test_parse_skips_invalid(self):
+        content = "0:Tanaka\nbad line\n99:out of range\n"
+        result = FillPrompt.parse(content, ["f1"])
+        assert len(result) == 1
+        assert result[0]["field_id"] == "f1"
+
+    def test_parse_value_with_colon(self):
+        content = "0:10:30 AM\n"
+        result = FillPrompt.parse(content, ["f1"])
+        assert result[0]["value"] == "10:30 AM"
 
 
 class TestMapPrompt:
@@ -82,12 +100,12 @@ class TestMapPrompt:
         )
         result = MapPrompt.build(ctx)
         assert isinstance(result, Prompt)
-        assert "Japanese PDF form" in result.system
+        assert "PDF form field identification" in result.system
         assert "f1" in result.user
 
     def test_build_with_confirmed_annotations(self):
         ann = Annotation(
-            document_id="doc1",
+            form_id="doc1",
             label_text="name",
             label_bbox=BBox(x=0.05, y=0.1, width=0.04, height=0.02),
             field_id="f1",
@@ -117,7 +135,7 @@ class TestRulesPrompt:
         )
         result = RulesPrompt.build(ctx)
         assert isinstance(result, Prompt)
-        assert "document analysis assistant" in result.system
+        assert "form analysis assistant" in result.system
         parsed_user = result.user
         assert "f1" in parsed_user
         assert "instruction text" in parsed_user

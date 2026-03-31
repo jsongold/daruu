@@ -53,7 +53,8 @@ def _direction_score(field_bbox: tuple[float, float, float, float], label_bbox: 
     else:
         direction = "above" if dy > 0 else "below"
 
-    multipliers = {"left": 0.8, "above": 0.9, "right": 2.0, "below": 1.5, "overlap": 0.5}
+    multipliers = {"left": 0.8, "above": 0.9,
+                   "right": 2.0, "below": 1.5, "overlap": 0.5}
     score = base_dist * multipliers[direction]
 
     # Vertical alignment bonus: same row -> x0.7
@@ -92,13 +93,16 @@ def _build_map_user(
         for field in pages[page_num]:
             if field.bbox is None:
                 continue
-            fb = (field.bbox.x, field.bbox.y, field.bbox.width, field.bbox.height)
+            fb = (field.bbox.x, field.bbox.y,
+                  field.bbox.width, field.bbox.height)
             f_ivb = _to_ivb(fb)
-            lines.append(f"{field.id} [{f_ivb[0]},{f_ivb[1]},{f_ivb[2]},{f_ivb[3]}] type={field.field_type.value}")
+            lines.append(
+                f"{field.id} [{f_ivb[0]},{f_ivb[1]},{f_ivb[2]},{f_ivb[3]}] type={field.field_type.value}")
 
             scored: list[tuple[float, str, TextBlock]] = []
             for block in page_blocks:
-                bb = (block.bbox.x, block.bbox.y, block.bbox.width, block.bbox.height)
+                bb = (block.bbox.x, block.bbox.y,
+                      block.bbox.width, block.bbox.height)
                 score, direction = _direction_score(fb, bb)
                 scored.append((score, direction, block))
 
@@ -108,18 +112,23 @@ def _build_map_user(
             if top:
                 parts = []
                 for score, direction, block in top:
-                    b_ivb = _to_ivb((block.bbox.x, block.bbox.y, block.bbox.width, block.bbox.height))
-                    parts.append(f'"{block.text}"[{b_ivb[0]},{b_ivb[1]},{b_ivb[2]},{b_ivb[3]}] {direction}')
+                    b_ivb = _to_ivb((block.bbox.x, block.bbox.y,
+                                    block.bbox.width, block.bbox.height))
+                    parts.append(
+                        f'"{block.text}"[{b_ivb[0]},{b_ivb[1]},{b_ivb[2]},{b_ivb[3]}] {direction}')
                 lines.append(f"  candidates: {' | '.join(parts)}")
             else:
                 lines.append("  candidates: (none)")
 
     if confirmed_annotations:
-        lines.append("\n## Confirmed mappings for this form (use as reference)")
+        lines.append(
+            "\n## Confirmed mappings for this form (use as reference)")
         for ann in confirmed_annotations:
             if ann.label_bbox and ann.field_bbox:
-                l_ivb = _to_ivb((ann.label_bbox.x, ann.label_bbox.y, ann.label_bbox.width, ann.label_bbox.height))
-                f_ivb = _to_ivb((ann.field_bbox.x, ann.field_bbox.y, ann.field_bbox.width, ann.field_bbox.height))
+                l_ivb = _to_ivb((ann.label_bbox.x, ann.label_bbox.y,
+                                ann.label_bbox.width, ann.label_bbox.height))
+                f_ivb = _to_ivb((ann.field_bbox.x, ann.field_bbox.y,
+                                ann.field_bbox.width, ann.field_bbox.height))
                 lines.append(
                     f'- "{ann.label_text}" [{l_ivb[0]},{l_ivb[1]},{l_ivb[2]},{l_ivb[3]}] '
                     f'-> {ann.field_id} [{f_ivb[0]},{f_ivb[1]},{f_ivb[2]},{f_ivb[3]}]'
@@ -129,7 +138,7 @@ def _build_map_user(
 
 
 def _build_understand_user(fields: list[FormField], text_blocks: list[TextBlock]) -> str:
-    """Build user prompt for document rule extraction."""
+    """Build user prompt for form rule extraction."""
     field_list = [
         {"field_id": f.id, "name": f.name, "type": f.field_type.value, "page": f.page}
         for f in fields
@@ -150,65 +159,140 @@ def _build_understand_user(fields: list[FormField], text_blocks: list[TextBlock]
 # ---------------------------------------------------------------------------
 
 class FillPrompt:
+    """Fill mode: compact plain-text prompt with integer indices."""
+
     SYSTEM = """\
-You are a form-filling assistant.
+Form-fill assistant for PDF forms in any language.
 
-1. Apply format and calculation rules provided in "Rules".
-   Examples: convert to required character type; apply date format; derive calculated values.
+## Input
+User provides general context about themselves or their situation as free text.
+This is NOT structured data -- it is natural language describing who they are,
+what they do, their circumstances, etc.
+Extract relevant facts to decide how to fill each field.
 
-2. Fill fields from "User information" using semantic matching.
-   Examples: name/full_name -> name field; address -> address field; dob/birth_date -> date of birth field.
+## Matching
+Match user context to form fields by MEANING, not by position or language.
+Cross-language matching is required:
+- A field labeled in one language must match user context in another language
+- Use semantic_key (English snake_case) as the bridge between languages
+- Example: semantic_key="full_name" matches context mentioning a person's name
+  regardless of whether the input is in English, Japanese, or any other language
 
-3. If "User response to previous question" is provided, use it to fill conditional fields.
-   Example: user confirmed spouse exists -> fill spouse name fields from user_info.
+## Hints
+Some fields include a hint (resolved from prior Q&A with the user).
+The hint tells you HOW to fill the field -- follow it exactly.
+Examples: specific date format, which option to select, a derived value.
 
-Return ONLY valid JSON. No markdown.
-{"fields": [{"field_id": "<id>", "value": "<val>"}]}"""
+## Output
+Types: text(default), checkbox(true/false), radio, select, date.
+Output: index:value, one per line. No JSON.
+Omit fields you cannot fill from the given context.
+Do not guess or fabricate values not present in the input."""
 
     @staticmethod
-    def build(ctx: FillContext) -> Prompt:
-        user = json.dumps(ctx.model_dump(mode="json"), ensure_ascii=False)
-        return Prompt(system=FillPrompt.SYSTEM, user=user)
+    def build(ctx: FillContext) -> tuple[Prompt, list[str]]:
+        """Build compact prompt and return (prompt, index_to_field_id mapping).
+
+        The caller must keep index_to_field_id to resolve LLM output back to field_ids.
+        """
+        lines = ["input"]
+        for v in ctx.user_info.values():
+            lines.append(v)
+
+        lines.append("form_schema")
+        index_to_field_id: list[str] = []
+        for i, f in enumerate(ctx.fields):
+            parts = [str(i), f.label or "", f.semantic_key or ""]
+            if f.type != "text":
+                parts.append(f.type)
+            if f.format_rule:
+                if f.type == "text":
+                    parts.append("")  # placeholder for type
+                parts.append(f.format_rule)
+            lines.append("|".join(parts))
+            index_to_field_id.append(f.field_id)
+
+        return Prompt(system=FillPrompt.SYSTEM, user="\n".join(lines)), index_to_field_id
+
+    @staticmethod
+    def parse(content: str, index_to_field_id: list[str]) -> list[dict]:
+        """Parse LLM output (index:value lines) back to [{field_id, value}]."""
+        filled: list[dict] = []
+        for line in content.strip().splitlines():
+            line = line.strip()
+            if not line or ":" not in line:
+                continue
+            idx_str, _, value = line.partition(":")
+            try:
+                idx = int(idx_str.strip())
+            except ValueError:
+                continue
+            if 0 <= idx < len(index_to_field_id) and value:
+                filled.append({
+                    "field_id": index_to_field_id[idx],
+                    "value": value.strip(),
+                })
+        return filled
 
 
 class MapPrompt:
-    SYSTEM = """You are a Japanese PDF form field identification expert.
+    SYSTEM = """You are a PDF form field identification expert.
 Your task: match each form field to its most relevant text label from the provided candidates.
 
 ## Coordinate system
 - Integer-Valued Binning: 0-999 grid, origin at top-left
 - [x1, y1, x2, y2] where (x1,y1) = top-left corner, (x2,y2) = bottom-right corner
 
-## Japanese form layout patterns
+## Form layout patterns
 - Labels are typically LEFT of or ABOVE their field
 - Dense forms may have labels INSIDE or OVERLAPPING the field area
-- Common label patterns: 氏名, フリガナ, 住所, 生年月日, 電話番号, etc.
 - Checkbox labels may be to the RIGHT of the checkbox
 
-## Output format
-Return ONLY a JSON object with a "results" key. No markdown, no explanation, no code fences.
-{"results": [{"field_id":"<id>","label":"<label text or null>","semantic_key":"<snake_case>","confidence":<0-100>}, ...]}
+## Label vs decoration -- general principles
+A label is descriptive text that tells the user WHAT to write in a field.
+Decoration is visual formatting that is NOT a label:
+- Single punctuation or symbols (dots, bullets, boxes, circles, dashes)
+- Separator characters between field parts (e.g. dots between year/month/day)
+- Selection option text that is part of the field's UI (e.g. "Yes/No", era choices)
+- Parenthetical instructions or footnotes
+- Row/column numbers or section markers
 
-## Fields
+When the best candidate is decoration, return label=null and confidence=0.
+A field with no meaningful label is better than a field with a wrong label.
+
+## Checkbox and radio fields
+- The label is the text that describes what selecting this option MEANS
+- Use the descriptive text adjacent to the widget, not the widget symbol itself
+- Example: "□ Married" -> label="Married", not label="□"
+
+## Output format
+Return ONLY a JSON object. No markdown, no explanation, no code fences.
+{"form_name":"<official form name, e.g. I-130, W-2, or null if unknown>","results": [{"field_id":"<id>","label":"<label text or null>","semantic_key":"<snake_case>","confidence":<0-100>}, ...]}
+
+## Top-level fields
+- form_name: official form identifier if visible (e.g. "I-130", "W-2", "履歴書"), or null
+
+## Per-field result fields
 - field_id: exact field ID from input
 - label: matched text (exact string from candidates), or null if no match
 - semantic_key: English snake_case key describing the field's purpose
 - confidence: 0-100 integer (90-100: directly adjacent; 70-89: nearby; 50-69: inferred; 0-49: weak/no match)
 
 ## Rules
-- Process ALL fields. Never skip a field.
+- Process ALL fields. For fields with no meaningful label nearby, return label=null and confidence=0.
 - For each field, return exactly one result.
 - left/above labels have higher prior probability than right/below."""
 
     @staticmethod
     def build(ctx: MapContext) -> Prompt:
-        user = _build_map_user(ctx.fields, ctx.text_blocks, ctx.confirmed_annotations, ctx.top_k)
+        user = _build_map_user(ctx.fields, ctx.text_blocks,
+                               ctx.confirmed_annotations, ctx.top_k)
         return Prompt(system=MapPrompt.SYSTEM, user=user)
 
 
 class RulesPrompt:
     SYSTEM = """\
-You are a document analysis assistant for PDF forms.
+You are a form analysis assistant for PDF forms.
 Analyze the form's fields and visible text to extract all filling rules and instructions.
 
 ## Part 1: Full rulebook (natural language)
@@ -225,12 +309,21 @@ Classify each rule into one of:
 - "format": specifies how to write a value (e.g., all caps, date format YYYY/MM/DD)
 - "calculation": value is derived from other fields or given data
 
+CRITICAL: Every rule MUST include "field_ids" — the list of field_id values that the rule governs.
+- A format rule for date fields should list all date field_ids it applies to.
+- A conditional rule like "fill spouse fields only if married" should list all spouse-related field_ids.
+- If a rule applies to all fields, list them all explicitly.
+
 For each "conditional" rule also provide:
 - question: the single yes/no or multiple-choice question that resolves the condition (write in the form's language)
 - options: ["Yes", "No"] for yes/no conditions; list the available choices for multiple-choice
 
 Return ONLY valid JSON. No markdown, no explanation.
-{"rulebook_text": "...", "rules": [{"type": "conditional", "rule_text": "...", "question": "...", "options": ["Yes", "No"]}, {"type": "format", "rule_text": "...", "question": null, "options": []}]}"""
+{"description": "<one-sentence English summary of the form's purpose for semantic search>", "rulebook_text": "...", "rules": [{"type": "conditional", "rule_text": "...", "field_ids": ["field_abc"], "question": "...", "options": ["Yes", "No"]}, {"type": "format", "rule_text": "...", "field_ids": ["field_xyz"], "question": null, "options": []}]}
+
+## description field
+- Write a concise English summary of the form's purpose (e.g. "Petition for alien relative filed with USCIS to establish family relationship for immigration")
+- This is used for semantic search to find similar forms"""
 
     @staticmethod
     def build(ctx: RulesContext) -> Prompt:

@@ -5,7 +5,7 @@ import type { Form, FormField, TextBlock, Annotation, Mode, AgentQuestion, Field
 import { useChatWindow } from "./useChatWindow"
 
 export function useFormSession(urlSessionId: string | undefined, navigate: NavigateFunction) {
-  const [documentId, setDocumentId] = useState<string | null>(null)
+  const [formId, setFormId] = useState<string | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [form, setForm] = useState<Form | null>(null)
   const [fields, setFields] = useState<FormField[]>([])
@@ -58,10 +58,15 @@ export function useFormSession(urlSessionId: string | undefined, navigate: Navig
         const ctx = await formClient.getSession(urlSessionId)
         if (cancelled) return
         setSessionId(ctx.session_id)
-        setDocumentId(ctx.document_id)
+        setFormId(ctx.form_id)
         if (ctx.form) {
           setForm(ctx.form)
-          setFields(ctx.form.fields)
+          const formValues = ctx.form_values ?? {}
+          setFields(
+            ctx.form.fields.map((f) =>
+              formValues[f.id] !== undefined ? { ...f, value: formValues[f.id] } : f
+            )
+          )
         }
         setAnnotations(ctx.annotations)
         setRulesItems(ctx.rules?.items ?? [])
@@ -69,10 +74,10 @@ export function useFormSession(urlSessionId: string | undefined, navigate: Navig
 
         const [convData, ...rest] = await Promise.all([
           formClient.listConversations(ctx.session_id).catch(() => []),
-          ...(ctx.document_id ? [
-            formClient.getFields(ctx.document_id),
-            formClient.getAnnotations(ctx.document_id).catch(() => [] as Annotation[]),
-            formClient.getMap(ctx.document_id).catch(() => ({ document_id: ctx.document_id!, maps: [] as FieldLabelMap[] })),
+          ...(ctx.form_id ? [
+            formClient.getFields(ctx.form_id),
+            formClient.getAnnotations(ctx.form_id).catch(() => [] as Annotation[]),
+            formClient.getMap(ctx.form_id).catch(() => ({ form_id: ctx.form_id!, maps: [] as FieldLabelMap[] })),
           ] : []),
         ])
         if (cancelled) return
@@ -84,18 +89,22 @@ export function useFormSession(urlSessionId: string | undefined, navigate: Navig
           timestamp: c.created_at ?? new Date().toISOString(),
         })))
 
-        if (ctx.document_id && rest.length === 3) {
+        if (ctx.form_id && rest.length === 3) {
           const [fieldsData, annotationsData, mapsData] = rest as [
             { fields: FormField[]; text_blocks: TextBlock[]; page_count: number },
             Annotation[],
-            { document_id: string; maps: FieldLabelMap[] },
+            { form_id: string; maps: FieldLabelMap[] },
           ]
           setTextBlocks(fieldsData.text_blocks)
           if (!ctx.form && fieldsData.fields.length > 0) {
-            setFields(fieldsData.fields)
+            const formValues = ctx.form_values ?? {}
+            const withValues = fieldsData.fields.map((f) =>
+              formValues[f.id] !== undefined ? { ...f, value: formValues[f.id] } : f
+            )
+            setFields(withValues)
             setForm({
-              id: ctx.document_id,
-              document_id: ctx.document_id,
+              id: ctx.form_id,
+              form_id: ctx.form_id,
               fields: fieldsData.fields,
               page_count: fieldsData.page_count ?? 1,
             })
@@ -124,26 +133,26 @@ export function useFormSession(urlSessionId: string | undefined, navigate: Navig
     setError(null)
     setExcludedPages(new Set())
     try {
-      const { document_id, form: uploadedForm } = await formClient.uploadDocument(file)
-      setDocumentId(document_id)
+      const { form_id, form: uploadedForm } = await formClient.uploadForm(file)
+      setFormId(form_id)
       setForm(uploadedForm)
       setFields(uploadedForm.fields)
       setCurrentPage(1)
 
       const [fieldsData, existingAnnotations, existingMaps] = await Promise.all([
-        formClient.getFields(document_id),
-        formClient.getAnnotations(document_id).catch(() => []),
-        formClient.getMap(document_id).catch(() => ({ document_id, maps: [] })),
+        formClient.getFields(form_id),
+        formClient.getAnnotations(form_id).catch(() => []),
+        formClient.getMap(form_id).catch(() => ({ form_id, maps: [] })),
       ])
       setTextBlocks(fieldsData.text_blocks)
       setAnnotations(existingAnnotations)
       setFieldLabelMaps(existingMaps.maps)
 
-      // Attach document to the existing session (created on /form entry)
+      // Attach form to the existing session (created on /form entry)
       if (sessionId) {
-        await formClient.updateSessionDocument(sessionId, document_id)
+        await formClient.updateSessionForm(sessionId, form_id)
       } else {
-        const session = await formClient.createSession(document_id)
+        const session = await formClient.createSession(form_id)
         setSessionId(session.session_id)
         navigate(`/form/c/${session.session_id}`, { replace: true })
       }
@@ -190,7 +199,7 @@ export function useFormSession(urlSessionId: string | undefined, navigate: Navig
 
   return {
     // state
-    documentId, sessionId, form, fields, textBlocks, annotations,
+    formId, sessionId, form, fields, textBlocks, annotations,
     mode, currentPage, selectedLabelId, selectedFieldId,
     isLoading, isFilling, isAsking, isMapping, isUnderstanding,
     rulesItems, fieldLabelMaps, pendingQuestions, askHistory,
@@ -201,7 +210,7 @@ export function useFormSession(urlSessionId: string | undefined, navigate: Navig
     setRulesItems, setFieldLabelMaps, setPendingQuestions, setAskHistory,
     setError, setIsDragging, setCurrentPage,
     // derived
-    pageImageUrl: documentId ? formClient.getPagePreview(documentId, currentPage) : null,
+    pageImageUrl: formId ? formClient.getPagePreview(formId, currentPage) : null,
     totalPages: form?.page_count ?? 1,
     // handlers
     fileInputRef, handleFileInput, handleDrop,

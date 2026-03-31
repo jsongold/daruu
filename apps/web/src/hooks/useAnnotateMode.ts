@@ -6,7 +6,7 @@ import type { ChatWindow } from "../lib/ChatWindow"
 interface Args {
   mode: Mode
   selectedLabelId: string | null
-  documentId: string | null
+  formId: string | null
   textBlocks: TextBlock[]
   setAnnotations: React.Dispatch<React.SetStateAction<Annotation[]>>
   setSelectedLabelId: (id: string | null) => void
@@ -19,7 +19,7 @@ interface Args {
 export function useAnnotateMode({
   mode,
   selectedLabelId,
-  documentId,
+  formId,
   textBlocks,
   setAnnotations,
   setSelectedLabelId,
@@ -40,7 +40,7 @@ export function useAnnotateMode({
   const handleFieldClick = useCallback(
     async (field: FormField) => {
       if (mode !== "annotate") return
-      if (!selectedLabelId || !documentId) return
+      if (!selectedLabelId || !formId) return
 
       const labelBlock = textBlocks.find((b) => b.id === selectedLabelId)
       if (!labelBlock) return
@@ -49,7 +49,7 @@ export function useAnnotateMode({
       setError(null)
       try {
         const annotation = await formClient.createAnnotation({
-          document_id: documentId,
+          form_id: formId,
           label_text: labelBlock.text,
           label_bbox: labelBlock.bbox,
           label_page: labelBlock.page,
@@ -70,7 +70,7 @@ export function useAnnotateMode({
         setIsLoading(false)
       }
     },
-    [mode, selectedLabelId, documentId, textBlocks, setAnnotations, setSelectedLabelId, setSelectedFieldId, setIsLoading, setError, chatWindow]
+    [mode, selectedLabelId, formId, textBlocks, setAnnotations, setSelectedLabelId, setSelectedFieldId, setIsLoading, setError, chatWindow]
   )
 
   const handleDeleteAnnotation = useCallback(
