@@ -160,6 +160,8 @@ Examples: specific date format, which option to select, a derived value.
 
 ## Output
 Types: text(default), checkbox(true/false), radio, select, date.
+For select fields with options=[...], pick ONLY from the listed values.
+For checkbox fields, use only true or false.
 Output: index:value, one per line. No JSON.
 Omit fields you cannot fill from the given context.
 Do not guess or fabricate values not present in the input."""
@@ -178,12 +180,13 @@ Do not guess or fabricate values not present in the input."""
         index_to_field_id: list[str] = []
         for i, f in enumerate(ctx.fields):
             parts = [str(i), f.label or "", f.semantic_key or ""]
-            if f.type != "text":
+            has_extra = f.type != "text" or f.format_rule or f.options
+            if has_extra:
                 parts.append(f.type)
-            if f.format_rule:
-                if f.type == "text":
-                    parts.append("")  # placeholder for type
-                parts.append(f.format_rule)
+            if f.format_rule or f.options:
+                parts.append(f.format_rule or "")
+            if f.options:
+                parts.append(f"options=[{','.join(f.options)}]")
             lines.append("|".join(parts))
             index_to_field_id.append(f.field_id)
 

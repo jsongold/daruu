@@ -44,6 +44,7 @@ class FormField(BaseModel):
     bbox: BBox | None = None
     page: int = 1
     value: str | None = None
+    options: list[str] = Field(default_factory=list)
     model_config = {"frozen": True}
 
 
@@ -273,6 +274,7 @@ class FillField(BaseModel):
     semantic_key: str | None = None
     type: str = "text"
     format_rule: str | None = None
+    options: list[str] = Field(default_factory=list)
     model_config = {"frozen": True}
 
 
@@ -317,6 +319,7 @@ class FormSchemaField(BaseModel):
     semantic_key: str | None = None
     confidence: int = 0
     is_confirmed: bool = False
+    options: list[str] = Field(default_factory=list)
     model_config = {"frozen": True}
 
 

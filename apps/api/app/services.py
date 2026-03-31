@@ -200,6 +200,8 @@ class FormService:
                 )
                 field_name = widget.field_name or f"field_{len(fields)}"
                 stable_id = str(len(fields))
+                raw_choices = getattr(widget, "choice_values", None) or []
+                options = [str(c) for c in raw_choices] if raw_choices else []
                 fields.append(
                     FormField(
                         id=stable_id,
@@ -208,6 +210,7 @@ class FormService:
                         bbox=bbox,
                         page=page_num,
                         value=widget.field_value if isinstance(widget.field_value, str) else None,
+                        options=options,
                     )
                 )
         return fields
@@ -1217,6 +1220,7 @@ class FormSchemaService:
                 default_value=f.value,
                 label_text=f.name if f.name else None,
                 label_source="pdf_extract" if f.name else None,
+                options=f.options,
             )
             for f in fields
         ]
@@ -1450,6 +1454,7 @@ class FormSchemaService:
                     semantic_key=item.get("semantic_key"),
                     confidence=int(item.get("confidence", 0)),
                     is_confirmed=bool(item.get("is_confirmed", False)),
+                    options=item.get("options", []),
                 ))
             except Exception as e:
                 logger.warning("Failed to parse form_schema field: %s", e)
@@ -1570,6 +1575,27 @@ class FillService:
         self._conversation_service.add_history_batch(conversation_id, [("user", prompt.user), ("agent", content)])
 
         filled = FillPrompt.parse(content, index_to_field_id)
+
+        # Validate select/checkbox values against allowed options
+        options_map = {f.field_id: f.options for f in fill_context.fields if f.options}
+        checkbox_ids = {f.field_id for f in fill_context.fields if f.type == "checkbox"}
+        validated: list[dict] = []
+        for item in filled:
+            fid = item["field_id"]
+            val = item["value"]
+            if fid in options_map:
+                valid = options_map[fid]
+                match = next((v for v in valid if v.lower() == val.lower()), None)
+                if match:
+                    validated.append({**item, "value": match})
+                else:
+                    logger.warning("Fill value %r not in options %s for field %s, skipping", val, valid, fid)
+            elif fid in checkbox_ids:
+                normalized = "true" if val.lower() in ("true", "yes", "1", "on") else "false"
+                validated.append({**item, "value": normalized})
+            else:
+                validated.append(item)
+        filled = validated
 
         if filled:
             values_map = {item["field_id"]: item["value"] for item in filled}
