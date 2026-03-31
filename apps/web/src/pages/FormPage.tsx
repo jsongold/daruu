@@ -144,6 +144,7 @@ export function FormPage() {
             selectedFieldId={s.selectedFieldId}
             onLabelClick={handleLabelClick}
             onFieldClick={handleFieldClick}
+            onValueChange={s.handleValueChange}
             page={s.currentPage}
             totalPages={s.totalPages}
             onPageChange={s.setCurrentPage}

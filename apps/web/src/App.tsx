@@ -6,7 +6,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/form" element={<FormPage />} />
-        <Route path="/form/c/:sessionId" element={<FormPage />} />
+        <Route path="/form/c/:conversationId" element={<FormPage />} />
         <Route path="*" element={<Navigate to="/form" replace />} />
       </Routes>
     </BrowserRouter>

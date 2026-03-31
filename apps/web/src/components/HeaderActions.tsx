@@ -1,12 +1,14 @@
 interface Props {
   formId: string | null
-  sessionId: string | null
+  conversationId: string | null
   isLoading: boolean
   isFilling: boolean
   isAsking: boolean
+  isMapping: boolean
   isUnderstanding: boolean
   error: string | null
   onUnderstand: () => void
+  onMap: () => void
   onAsk: () => void
   onFill: () => void
   onUploadClick: () => void
@@ -19,10 +21,10 @@ function Spinner() {
 }
 
 export function HeaderActions({
-  formId, sessionId,
-  isLoading, isFilling, isAsking, isUnderstanding,
+  formId, conversationId,
+  isLoading, isFilling, isAsking, isMapping, isUnderstanding,
   error,
-  onUnderstand, onAsk, onFill, onUploadClick,
+  onUnderstand, onMap, onAsk, onFill, onUploadClick,
 }: Props) {
   const busy = isLoading || isFilling
 
@@ -35,15 +37,23 @@ export function HeaderActions({
       )}
       <button
         onClick={onUnderstand}
-        disabled={isUnderstanding || busy || !sessionId}
+        disabled={isUnderstanding || busy || !conversationId}
         className="px-3 py-1.5 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
       >
         {isUnderstanding && <Spinner />}
         {isUnderstanding ? "Analyzing..." : "Understand"}
       </button>
       <button
+        onClick={onMap}
+        disabled={isMapping || busy || !conversationId}
+        className="px-3 py-1.5 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+      >
+        {isMapping && <Spinner />}
+        {isMapping ? "Mapping..." : "Map"}
+      </button>
+      <button
         onClick={onAsk}
-        disabled={isAsking || busy || !sessionId}
+        disabled={isAsking || busy || !conversationId}
         className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
       >
         {isAsking && <Spinner />}
@@ -51,7 +61,7 @@ export function HeaderActions({
       </button>
       <button
         onClick={onFill}
-        disabled={isFilling || busy || !sessionId}
+        disabled={isFilling || busy || !conversationId}
         className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
       >
         {isFilling && <Spinner />}

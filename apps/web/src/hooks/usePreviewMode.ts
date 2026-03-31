@@ -4,7 +4,7 @@ import type { AgentQuestion, Mode } from "../api/formClient"
 import type { ChatWindow } from "../lib/ChatWindow"
 
 interface Args {
-  sessionId: string | null
+  conversationId: string | null
   setIsAsking: (v: boolean) => void
   setMode: (mode: Mode) => void
   setPendingQuestions: React.Dispatch<React.SetStateAction<AgentQuestion[]>>
@@ -14,7 +14,7 @@ interface Args {
 }
 
 export function usePreviewMode({
-  sessionId,
+  conversationId,
   setIsAsking,
   setMode,
   setPendingQuestions,
@@ -24,21 +24,21 @@ export function usePreviewMode({
 }: Args) {
   const handleSendInfo = useCallback(
     async (text: string) => {
-      if (!sessionId) return
+      if (!conversationId) return
       chatWindow.add("user", text)
-      await formClient.updateUserInfo(sessionId, { note: text })
+      await formClient.updateUserInfo(conversationId, { [`note_${Date.now()}`]: text })
     },
-    [sessionId, chatWindow]
+    [conversationId, chatWindow]
   )
 
   const handleAsk = useCallback(async () => {
-    if (!sessionId) return
+    if (!conversationId) return
     setIsAsking(true)
     setMode("ask")
     setError(null)
     chatWindow.add("system", "Ask started...")
     try {
-      const result = await formClient.ask(sessionId)
+      const result = await formClient.ask(conversationId)
       if (result.questions.length > 0) {
         setPendingQuestions(result.questions)
         const combinedQuestion = result.questions.map((q) => q.question).join("\n")
@@ -55,7 +55,7 @@ export function usePreviewMode({
       setIsAsking(false)
       setMode("preview")
     }
-  }, [sessionId, setIsAsking, setMode, setPendingQuestions, setAskHistory, setError, chatWindow])
+  }, [conversationId, setIsAsking, setMode, setPendingQuestions, setAskHistory, setError, chatWindow])
 
   return { handleSendInfo, handleAsk }
 }

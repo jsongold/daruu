@@ -28,7 +28,7 @@ from app.models import (
     TextBlock,
     UserInfo,
 )
-from app.services import AnnotationService, DocumentService, MappingService, SessionService
+from app.services import AnnotationService, FormService, MappingService, ConversationService
 
 client = TestClient(app)
 
@@ -107,13 +107,13 @@ class TestAnnotation:
 
 class TestMapping:
     def test_construction(self):
-        m = Mapping(session_id="s1", annotation_id="a1", field_id="f1")
+        m = Mapping(conversation_id="s1", annotation_id="a1", field_id="f1")
         assert m.confidence == 0.0
         assert m.reason == ""
         assert m.id is not None
 
     def test_frozen(self):
-        m = Mapping(session_id="s1", annotation_id="a1", field_id="f1")
+        m = Mapping(conversation_id="s1", annotation_id="a1", field_id="f1")
         with pytest.raises((ValidationError, TypeError)):
             m.confidence = 1.0  # type: ignore[misc]
 
@@ -125,7 +125,7 @@ class TestContextWindow:
         assert ctx.annotations == []
         assert ctx.mappings == []
         assert ctx.history == []
-        assert ctx.session_id is not None
+        assert ctx.conversation_id is not None
 
     def test_frozen(self):
         ctx = ContextWindow()
@@ -254,17 +254,17 @@ class TestAnnotationService:
 
 
 # ---------------------------------------------------------------------------
-# SessionService tests
+# ConversationService tests
 # ---------------------------------------------------------------------------
 
 
-class TestSessionService:
+class TestConversationService:
     @patch("app.services.get_supabase_client")
     def test_create_inserts_correct_fields_and_returns_context_window(self, mock_get_supabase):
         mock_client = _make_supabase_mock()
         mock_get_supabase.return_value = mock_client
 
-        svc = SessionService()
+        svc = ConversationService()
         user_info = UserInfo(data={"name": "Alice"})
         rules = Rules(items=[RuleItem(type=RuleType.FORMAT, rule_text="rule1")])
         ctx = svc.create("doc1", user_info, rules)
@@ -288,7 +288,7 @@ class TestSessionService:
         mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = MagicMock(data=[])
         mock_get_supabase.return_value = mock_client
 
-        svc = SessionService()
+        svc = ConversationService()
         result = svc.get("nonexistent-session")
         assert result is None
 
@@ -297,7 +297,7 @@ class TestSessionService:
         mock_client = _make_supabase_mock()
         mock_get_supabase.return_value = mock_client
 
-        svc = SessionService()
+        svc = ConversationService()
         svc.update_mode("session-1", Mode.FILL)
 
         update_chain = mock_client.table.return_value.update
@@ -405,33 +405,33 @@ class TestDocumentRoutes:
         assert len(data["text_blocks"]) == 1
 
 
-class TestSessionRoutes:
-    @patch("app.routes.session_service")
-    def test_create_session_returns_session_id(self, mock_session_service):
+class TestConversationRoutes:
+    @patch("app.routes.conversation_service")
+    def test_create_conversation_returns_conversation_id(self, mock_conversation_service):
         now = datetime.now(timezone.utc)
         ctx = ContextWindow(
-            session_id="sess-abc",
+            conversation_id="sess-abc",
             document_id="doc1",
             mode=Mode.PREVIEW,
             created_at=now,
             updated_at=now,
         )
-        mock_session_service.create.return_value = ctx
+        mock_conversation_service.create.return_value = ctx
 
         response = client.post(
-            "/api/sessions",
+            "/api/conversations",
             json={"document_id": "doc1"},
         )
 
         assert response.status_code == 200
         data = response.json()
-        assert data["session_id"] == "sess-abc"
+        assert data["conversation_id"] == "sess-abc"
 
-    @patch("app.routes.session_service")
-    def test_get_session_returns_404_for_missing(self, mock_session_service):
-        mock_session_service.get.return_value = None
+    @patch("app.routes.conversation_service")
+    def test_get_conversation_returns_404_for_missing(self, mock_conversation_service):
+        mock_conversation_service.get.return_value = None
 
-        response = client.get("/api/sessions/nonexistent")
+        response = client.get("/api/conversations/nonexistent")
 
         assert response.status_code == 404
 
@@ -481,14 +481,14 @@ class TestFillRoute:
     def test_fill_returns_sse_stream(self, mock_fill_service):
         from app.models import FillEvent
 
-        async def _fake_stream(session_id, user_message=None):
+        async def _fake_stream(conversation_id, user_message=None):
             yield FillEvent(event="done", data={}).model_dump_json()
 
         mock_fill_service.fill_stream = _fake_stream
 
         response = client.post(
             "/api/fill",
-            json={"session_id": "session-1"},
+            json={"conversation_id": "conv-1"},
         )
 
         assert response.status_code == 200

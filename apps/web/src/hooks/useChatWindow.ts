@@ -3,7 +3,7 @@ import { ChatWindow } from "../lib/ChatWindow"
 import type { ActivityEntry } from "../lib/ChatWindow"
 import { formClient } from "../api/formClient"
 
-export function useChatWindow(sessionId: string | null): {
+export function useChatWindow(conversationId: string | null): {
   chatWindow: ChatWindow
   entries: ActivityEntry[]
 } {
@@ -16,16 +16,16 @@ export function useChatWindow(sessionId: string | null): {
       const current = [...chatWindow.entries]
       setEntries(current)
 
-      // Persist only entries added after load() — those beyond persistedCount
-      if (sessionId && current.length > persistedCount.current) {
+      // Persist only entries added after load() -- those beyond persistedCount
+      if (conversationId && current.length > persistedCount.current) {
         const newEntries = current.slice(persistedCount.current)
         persistedCount.current = current.length
         for (const entry of newEntries) {
-          formClient.addConversation(sessionId, entry.role, entry.text).catch(() => {})
+          formClient.addMessage(conversationId, entry.role, entry.text).catch(() => {})
         }
       }
     })
-  }, [chatWindow, sessionId])
+  }, [chatWindow, conversationId])
 
   // Wrap load once so we can track how many entries came from the DB
   useEffect(() => {
