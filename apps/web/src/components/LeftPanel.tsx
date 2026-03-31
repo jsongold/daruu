@@ -117,13 +117,33 @@ export function LeftPanel({
                       </td>
                       <td className="px-2 py-1.5 max-w-[60px]">
                         {isEdit ? (
-                          <input
-                            type="text"
-                            value={f.value ?? ""}
-                            onChange={(e) => onValueChange(f.id, e.target.value)}
-                            className="w-full text-xs text-green-700 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-blue-400 focus:outline-none truncate"
-                            placeholder="---"
-                          />
+                          f.options.length > 0 ? (
+                            <select
+                              value={f.value ?? ""}
+                              onChange={(e) => onValueChange(f.id, e.target.value)}
+                              className="w-full text-xs text-green-700 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-blue-400 focus:outline-none"
+                            >
+                              <option value="">---</option>
+                              {f.options.map((opt) => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
+                            </select>
+                          ) : f.field_type === "checkbox" ? (
+                            <input
+                              type="checkbox"
+                              checked={f.value === "true"}
+                              onChange={(e) => onValueChange(f.id, e.target.checked ? "true" : "false")}
+                              className="w-3 h-3 accent-green-600"
+                            />
+                          ) : (
+                            <input
+                              type="text"
+                              value={f.value ?? ""}
+                              onChange={(e) => onValueChange(f.id, e.target.value)}
+                              className="w-full text-xs text-green-700 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-blue-400 focus:outline-none truncate"
+                              placeholder="---"
+                            />
+                          )
                         ) : (
                           <span className="text-green-700 truncate block" title={f.value ?? ""}>
                             {f.value ?? <span className="text-gray-300">---</span>}

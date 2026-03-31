@@ -45,7 +45,7 @@ export function PdfViewer({
 }: Props) {
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(null)
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null)
-  const editInputRef = useRef<HTMLInputElement>(null)
+  const editInputRef = useRef<HTMLInputElement | HTMLSelectElement>(null)
 
   useEffect(() => {
     if (!imageUrl) {
@@ -120,24 +120,57 @@ export function PdfViewer({
                   title={field.name}
                 >
                   {isEditing ? (
-                    <input
-                      ref={editInputRef}
-                      type="text"
-                      defaultValue={field.value ?? ""}
-                      onBlur={(e) => {
-                        onValueChange!(field.id, e.target.value)
-                        setEditingFieldId(null)
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          onValueChange!(field.id, e.currentTarget.value)
+                    field.options.length > 0 ? (
+                      <select
+                        ref={editInputRef as React.RefObject<HTMLSelectElement>}
+                        defaultValue={field.value ?? ""}
+                        onChange={(e) => {
+                          onValueChange!(field.id, e.target.value)
                           setEditingFieldId(null)
-                        } else if (e.key === "Escape") {
+                        }}
+                        onBlur={() => setEditingFieldId(null)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Escape") setEditingFieldId(null)
+                        }}
+                        className="absolute inset-0 w-full h-full text-[10px] text-green-800 bg-white/90 px-0.5 outline-none border-none"
+                      >
+                        <option value="">---</option>
+                        {field.options.map((opt) => (
+                          <option key={opt} value={opt}>{opt}</option>
+                        ))}
+                      </select>
+                    ) : field.field_type === "checkbox" ? (
+                      <label className="absolute inset-0 flex items-center justify-center bg-white/80 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={field.value === "true"}
+                          onChange={(e) => {
+                            onValueChange!(field.id, e.target.checked ? "true" : "false")
+                            setEditingFieldId(null)
+                          }}
+                          className="w-3 h-3 accent-green-600"
+                        />
+                      </label>
+                    ) : (
+                      <input
+                        ref={editInputRef as React.RefObject<HTMLInputElement>}
+                        type="text"
+                        defaultValue={field.value ?? ""}
+                        onBlur={(e) => {
+                          onValueChange!(field.id, e.target.value)
                           setEditingFieldId(null)
-                        }
-                      }}
-                      className="absolute inset-0 w-full h-full text-[10px] text-green-800 bg-white/80 px-0.5 outline-none border-none"
-                    />
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            onValueChange!(field.id, e.currentTarget.value)
+                            setEditingFieldId(null)
+                          } else if (e.key === "Escape") {
+                            setEditingFieldId(null)
+                          }
+                        }}
+                        className="absolute inset-0 w-full h-full text-[10px] text-green-800 bg-white/80 px-0.5 outline-none border-none"
+                      />
+                    )
                   ) : (
                     <>
                       {field.value && (
