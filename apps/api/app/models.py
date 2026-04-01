@@ -26,6 +26,8 @@ class FieldType(str, Enum):
     SELECT = "select"
     DATE = "date"
     SIGNATURE = "signature"
+    NAME = "name"
+    ADDRESS = "address"
     UNKNOWN = "unknown"
 
 
@@ -54,6 +56,22 @@ class TextBlock(BaseModel):
     bbox: BBox
     page: int
     model_config = {"frozen": True}
+
+
+class Segment(BaseModel):
+    id: str
+    title: str | None = None
+    bbox: BBox
+    page: int
+    field_ids: list[str] = Field(default_factory=list)
+    text_block_ids: list[str] = Field(default_factory=list)
+    model_config = {"frozen": True}
+
+
+class SegmentationResponse(BaseModel):
+    form_id: str
+    method: str
+    segments: list[Segment]
 
 
 class Form(BaseModel):
@@ -245,6 +263,7 @@ class FieldLabelMap(BaseModel):
     semantic_key: str | None = None
     confidence: int = 0
     source: str = "auto"
+    inferred_field_type: str | None = None
     created_at: datetime | None = None
     model_config = {"frozen": True}
 
@@ -295,7 +314,6 @@ class FillField(BaseModel):
     label: str | None = None
     semantic_key: str | None = None
     type: str = "text"
-    format_rule: str | None = None
     options: list[str] = Field(default_factory=list)
     model_config = {"frozen": True}
 
@@ -303,6 +321,9 @@ class FillField(BaseModel):
 class FillContext(BaseModel):
     fields: list[FillField] = Field(default_factory=list)
     user_info: dict[str, str] = Field(default_factory=dict)
+    general_rules: list[RuleItem] = Field(default_factory=list)
+    form_rules: list[RuleItem] = Field(default_factory=list)
+    ask_answers: dict[str, str] = Field(default_factory=dict)
     model_config = {"frozen": True}
 
 
@@ -318,6 +339,7 @@ class MapContext(BaseModel):
 class RulesContext(BaseModel):
     fields: list[FormField] = Field(default_factory=list)
     text_blocks: list[TextBlock] = Field(default_factory=list)
+    general_rules: list[RuleItem] = Field(default_factory=list)
     model_config = {"frozen": True}
 
 
@@ -342,6 +364,17 @@ class FormSchemaField(BaseModel):
     confidence: int = 0
     is_confirmed: bool = False
     options: list[str] = Field(default_factory=list)
+    model_config = {"frozen": True}
+
+
+class GeneralRules(BaseModel):
+    """Reusable rules scoped by country and/or category."""
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    country: str = "GLOBAL"
+    category: str = "GLOBAL"
+    rules: list[RuleItem] = Field(default_factory=list)
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
     model_config = {"frozen": True}
 
 

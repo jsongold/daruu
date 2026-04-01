@@ -167,7 +167,7 @@ incorrectly and corrected by the user.
   you have strong evidence from the input context.
 
 ## Output
-Types: text(default), checkbox(true/false), radio, select, date.
+Types: text(default), checkbox(true/false), radio, select, date, name, address, number.
 For select fields with options=[...], pick ONLY from the listed values.
 For checkbox fields, use only true or false.
 Output: index:value, one per line. No JSON.
@@ -182,25 +182,38 @@ Do not guess or fabricate values not present in the input."""
 
         The caller must keep index_to_field_id to resolve LLM output back to field_ids.
         """
+        # --- system prompt: base + general rules + form rules ---
+        system = FillPrompt.SYSTEM
+        if ctx.general_rules:
+            rule_lines = [r.rule_text for r in ctx.general_rules]
+            system += "\n\n## General rules\n" + "\n".join(f"- {l}" for l in rule_lines)
+        if ctx.form_rules:
+            rule_lines = [r.rule_text for r in ctx.form_rules]
+            system += "\n\n## Form rules\n" + "\n".join(f"- {l}" for l in rule_lines)
+
+        # --- user prompt: input + answers + clean schema ---
         lines = ["input"]
         for v in ctx.user_info.values():
             lines.append(v)
 
-        lines.append("form_schema")
+        if ctx.ask_answers:
+            lines.append("\n## Answers")
+            for question, answer in ctx.ask_answers.items():
+                lines.append(f"Q: {question}")
+                lines.append(f"A: {answer}")
+
+        lines.append("\nform_schema")
         index_to_field_id: list[str] = []
         for i, f in enumerate(ctx.fields):
             parts = [str(i), f.label or "", f.semantic_key or ""]
-            has_extra = f.type != "text" or f.format_rule or f.options
-            if has_extra:
+            if f.type != "text" or f.options:
                 parts.append(f.type)
-            if f.format_rule or f.options:
-                parts.append(f.format_rule or "")
             if f.options:
                 parts.append(f"options=[{','.join(f.options)}]")
             lines.append("|".join(parts))
             index_to_field_id.append(f.field_id)
 
-        return Prompt(system=FillPrompt.SYSTEM, user="\n".join(lines)), index_to_field_id
+        return Prompt(system=system, user="\n".join(lines)), index_to_field_id
 
     @staticmethod
     def parse(content: str, index_to_field_id: list[str]) -> list[dict]:
@@ -265,6 +278,7 @@ Return ONLY a JSON object. No markdown, no explanation, no code fences.
 - label: matched text (exact string from candidates), or null if no match
 - semantic_key: English snake_case key describing the field's purpose
 - confidence: 0-100 integer (90-100: directly adjacent; 70-89: nearby; 50-69: inferred; 0-49: weak/no match)
+- field_type: (optional) only include when the field's current type is "text" or "unknown" AND you can confidently determine a more specific type from the label or semantic key. Valid values: text | checkbox | radio | select | date | number | name | address | signature. Omit this key entirely when the existing type is already reliable (checkbox, radio, select, date, signature).
 
 ## Rules
 - Process ALL fields. For fields with no meaningful label nearby, return label=null and confidence=0.
@@ -318,8 +332,18 @@ Return ONLY valid JSON. No markdown, no explanation.
 
     @staticmethod
     def build(ctx: RulesContext) -> Prompt:
+        system = RulesPrompt.SYSTEM
+        if ctx.general_rules:
+            rule_lines = [r.rule_text for r in ctx.general_rules]
+            system += (
+                "\n\n## Known general rules (already handled by the system)\n"
+                "The following rules are already applied globally. "
+                "Do NOT include these in your output. "
+                "Only extract rules that are SPECIFIC to this form.\n"
+                + "\n".join(f"- {l}" for l in rule_lines)
+            )
         user = _build_understand_user(ctx.fields, ctx.text_blocks)
-        return Prompt(system=RulesPrompt.SYSTEM, user=user)
+        return Prompt(system=system, user=user)
 
 
 class AskPrompt:

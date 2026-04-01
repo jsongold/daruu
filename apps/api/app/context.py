@@ -27,16 +27,21 @@ class ContextService:
         user_info: dict[str, str],
         rules: list[RuleItem],
         ask_answers: dict[str, str] | None = None,
+        general_rules: list[RuleItem] | None = None,
     ) -> FillContext:
         """Build FillContext from form_schema fields (rules pre-resolved).
 
         schema_fields come from the global form_schema table, already
         enriched with labels and semantic keys from annotate + map.
+
+        general_rules are resolved from the general_rules table and
+        stored on FillContext for system prompt injection.
+        Form-level format rules override general format rules.
         """
         ask_answers = ask_answers or {}
+        general_rules = general_rules or []
 
         skip_field_ids = self._resolve_skips(rules, ask_answers)
-        format_rules_by_field = self._index_format_rules(rules)
 
         fill_fields: list[FillField] = []
 
@@ -61,20 +66,20 @@ class ContextService:
             if f.confidence == 0 and not f.is_confirmed:
                 continue
 
-            format_rule = format_rules_by_field.get(f.field_id)
-
             fill_fields.append(FillField(
                 field_id=f.field_id,
                 label=f.label_text or f.field_name,
                 semantic_key=f.semantic_key,
                 type=f.field_type,
-                format_rule=format_rule,
                 options=f.options,
             ))
 
         return FillContext(
             fields=fill_fields,
             user_info=user_info,
+            general_rules=general_rules,
+            form_rules=rules,
+            ask_answers=ask_answers,
         )
 
     def build_legacy(
@@ -178,15 +183,3 @@ class ContextService:
 
         return skip_ids
 
-    def _index_format_rules(
-        self,
-        rules: list[RuleItem],
-    ) -> dict[str, str]:
-        """Build field_id -> format_rule text mapping."""
-        result: dict[str, str] = {}
-        for rule in rules:
-            if rule.type != RuleType.FORMAT:
-                continue
-            for fid in rule.field_ids:
-                result[fid] = rule.rule_text
-        return result
