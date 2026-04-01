@@ -18,6 +18,8 @@ from app.prompts import AskPrompt, FillPrompt, MapPrompt, RulesPrompt
 from app.models import (
     AskContext,
     Annotation,
+    AnnotationEntry,
+    AnnotationOperation,
     BBox,
     Message,
     ContextWindow,
@@ -296,11 +298,141 @@ class FormService:
 
 
 class AnnotationService:
-    """CRUD for annotation pairs stored in Supabase."""
+    """Append-only changelog for spatial label-field annotation pairs.
+
+    Uses the form_annotation_pairs table.
+    The public interface still returns Annotation projection objects so
+    FormSchemaService and MapService need no changes.
+    """
+
+    TABLE = "form_annotation_pairs"
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    def _current_pairs(self, form_id: str) -> list[Annotation]:
+        """Replay annotation changelog rows to compute currently active pairs."""
+        supabase = get_supabase_client()
+        result = (
+            supabase.table(self.TABLE)
+            .select("*")
+            .eq("form_id", form_id)
+            .order("created_at", desc=False)
+            .execute()
+        )
+        rows = result.data if hasattr(result, "data") else []
+
+        # Group by pair_id
+        from collections import defaultdict
+        groups: dict[str, list[dict]] = defaultdict(list)
+        for row in rows:
+            groups[row["pair_id"]].append(row)
+
+        annotations: list[Annotation] = []
+        for pair_id, entries in groups.items():
+            label_added = [e for e in entries if e["role"] == "label" and e["operation"] == "added"]
+            label_removed = [e for e in entries if e["role"] == "label" and e["operation"] == "removed"]
+            field_added = [e for e in entries if e["role"] == "field" and e["operation"] == "added"]
+            field_removed = [e for e in entries if e["role"] == "field" and e["operation"] == "removed"]
+
+            label_net = len(label_added) - len(label_removed)
+            field_net = len(field_added) - len(field_removed)
+
+            if label_net <= 0 or field_net <= 0:
+                continue
+
+            latest_label = label_added[-1]
+            latest_field = field_added[-1]
+
+            try:
+                annotations.append(
+                    Annotation(
+                        id=pair_id,
+                        form_id=form_id,
+                        label_text=latest_label["value"],
+                        label_bbox=BBox(**latest_label["bbox"]),
+                        label_page=latest_label.get("page", 1),
+                        field_id=latest_field["field_id"],
+                        field_name=latest_field["value"],
+                        field_bbox=_dict_to_bbox(latest_field.get("bbox")),
+                        field_page=latest_field.get("page", 1),
+                        created_at=datetime.fromisoformat(latest_label["created_at"])
+                        if latest_label.get("created_at")
+                        else None,
+                    )
+                )
+            except Exception as e:
+                logger.warning("Failed to reconstruct annotation pair %s: %s", pair_id, e)
+
+        return annotations
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
 
     def create(self, req: CreateAnnotationRequest) -> Annotation:
+        pair_id = str(uuid4())
+        now = datetime.now(timezone.utc).isoformat()
+
+        supabase = get_supabase_client()
+
+        # Auto-remove any existing active annotation for the same field_id
+        existing = [a for a in self._current_pairs(req.form_id) if a.field_id == req.field_id]
+        if existing:
+            old = existing[-1]
+            supabase.table(self.TABLE).insert([
+                {
+                    "form_id": req.form_id,
+                    "pair_id": old.id,
+                        "operation": AnnotationOperation.REMOVED.value,
+                    "role": "label",
+                    "value": old.label_text,
+                    "bbox": _bbox_to_dict(old.label_bbox),
+                    "page": old.label_page,
+                    "field_id": None,
+                        "created_at": now,
+                },
+                {
+                    "form_id": req.form_id,
+                    "pair_id": old.id,
+                        "operation": AnnotationOperation.REMOVED.value,
+                    "role": "field",
+                    "value": old.field_name,
+                    "bbox": _bbox_to_dict(old.field_bbox),
+                    "page": old.field_page,
+                    "field_id": old.field_id,
+                        "created_at": now,
+                },
+            ]).execute()
+
+        supabase.table(self.TABLE).insert([
+            {
+                "form_id": req.form_id,
+                "pair_id": pair_id,
+                "operation": AnnotationOperation.ADDED.value,
+                "role": "label",
+                "value": req.label_text,
+                "bbox": _bbox_to_dict(req.label_bbox),
+                "page": req.label_page,
+                "field_id": None,
+                "created_at": now,
+            },
+            {
+                "form_id": req.form_id,
+                "pair_id": pair_id,
+                "operation": AnnotationOperation.ADDED.value,
+                "role": "field",
+                "value": req.field_name,
+                "bbox": _bbox_to_dict(req.field_bbox),
+                "page": req.field_page,
+                "field_id": req.field_id,
+                "created_at": now,
+            },
+        ]).execute()
+
         annotation = Annotation(
-            id=str(uuid4()),
+            id=pair_id,
             form_id=req.form_id,
             label_text=req.label_text,
             label_bbox=req.label_bbox,
@@ -309,30 +441,9 @@ class AnnotationService:
             field_name=req.field_name,
             field_bbox=req.field_bbox,
             field_page=req.field_page,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.fromisoformat(now),
         )
 
-        supabase = get_supabase_client()
-        supabase.table("annotation_pairs").insert(
-            {
-                "id": annotation.id,
-                "form_id": annotation.form_id,
-                "label_id": annotation.id,
-                "label_text": annotation.label_text,
-                "label_bbox": _bbox_to_dict(annotation.label_bbox),
-                "label_page": annotation.label_page,
-                "field_id": annotation.field_id,
-                "field_name": annotation.field_name,
-                "field_bbox": _bbox_to_dict(annotation.field_bbox),
-                "field_page": annotation.field_page,
-                "confidence": 100.0,
-                "status": "confirmed",
-                "is_manual": True,
-                "created_at": annotation.created_at.isoformat() if annotation.created_at else None,
-            }
-        ).execute()
-
-        # Update form_schema with annotation label
         try:
             FormSchemaService().upsert_from_annotation(req.form_id, annotation)
         except Exception as e:
@@ -341,52 +452,60 @@ class AnnotationService:
         return annotation
 
     def list_by_form(self, form_id: str) -> list[Annotation]:
+        return self._current_pairs(form_id)
+
+    def delete(self, annotation_id: str) -> None:
+        """annotation_id is the pair_id. Appends removed rows (never deletes)."""
         supabase = get_supabase_client()
+
+        # Fetch the latest added rows for this pair to get current values
         result = (
-            supabase.table("annotation_pairs")
+            supabase.table(self.TABLE)
             .select("*")
-            .eq("form_id", form_id)
+            .eq("pair_id", annotation_id)
+            .eq("operation", "added")
+            .order("created_at", desc=True)
             .execute()
         )
         rows = result.data if hasattr(result, "data") else []
-        annotations: list[Annotation] = []
-        for row in rows:
-            try:
-                annotations.append(
-                    Annotation(
-                        id=row["id"],
-                        form_id=row["form_id"],
-                        label_text=row["label_text"],
-                        label_bbox=BBox(**row["label_bbox"]),
-                        label_page=row.get("label_page", 1),
-                        field_id=row["field_id"],
-                        field_name=row["field_name"],
-                        field_bbox=_dict_to_bbox(row.get("field_bbox")),
-                        field_page=row.get("field_page", 1),
-                        created_at=datetime.fromisoformat(row["created_at"])
-                        if row.get("created_at")
-                        else None,
-                    )
-                )
-            except Exception as e:
-                logger.warning("Failed to parse annotation row %s: %s", row.get("id"), e)
-        return annotations
 
-    def delete(self, annotation_id: str) -> None:
-        supabase = get_supabase_client()
+        label_row = next((r for r in rows if r["role"] == "label"), None)
+        field_row = next((r for r in rows if r["role"] == "field"), None)
 
-        # Look up annotation before deleting so we can update form_schema
-        result = supabase.table("annotation_pairs").select("form_id, field_id").eq("id", annotation_id).execute()
-        rows = result.data if hasattr(result, "data") else []
+        if not label_row or not field_row:
+            logger.warning("Annotation pair %s not found for deletion", annotation_id)
+            return
 
-        supabase.table("annotation_pairs").delete().eq("id", annotation_id).execute()
+        now = datetime.now(timezone.utc).isoformat()
+        supabase.table(self.TABLE).insert([
+            {
+                "form_id": label_row["form_id"],
+                "pair_id": annotation_id,
+                "operation": AnnotationOperation.REMOVED.value,
+                "role": "label",
+                "value": label_row["value"],
+                "bbox": label_row.get("bbox"),
+                "page": label_row.get("page", 1),
+                "field_id": None,
+                "created_at": now,
+            },
+            {
+                "form_id": field_row["form_id"],
+                "pair_id": annotation_id,
+                "operation": AnnotationOperation.REMOVED.value,
+                "role": "field",
+                "value": field_row["value"],
+                "bbox": field_row.get("bbox"),
+                "page": field_row.get("page", 1),
+                "field_id": field_row.get("field_id"),
+                "created_at": now,
+            },
+        ]).execute()
 
-        # Revert form_schema label to map fallback
-        if rows:
-            try:
-                FormSchemaService().remove_annotation(rows[0]["form_id"], rows[0]["field_id"])
-            except Exception as e:
-                logger.warning("Failed to revert form_schema after annotation delete: %s", e)
+        try:
+            FormSchemaService().remove_annotation(label_row["form_id"], field_row["field_id"])
+        except Exception as e:
+            logger.warning("Failed to revert form_schema after annotation delete: %s", e)
 
 
 class ConversationService:
@@ -405,6 +524,7 @@ class ConversationService:
                 "mode": Mode.PREVIEW.value,
                 "history": [],
                 "rules": rules.model_dump(),
+                "ask_answers": {},
                 "created_at": now.isoformat(),
                 "updated_at": now.isoformat(),
             }
@@ -435,6 +555,7 @@ class ConversationService:
             rules = Rules(**row.get("rules", {"items": []}))
             history = [HistoryMessage(**m) for m in row.get("history", [])]
             form_values: dict[str, str] = row.get("form_values") or {}
+            ask_answers: dict[str, str] = row.get("ask_answers") or {}
 
             return ContextWindow(
                 conversation_id=row["id"],
@@ -445,6 +566,7 @@ class ConversationService:
                 mode=Mode(row.get("mode", Mode.PREVIEW.value)),
                 history=history,
                 form_values=form_values,
+                ask_answers=ask_answers,
                 created_at=datetime.fromisoformat(row["created_at"]) if row.get("created_at") else None,
                 updated_at=datetime.fromisoformat(row["updated_at"]) if row.get("updated_at") else None,
             )
@@ -493,6 +615,17 @@ class ConversationService:
             {"user_info": {"data": merged}, "updated_at": datetime.now(timezone.utc).isoformat()}
         ).eq("id", conversation_id).execute()
 
+    def update_ask_answers(self, conversation_id: str, new_answers: dict[str, str]) -> None:
+        """Merge new question->answer pairs into conversation ask_answers."""
+        ctx = self.get(conversation_id)
+        if ctx is None:
+            return
+        merged = {**ctx.ask_answers, **new_answers}
+        supabase = get_supabase_client()
+        supabase.table("conversations").update(
+            {"ask_answers": merged, "updated_at": datetime.now(timezone.utc).isoformat()}
+        ).eq("id", conversation_id).execute()
+
     def update_form_values(self, conversation_id: str, new_values: dict[str, str]) -> None:
         """Merge new field_id->value pairs into conversation form_values."""
         ctx = self.get(conversation_id)
@@ -513,6 +646,7 @@ class ConversationService:
         }
         if rulebook_url is not None:
             payload["rulebook_url"] = rulebook_url
+        payload["ask_answers"] = {}
         supabase.table("conversations").update(payload).eq("id", conversation_id).execute()
 
 
@@ -1526,6 +1660,15 @@ class FillService:
             raise ValueError(f"Conversation {conversation_id} not found")
         if not ctx.form_id:
             raise ValueError("No form associated with conversation")
+
+        # Merge persisted answers with new request answers
+        persisted = dict(ctx.ask_answers) if ctx.ask_answers else {}
+        if ask_answers:
+            persisted.update(ask_answers)
+        ask_answers = persisted or None
+
+        if ask_answers:
+            self._conversation_service.update_ask_answers(conversation_id, ask_answers)
 
         # Check for unanswered conditional questions first
         unanswered = self._context_service.get_unanswered_questions(

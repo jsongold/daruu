@@ -78,6 +78,27 @@ class Annotation(BaseModel):
     model_config = {"frozen": True}
 
 
+class AnnotationOperation(str, Enum):
+    ADDED = "added"
+    REMOVED = "removed"
+
+
+class AnnotationEntry(BaseModel):
+    """One row in the form_annotation_pairs changelog table."""
+
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    form_id: str
+    pair_id: str
+    operation: AnnotationOperation
+    role: str  # 'label'|'field'
+    value: str
+    bbox: BBox | None = None
+    page: int = 1
+    field_id: str | None = None
+    created_at: datetime | None = None
+    model_config = {"frozen": True}
+
+
 class Mapping(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     conversation_id: str
@@ -171,6 +192,7 @@ class ContextWindow(BaseModel):
     history: list[HistoryMessage] = Field(default_factory=list)
     rules: Rules = Field(default_factory=Rules)
     form_values: dict[str, str] = Field(default_factory=dict)
+    ask_answers: dict[str, str] = Field(default_factory=dict)
     rulebook_url: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None

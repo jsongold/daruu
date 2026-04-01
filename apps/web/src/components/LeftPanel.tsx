@@ -11,6 +11,7 @@ interface Props {
   currentPage: number
   formId: string | null
   onValueChange: (fieldId: string, value: string) => void
+  onCommitValue?: (field: FormField, value: string) => void
   onDeleteAnnotation: (id: string) => void
 }
 
@@ -52,6 +53,7 @@ export function LeftPanel({
   currentPage,
   formId,
   onValueChange,
+  onCommitValue,
   onDeleteAnnotation,
 }: Props) {
   const [fieldsOpen, setFieldsOpen] = useState(true)
@@ -120,7 +122,10 @@ export function LeftPanel({
                           f.options.length > 0 ? (
                             <select
                               value={f.value ?? ""}
-                              onChange={(e) => onValueChange(f.id, e.target.value)}
+                              onChange={(e) => {
+                                onValueChange(f.id, e.target.value)
+                                onCommitValue?.(f, e.target.value)
+                              }}
                               className="w-full text-xs text-green-700 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-blue-400 focus:outline-none"
                             >
                               <option value="">---</option>
@@ -132,7 +137,11 @@ export function LeftPanel({
                             <input
                               type="checkbox"
                               checked={f.value === "true"}
-                              onChange={(e) => onValueChange(f.id, e.target.checked ? "true" : "false")}
+                              onChange={(e) => {
+                                const val = e.target.checked ? "true" : "false"
+                                onValueChange(f.id, val)
+                                onCommitValue?.(f, val)
+                              }}
                               className="w-3 h-3 accent-green-600"
                             />
                           ) : (
@@ -140,6 +149,7 @@ export function LeftPanel({
                               type="text"
                               value={f.value ?? ""}
                               onChange={(e) => onValueChange(f.id, e.target.value)}
+                              onBlur={(e) => onCommitValue?.(f, e.target.value)}
                               className="w-full text-xs text-green-700 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-blue-400 focus:outline-none truncate"
                               placeholder="---"
                             />

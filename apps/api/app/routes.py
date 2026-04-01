@@ -6,6 +6,8 @@ from typing import Optional
 
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 
+from pydantic import BaseModel
+
 from app.models import (
     Annotation,
     Message,
@@ -43,6 +45,11 @@ fill_service = FillService()
 understand_service = UnderstandService()
 message_service = MessageService()
 form_schema_service = FormSchemaService()
+
+
+class UpdateFieldValueRequest(BaseModel):
+    value: str
+    field_name: str
 
 
 @router.post("/forms", response_model=UploadFormResponse)
@@ -139,6 +146,48 @@ async def get_conversation(conversation_id: str) -> ContextWindow:
     if ctx is None:
         raise HTTPException(status_code=404, detail=f"Conversation {conversation_id} not found")
     return ctx
+
+
+@router.patch("/conversations/{conversation_id}/fields/{field_id}", response_model=ContextWindow)
+async def update_field_value(
+    conversation_id: str, field_id: str, body: UpdateFieldValueRequest
+) -> ContextWindow:
+    """User corrects an LLM-filled field value."""
+    ctx = conversation_service.get(conversation_id)
+    if ctx is None:
+        raise HTTPException(status_code=404, detail=f"Conversation {conversation_id} not found")
+    if not ctx.form_id:
+        raise HTTPException(status_code=422, detail="No form associated with conversation")
+
+    try:
+        conversation_service.update_form_values(conversation_id, {field_id: body.value})
+        form_schema_service.fill_values(ctx.form_id, {field_id: body.value})
+    except Exception as e:
+        logger.error("Failed to update field value: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+    return conversation_service.get(conversation_id)  # type: ignore[return-value]
+
+
+@router.delete("/conversations/{conversation_id}/fields/{field_id}", status_code=204)
+async def delete_field_value(conversation_id: str, field_id: str, field_name: str = "") -> None:
+    """User deletes an LLM-filled field value."""
+    ctx = conversation_service.get(conversation_id)
+    if ctx is None:
+        raise HTTPException(status_code=404, detail=f"Conversation {conversation_id} not found")
+    if not ctx.form_id:
+        raise HTTPException(status_code=422, detail="No form associated with conversation")
+
+    old_value = (ctx.form_values or {}).get(field_id)
+    if old_value is None:
+        return  # Nothing to delete
+
+    try:
+        conversation_service.update_form_values(conversation_id, {field_id: ""})
+        form_schema_service.fill_values(ctx.form_id, {field_id: ""})
+    except Exception as e:
+        logger.error("Failed to delete field value: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/messages", response_model=Message, status_code=201)

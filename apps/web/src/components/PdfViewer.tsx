@@ -11,6 +11,7 @@ interface Props {
   onLabelClick: (block: TextBlock) => void
   onFieldClick: (field: FormField) => void
   onValueChange?: (fieldId: string, value: string) => void
+  onCommitValue?: (field: FormField, value: string) => void
   page: number
   totalPages: number
   onPageChange: (page: number) => void
@@ -37,6 +38,7 @@ export function PdfViewer({
   onLabelClick,
   onFieldClick,
   onValueChange,
+  onCommitValue,
   page,
   totalPages,
   onPageChange,
@@ -126,6 +128,7 @@ export function PdfViewer({
                         defaultValue={field.value ?? ""}
                         onChange={(e) => {
                           onValueChange!(field.id, e.target.value)
+                          onCommitValue?.(field, e.target.value)
                           setEditingFieldId(null)
                         }}
                         onBlur={() => setEditingFieldId(null)}
@@ -145,7 +148,9 @@ export function PdfViewer({
                           type="checkbox"
                           checked={field.value === "true"}
                           onChange={(e) => {
-                            onValueChange!(field.id, e.target.checked ? "true" : "false")
+                            const val = e.target.checked ? "true" : "false"
+                            onValueChange!(field.id, val)
+                            onCommitValue?.(field, val)
                             setEditingFieldId(null)
                           }}
                           className="w-3 h-3 accent-green-600"
@@ -158,11 +163,13 @@ export function PdfViewer({
                         defaultValue={field.value ?? ""}
                         onBlur={(e) => {
                           onValueChange!(field.id, e.target.value)
+                          onCommitValue?.(field, e.target.value)
                           setEditingFieldId(null)
                         }}
                         onKeyDown={(e) => {
                           if (e.key === "Enter") {
                             onValueChange!(field.id, e.currentTarget.value)
+                            onCommitValue?.(field, e.currentTarget.value)
                             setEditingFieldId(null)
                           } else if (e.key === "Escape") {
                             setEditingFieldId(null)

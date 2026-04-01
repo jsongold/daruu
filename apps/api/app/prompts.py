@@ -158,6 +158,14 @@ Some fields include a hint (resolved from prior Q&A with the user).
 The hint tells you HOW to fill the field -- follow it exactly.
 Examples: specific date format, which option to select, a derived value.
 
+## Corrections
+If a corrections section is present, the listed fields were previously filled
+incorrectly and corrected by the user.
+- DO NOT repeat any rejected value.
+- Use the corrected value directly when provided.
+- If only a removed value is shown (no corrected value), skip that field unless
+  you have strong evidence from the input context.
+
 ## Output
 Types: text(default), checkbox(true/false), radio, select, date.
 For select fields with options=[...], pick ONLY from the listed values.
@@ -167,7 +175,9 @@ Omit fields you cannot fill from the given context.
 Do not guess or fabricate values not present in the input."""
 
     @staticmethod
-    def build(ctx: FillContext) -> tuple[Prompt, list[str]]:
+    def build(
+        ctx: "FillContext",
+    ) -> "tuple[Prompt, list[str]]":
         """Build compact prompt and return (prompt, index_to_field_id mapping).
 
         The caller must keep index_to_field_id to resolve LLM output back to field_ids.
