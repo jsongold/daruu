@@ -44,6 +44,7 @@ class FormField(BaseModel):
     bbox: BBox | None = None
     page: int = 1
     value: str | None = None
+    options: list[str] = Field(default_factory=list)
     model_config = {"frozen": True}
 
 
@@ -73,6 +74,27 @@ class Annotation(BaseModel):
     field_name: str
     field_bbox: BBox | None = None
     field_page: int = 1
+    created_at: datetime | None = None
+    model_config = {"frozen": True}
+
+
+class AnnotationOperation(str, Enum):
+    ADDED = "added"
+    REMOVED = "removed"
+
+
+class AnnotationEntry(BaseModel):
+    """One row in the form_annotation_pairs changelog table."""
+
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    form_id: str
+    pair_id: str
+    operation: AnnotationOperation
+    role: str  # 'label'|'field'
+    value: str
+    bbox: BBox | None = None
+    page: int = 1
+    field_id: str | None = None
     created_at: datetime | None = None
     model_config = {"frozen": True}
 
@@ -170,6 +192,7 @@ class ContextWindow(BaseModel):
     history: list[HistoryMessage] = Field(default_factory=list)
     rules: Rules = Field(default_factory=Rules)
     form_values: dict[str, str] = Field(default_factory=dict)
+    ask_answers: dict[str, str] = Field(default_factory=dict)
     rulebook_url: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -273,6 +296,7 @@ class FillField(BaseModel):
     semantic_key: str | None = None
     type: str = "text"
     format_rule: str | None = None
+    options: list[str] = Field(default_factory=list)
     model_config = {"frozen": True}
 
 
@@ -317,6 +341,7 @@ class FormSchemaField(BaseModel):
     semantic_key: str | None = None
     confidence: int = 0
     is_confirmed: bool = False
+    options: list[str] = Field(default_factory=list)
     model_config = {"frozen": True}
 
 

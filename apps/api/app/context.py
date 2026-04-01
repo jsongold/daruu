@@ -69,6 +69,7 @@ class ContextService:
                 semantic_key=f.semantic_key,
                 type=f.field_type,
                 format_rule=format_rule,
+                options=f.options,
             ))
 
         return FillContext(

@@ -14,6 +14,7 @@ export interface FormField {
   bbox: BBox | null
   page: number
   value: string | null
+  options: string[]
 }
 
 export interface TextBlock {
@@ -241,4 +242,15 @@ export const formClient = {
 
   listMessages: (conversationId: string): Promise<Array<{ id: string; conversation_id: string; role: string; content: string; created_at: string | null }>> =>
     get(`/api/messages/${conversationId}`),
+
+  updateFieldValue: (
+    conversationId: string,
+    fieldId: string,
+    value: string,
+    fieldName: string,
+  ): Promise<ContextWindow> =>
+    patch(`/api/conversations/${conversationId}/fields/${fieldId}`, { value, field_name: fieldName }),
+
+  deleteFieldValue: (conversationId: string, fieldId: string, fieldName: string): Promise<void> =>
+    del(`/api/conversations/${conversationId}/fields/${fieldId}?field_name=${encodeURIComponent(fieldName)}`),
 }

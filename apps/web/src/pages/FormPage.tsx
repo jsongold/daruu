@@ -11,6 +11,7 @@ import { useMapMode } from "../hooks/useMapMode"
 import { useRulesMode } from "../hooks/useRulesMode"
 import { useFillMode } from "../hooks/useFillMode"
 import { usePreviewMode } from "../hooks/usePreviewMode"
+import { useFieldCorrection } from "../hooks/useFieldCorrection"
 
 export function FormPage() {
   const { conversationId: urlConversationId } = useParams<{ conversationId: string }>()
@@ -58,6 +59,13 @@ export function FormPage() {
     setIsFilling: s.setIsFilling,
     setAskHistory: s.setAskHistory,
     setPendingQuestions: s.setPendingQuestions,
+    setError: s.setError,
+    chatWindow: s.chatWindow,
+  })
+
+  const { handleEditField } = useFieldCorrection({
+    conversationId: s.conversationId,
+    setFields: s.setFields,
     setError: s.setError,
     chatWindow: s.chatWindow,
   })
@@ -123,6 +131,7 @@ export function FormPage() {
           currentPage={s.currentPage}
           formId={s.formId}
           onValueChange={s.handleValueChange}
+          onCommitValue={handleEditField}
           onDeleteAnnotation={handleDeleteAnnotation}
         />
 
@@ -145,6 +154,7 @@ export function FormPage() {
             onLabelClick={handleLabelClick}
             onFieldClick={handleFieldClick}
             onValueChange={s.handleValueChange}
+            onCommitValue={handleEditField}
             page={s.currentPage}
             totalPages={s.totalPages}
             onPageChange={s.setCurrentPage}

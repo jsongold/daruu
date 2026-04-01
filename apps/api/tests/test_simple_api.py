@@ -82,20 +82,20 @@ class TestAnnotation:
     def test_construction(self):
         bbox = BBox(x=0.0, y=0.0, width=0.1, height=0.1)
         ann = Annotation(
-            document_id="doc1",
+            form_id="form1",
             label_text="Name",
             label_bbox=bbox,
             field_id="f1",
             field_name="name_field",
         )
-        assert ann.document_id == "doc1"
+        assert ann.form_id == "form1"
         assert ann.label_text == "Name"
         assert ann.id is not None  # uuid generated
 
     def test_frozen(self):
         bbox = BBox(x=0.0, y=0.0, width=0.1, height=0.1)
         ann = Annotation(
-            document_id="doc1",
+            form_id="form1",
             label_text="Name",
             label_bbox=bbox,
             field_id="f1",
@@ -207,50 +207,137 @@ class TestDocumentService:
 
 
 class TestAnnotationService:
+    @patch("app.services.FormSchemaService")
     @patch("app.services.get_supabase_client")
-    def test_create_inserts_with_confirmed_status(self, mock_get_supabase):
+    def test_create_inserts_two_changelog_rows(self, mock_get_supabase, mock_schema_svc):
         mock_client = _make_supabase_mock()
         mock_get_supabase.return_value = mock_client
+        mock_schema_svc.return_value.upsert_from_annotation.return_value = None
 
         bbox = BBox(x=0.0, y=0.0, width=0.1, height=0.1)
         req = CreateAnnotationRequest(
-            document_id="doc1",
+            form_id="form1",
             label_text="Name",
             label_bbox=bbox,
+            label_page=1,
             field_id="f1",
             field_name="name_field",
+            field_page=1,
         )
         svc = AnnotationService()
         annotation = svc.create(req)
 
-        assert annotation.document_id == "doc1"
+        assert annotation.form_id == "form1"
+        assert annotation.label_text == "Name"
+        assert annotation.field_id == "f1"
+        # insert is called with a list of 2 rows (label + field)
         insert_call = mock_client.table.return_value.insert
         assert insert_call.called
-        inserted = insert_call.call_args[0][0]
-        assert inserted["status"] == "confirmed"
-        assert inserted["confidence"] == 100.0
+        inserted_rows = insert_call.call_args[0][0]
+        assert isinstance(inserted_rows, list)
+        assert len(inserted_rows) == 2
+        roles = {r["role"] for r in inserted_rows}
+        assert roles == {"label", "field"}
+        for row in inserted_rows:
+            assert row["operation"] == "added"
+            assert row["pair_id"] == annotation.id
 
     @patch("app.services.get_supabase_client")
-    def test_list_by_document_returns_empty_when_no_data(self, mock_get_supabase):
+    def test_list_by_form_returns_empty_when_no_data(self, mock_get_supabase):
         mock_client = MagicMock()
-        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = MagicMock(data=[])
+        chain = mock_client.table.return_value.select.return_value
+        chain.eq.return_value.order.return_value.execute.return_value = MagicMock(data=[])
         mock_get_supabase.return_value = mock_client
 
         svc = AnnotationService()
-        result = svc.list_by_document("doc1")
+        result = svc.list_by_form("form1")
         assert result == []
 
+    @patch("app.services.FormSchemaService")
     @patch("app.services.get_supabase_client")
-    def test_delete_calls_supabase_delete(self, mock_get_supabase):
-        mock_client = _make_supabase_mock()
+    def test_create_auto_removes_existing_annotation_for_same_field(self, mock_get_supabase, mock_schema_svc):
+        """Re-annotating a field that already has an active annotation should insert removed rows first."""
+        mock_schema_svc.return_value.upsert_from_annotation.return_value = None
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        existing_pair_id = "existing-pair-id"
+
+        # _current_pairs fetches annotation rows — return one existing active annotation
+        existing_rows = [
+            {"pair_id": existing_pair_id, "operation": "added",
+             "role": "label", "value": "Old Label", "bbox": {"x": 0.0, "y": 0.0, "width": 0.1, "height": 0.1},
+             "page": 1, "form_id": "form1", "field_id": None, "created_at": now_iso},
+            {"pair_id": existing_pair_id, "operation": "added",
+             "role": "field", "value": "name_field", "bbox": None,
+             "page": 1, "form_id": "form1", "field_id": "f1", "created_at": now_iso},
+        ]
+
+        mock_client = MagicMock()
+        # _current_pairs calls: select().eq(form_id=...).order()
+        mock_client.table.return_value.select.return_value\
+            .eq.return_value\
+            .order.return_value.execute.return_value = MagicMock(data=existing_rows)
+        mock_client.table.return_value.insert.return_value.execute.return_value = MagicMock(data=[{}])
+        mock_get_supabase.return_value = mock_client
+
+        bbox = BBox(x=0.5, y=0.5, width=0.1, height=0.1)
+        req = CreateAnnotationRequest(
+            form_id="form1",
+            label_text="New Label",
+            label_bbox=bbox,
+            label_page=1,
+            field_id="f1",  # same field_id as the existing annotation
+            field_name="name_field",
+            field_page=1,
+        )
+        svc = AnnotationService()
+        annotation = svc.create(req)
+
+        # insert should have been called twice: once for removed rows, once for added rows
+        insert_call = mock_client.table.return_value.insert
+        assert insert_call.call_count == 2
+
+        removed_rows = insert_call.call_args_list[0][0][0]
+        assert len(removed_rows) == 2
+        for row in removed_rows:
+            assert row["operation"] == "removed"
+            assert row["pair_id"] == existing_pair_id
+
+        added_rows = insert_call.call_args_list[1][0][0]
+        assert len(added_rows) == 2
+        for row in added_rows:
+            assert row["operation"] == "added"
+            assert row["pair_id"] == annotation.id
+
+    @patch("app.services.FormSchemaService")
+    @patch("app.services.get_supabase_client")
+    def test_delete_inserts_removed_rows(self, mock_get_supabase, mock_schema_svc):
+        mock_client = MagicMock()
+        mock_schema_svc.return_value.remove_annotation.return_value = None
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        # Simulate fetching the existing added rows for the pair
+        mock_client.table.return_value.select.return_value\
+            .eq.return_value.eq.return_value\
+            .order.return_value.execute.return_value = MagicMock(data=[
+                {"role": "label", "value": "Name", "bbox": {"x": 0, "y": 0, "width": 0.1, "height": 0.1},
+                 "page": 1, "form_id": "form1", "field_id": None, "created_at": now_iso},
+                {"role": "field", "value": "name_field", "bbox": None,
+                 "page": 1, "form_id": "form1", "field_id": "f1", "created_at": now_iso},
+            ])
+        mock_client.table.return_value.insert.return_value.execute.return_value = MagicMock(data=[])
         mock_get_supabase.return_value = mock_client
 
         svc = AnnotationService()
-        svc.delete("annotation-id-123")
+        svc.delete("pair-id-123")
 
-        delete_chain = mock_client.table.return_value.delete.return_value.eq
-        assert delete_chain.called
-        assert delete_chain.call_args[0] == ("id", "annotation-id-123")
+        insert_call = mock_client.table.return_value.insert
+        assert insert_call.called
+        inserted_rows = insert_call.call_args[0][0]
+        assert len(inserted_rows) == 2
+        for row in inserted_rows:
+            assert row["operation"] == "removed"
+            assert row["pair_id"] == "pair-id-123"
 
 
 # ---------------------------------------------------------------------------
@@ -442,7 +529,7 @@ class TestAnnotationRoutes:
         bbox = BBox(x=0.0, y=0.0, width=0.1, height=0.1)
         annotation = Annotation(
             id="ann1",
-            document_id="doc1",
+            form_id="form1",
             label_text="Name",
             label_bbox=bbox,
             field_id="f1",
@@ -454,11 +541,13 @@ class TestAnnotationRoutes:
         response = client.post(
             "/api/annotations",
             json={
-                "document_id": "doc1",
+                "form_id": "form1",
                 "label_text": "Name",
                 "label_bbox": {"x": 0.0, "y": 0.0, "width": 0.1, "height": 0.1},
+                "label_page": 1,
                 "field_id": "f1",
                 "field_name": "name_field",
+                "field_page": 1,
             },
         )
 
