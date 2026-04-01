@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import get_settings
+from app.admin_routes import admin_router
 from app.routes import router
 
 
@@ -42,6 +43,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(router)
+    app.include_router(admin_router)
 
     @app.get("/health")
     async def health() -> dict[str, Any]:
