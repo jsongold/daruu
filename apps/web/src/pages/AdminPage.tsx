@@ -82,22 +82,25 @@ export function AdminPage() {
     })
   }, [])
 
-  const handleCompare = useCallback(async () => {
+  useEffect(() => {
     if (!selectedTable || !selectedAId || !selectedBId) return
+    let cancelled = false
     setLoading(true)
-    try {
-      const [a, b] = await Promise.all([
-        adminClient.getRecord(selectedTable, selectedAId),
-        adminClient.getRecord(selectedTable, selectedBId),
-      ])
-      setRecordA(a)
-      setRecordB(b)
-      setShowDiff(true)
-    } catch {
-      // silently ignore
-    } finally {
-      setLoading(false)
-    }
+    Promise.all([
+      adminClient.getRecord(selectedTable, selectedAId),
+      adminClient.getRecord(selectedTable, selectedBId),
+    ])
+      .then(([a, b]) => {
+        if (cancelled) return
+        setRecordA(a)
+        setRecordB(b)
+        setShowDiff(true)
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => { cancelled = true }
   }, [selectedTable, selectedAId, selectedBId])
 
   const handleCloseDiff = useCallback(() => {
@@ -113,17 +116,11 @@ export function AdminPage() {
           selected={selectedTable}
           onSelect={handleTableSelect}
         />
-        <button
-          className={`ml-auto px-4 py-2 rounded text-sm font-medium text-white transition-colors ${
-            selectedAId && selectedBId
-              ? "bg-blue-600 hover:bg-blue-700"
-              : "bg-gray-300 cursor-not-allowed"
-          }`}
-          disabled={!selectedAId || !selectedBId}
-          onClick={handleCompare}
-        >
-          Compare
-        </button>
+        {selectedAId && selectedBId && (
+          <span className="ml-auto text-sm text-gray-500">
+            Comparing {selectedAId.slice(0, 8)}... vs {selectedBId.slice(0, 8)}...
+          </span>
+        )}
       </header>
 
       <main className="p-6">
