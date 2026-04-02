@@ -315,6 +315,7 @@ class FillField(BaseModel):
     semantic_key: str | None = None
     type: str = "text"
     options: list[str] = Field(default_factory=list)
+    segment_title: str | None = None
     model_config = {"frozen": True}
 
 
@@ -332,6 +333,7 @@ class MapContext(BaseModel):
     text_blocks: list[TextBlock] = Field(default_factory=list)
     confirmed_annotations: list[Annotation] = Field(default_factory=list)
     heuristic_maps: list[FieldLabelMap] = Field(default_factory=list)
+    segments: list[Segment] = Field(default_factory=list)
     top_k: int = 7
     model_config = {"frozen": True}
 
@@ -364,6 +366,8 @@ class FormSchemaField(BaseModel):
     confidence: int = 0
     is_confirmed: bool = False
     options: list[str] = Field(default_factory=list)
+    segment_id: str | None = None
+    segment_title: str | None = None
     model_config = {"frozen": True}
 
 

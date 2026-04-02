@@ -43,6 +43,7 @@ from app.models import (
     RulesContext,
     RuleType,
     Rules,
+    Segment,
     TextBlock,
     UserInfo,
 )
@@ -925,10 +926,13 @@ class MapService:
         annotations = AnnotationService().list_by_form(form_id)
 
         existing_heuristic = self._get_heuristic_maps(form_id)
+        seg_service = SegmentationService()
+        segments = seg_service.get(form_id) or []
         map_ctx = MapContext(
             fields=fields, text_blocks=text_blocks,
             confirmed_annotations=annotations,
             heuristic_maps=existing_heuristic,
+            segments=segments,
         )
         prompt = MapPrompt.build(map_ctx)
         from openai import OpenAI
@@ -1730,6 +1734,8 @@ class FormSchemaService:
                     confidence=int(item.get("confidence", 0)),
                     is_confirmed=bool(item.get("is_confirmed", False)),
                     options=item.get("options", []),
+                    segment_id=item.get("segment_id"),
+                    segment_title=item.get("segment_title"),
                 ))
             except Exception as e:
                 logger.warning("Failed to parse form_schema field: %s", e)
@@ -1917,4 +1923,97 @@ class FillService:
             for q in parsed["questions"]
         ]
         return {"questions": questions}
+
+
+class SegmentationService:
+    """Manages the form_segmentation table (one row per form+method)."""
+
+    TABLE = "form_segmentation"
+
+    def upsert(self, form_id: str, method: str, segments: list[Segment]) -> None:
+        """Save segmentation results (upsert by form_id + method)."""
+        supabase = get_supabase_client()
+        payload = {
+            "form_id": form_id,
+            "method": method,
+            "segments": [s.model_dump(mode="json") for s in segments],
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        # Try update first, then insert
+        result = (
+            supabase.table(self.TABLE)
+            .select("id")
+            .eq("form_id", form_id)
+            .eq("method", method)
+            .execute()
+        )
+        rows = result.data if hasattr(result, "data") else []
+        if rows:
+            supabase.table(self.TABLE).update(payload).eq("id", rows[0]["id"]).execute()
+        else:
+            payload["id"] = str(uuid4())
+            supabase.table(self.TABLE).insert(payload).execute()
+
+    def get(self, form_id: str, method: str = "fitz") -> list[Segment] | None:
+        """Fetch segments for a form."""
+        supabase = get_supabase_client()
+        result = (
+            supabase.table(self.TABLE)
+            .select("segments")
+            .eq("form_id", form_id)
+            .eq("method", method)
+            .execute()
+        )
+        rows = result.data if hasattr(result, "data") else []
+        if not rows:
+            return None
+        raw = rows[0].get("segments", [])
+        return [
+            Segment(
+                id=s["id"],
+                title=s.get("title"),
+                bbox=BBox(**s["bbox"]) if isinstance(s.get("bbox"), dict) else s.get("bbox"),
+                page=s.get("page", 1),
+                field_ids=s.get("field_ids", []),
+                text_block_ids=s.get("text_block_ids", []),
+            )
+            for s in raw
+        ]
+
+    def link_to_schema(self, form_id: str, method: str = "fitz") -> None:
+        """Set segment_id/segment_title on each FormSchemaField by spatial overlap."""
+        segments = self.get(form_id, method)
+        if not segments:
+            return
+
+        schema_service = FormSchemaService()
+        schema = schema_service.get(form_id)
+        if schema is None:
+            return
+
+        updated_fields: list[FormSchemaField] = []
+        for field in schema.fields:
+            matched_seg = self._find_segment(field, segments)
+            if matched_seg:
+                updated_fields.append(FormSchemaField(
+                    **{**field.model_dump(), "segment_id": matched_seg.id, "segment_title": matched_seg.title}
+                ))
+            else:
+                updated_fields.append(field)
+
+        schema_service._save_schema(form_id, updated_fields, updated_by="segmentation")
+
+    def _find_segment(self, field: FormSchemaField, segments: list[Segment]) -> Segment | None:
+        """Find the segment a field belongs to by checking bbox center overlap."""
+        if field.bbox is None:
+            return None
+        cx = field.bbox.x + field.bbox.width / 2.0
+        cy = field.bbox.y + field.bbox.height / 2.0
+        for seg in segments:
+            if seg.page != field.page:
+                continue
+            if (seg.bbox.x <= cx <= seg.bbox.x + seg.bbox.width
+                    and seg.bbox.y <= cy <= seg.bbox.y + seg.bbox.height):
+                return seg
+        return None
 

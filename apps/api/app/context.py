@@ -72,6 +72,7 @@ class ContextService:
                 semantic_key=f.semantic_key,
                 type=f.field_type,
                 options=f.options,
+                segment_title=f.segment_title,
             ))
 
         return FillContext(

@@ -34,6 +34,7 @@ from app.services import (
     FillService,
     MapService,
     ConversationService,
+    SegmentationService,
     UnderstandService,
 )
 
@@ -50,6 +51,7 @@ understand_service = UnderstandService()
 message_service = MessageService()
 form_schema_service = FormSchemaService()
 general_rules_service = GeneralRulesService()
+segmentation_service = SegmentationService()
 
 
 class UpdateFieldValueRequest(BaseModel):
@@ -108,17 +110,31 @@ async def get_form_fields(form_id: str) -> FieldsResponse:
 async def run_segmentation(
     form_id: str,
     method: str = Query("fitz", regex="^(fitz|docling)$"),
+    mode: str = Query("lines", regex="^(lines|segments)$"),
 ) -> SegmentationResponse:
-    """Extract visual segments from a PDF form."""
+    """Extract visual structure from a PDF form.
+
+    mode=lines:    raw vector lines for UI visualisation (no DB save)
+    mode=segments: grid-cell segments for LLM context (saved to form_segmentation)
+    """
     try:
-        fields, text_blocks = doc_service.get_fields_and_text_blocks(form_id)
         pdf_path = str(doc_service._get_file_path(form_id))
-        if method == "docling":
+
+        if mode == "lines":
+            from app.segmentation_fitz import extract_lines_fitz
+            segments = extract_lines_fitz(pdf_path)
+        elif method == "docling":
+            fields, text_blocks = doc_service.get_fields_and_text_blocks(form_id)
             from app.segmentation_docling import extract_segments_docling
             segments = extract_segments_docling(pdf_path, fields, text_blocks)
+            segmentation_service.upsert(form_id, method, segments)
+            segmentation_service.link_to_schema(form_id, method)
         else:
-            from app.segmentation_fitz import extract_segments_fitz
-            segments = extract_segments_fitz(pdf_path, fields, text_blocks)
+            fields, text_blocks = doc_service.get_fields_and_text_blocks(form_id)
+            from app.segmentation_fitz import build_segments_fitz
+            segments = build_segments_fitz(pdf_path, fields, text_blocks)
+            segmentation_service.upsert(form_id, method, segments)
+            segmentation_service.link_to_schema(form_id, method)
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:

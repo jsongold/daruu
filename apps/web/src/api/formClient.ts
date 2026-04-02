@@ -24,6 +24,21 @@ export interface TextBlock {
   page: number
 }
 
+export interface Segment {
+  id: string
+  title: string | null
+  bbox: BBox
+  page: number
+  field_ids: string[]
+  text_block_ids: string[]
+}
+
+export interface SegmentationResult {
+  form_id: string
+  method: string
+  segments: Segment[]
+}
+
 export interface Annotation {
   id: string
   form_id: string
@@ -224,6 +239,9 @@ export const formClient = {
 
   getMap: (formId: string): Promise<MapResult> =>
     get(`/api/map/${formId}`),
+
+  runSegmentation: (formId: string, method: string = "fitz", mode: string = "lines"): Promise<SegmentationResult> =>
+    post(`/api/forms/${formId}/segmentation?method=${method}&mode=${mode}`, {}),
 
   fill: (conversationId: string, askAnswers?: Record<string, string>): Promise<FillResult> =>
     post(`/api/fill`, { conversation_id: conversationId, ask_answers: askAnswers }),
