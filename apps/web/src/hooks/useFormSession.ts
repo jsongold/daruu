@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from "react"
 import type { NavigateFunction } from "react-router-dom"
 import { formClient } from "../api/formClient"
-import type { Form, FormField, TextBlock, Annotation, Mode, AgentQuestion, FieldLabelMap } from "../api/formClient"
+import type { Form, FormField, TextBlock, Annotation, Mode, AgentQuestion, FieldLabelMap, Segment } from "../api/formClient"
 import { useChatWindow } from "./useChatWindow"
 
 export function useFormSession(urlConversationId: string | undefined, navigate: NavigateFunction) {
@@ -20,6 +20,8 @@ export function useFormSession(urlConversationId: string | undefined, navigate: 
   const [isAsking, setIsAsking] = useState(false)
   const [isMapping, setIsMapping] = useState(false)
   const [isUnderstanding, setIsUnderstanding] = useState(false)
+  const [isSegmenting, setIsSegmenting] = useState(false)
+  const [segments, setSegments] = useState<Segment[]>([])
   const [rulesItems, setRulesItems] = useState<string[]>([])
   const [fieldLabelMaps, setFieldLabelMaps] = useState<FieldLabelMap[]>([])
   const [pendingQuestions, setPendingQuestions] = useState<AgentQuestion[]>([])
@@ -203,12 +205,12 @@ export function useFormSession(urlConversationId: string | undefined, navigate: 
     // state
     formId, conversationId, form, fields, textBlocks, annotations,
     mode, currentPage, selectedLabelId, selectedFieldId,
-    isLoading, isFilling, isAsking, isMapping, isUnderstanding,
+    isLoading, isFilling, isAsking, isMapping, isUnderstanding, isSegmenting, segments,
     rulesItems, fieldLabelMaps, pendingQuestions, askHistory,
     error, isDragging, excludedPages, activityLog,
     // setters (consumed by mode hooks)
     setFields, setAnnotations, setMode, setSelectedLabelId, setSelectedFieldId,
-    setIsLoading, setIsFilling, setIsAsking, setIsMapping, setIsUnderstanding,
+    setIsLoading, setIsFilling, setIsAsking, setIsMapping, setIsUnderstanding, setIsSegmenting, setSegments,
     setRulesItems, setFieldLabelMaps, setPendingQuestions, setAskHistory,
     setError, setIsDragging, setCurrentPage,
     // derived

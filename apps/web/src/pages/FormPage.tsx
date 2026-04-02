@@ -8,6 +8,7 @@ import { HeaderActions } from "../components/HeaderActions"
 import { useFormSession } from "../hooks/useFormSession"
 import { useAnnotateMode } from "../hooks/useAnnotateMode"
 import { useMapMode } from "../hooks/useMapMode"
+import { useSegmentationMode } from "../hooks/useSegmentationMode"
 import { useRulesMode } from "../hooks/useRulesMode"
 import { useFillMode } from "../hooks/useFillMode"
 import { usePreviewMode } from "../hooks/usePreviewMode"
@@ -37,6 +38,14 @@ export function FormPage() {
     conversationId: s.conversationId,
     setFieldLabelMaps: s.setFieldLabelMaps,
     setIsMapping: s.setIsMapping,
+    setError: s.setError,
+    chatWindow: s.chatWindow,
+  })
+
+  const { handleRunSegmentation } = useSegmentationMode({
+    formId: s.formId,
+    setSegments: s.setSegments,
+    setIsSegmenting: s.setIsSegmenting,
     setError: s.setError,
     chatWindow: s.chatWindow,
   })
@@ -104,8 +113,10 @@ export function FormPage() {
           isAsking={s.isAsking}
           isMapping={s.isMapping}
           isUnderstanding={s.isUnderstanding}
+          isSegmenting={s.isSegmenting}
           error={s.error}
           onUnderstand={handleUnderstand}
+          onSegment={handleRunSegmentation}
           onMap={handleRunMap}
           onAsk={handleAsk}
           onFill={() => handleFill()}
@@ -148,6 +159,7 @@ export function FormPage() {
             imageUrl={s.pageImageUrl}
             fields={s.fields}
             textBlocks={s.textBlocks}
+            segments={s.segments}
             mode={s.mode}
             selectedLabelId={s.selectedLabelId}
             selectedFieldId={s.selectedFieldId}

@@ -12,6 +12,7 @@ from app.models import (
     Prompt,
     RulesContext,
     RuleType,
+    Segment,
     TextBlock,
 )
 from app.spatial import direction_score as _direction_score
@@ -35,14 +36,67 @@ def _to_ivb(bbox_normalized: tuple[float, float, float, float]) -> tuple[int, in
 # Private user-prompt builders
 # ---------------------------------------------------------------------------
 
+def _field_segment_id(field: FormField, segments: list[Segment]) -> str | None:
+    """Return the segment id that contains the field's bbox center, or None."""
+    if not field.bbox or not segments:
+        return None
+    cx = field.bbox.x + field.bbox.width / 2.0
+    cy = field.bbox.y + field.bbox.height / 2.0
+    for seg in segments:
+        if seg.page != field.page:
+            continue
+        if (seg.bbox.x <= cx <= seg.bbox.x + seg.bbox.width
+                and seg.bbox.y <= cy <= seg.bbox.y + seg.bbox.height):
+            return seg.id
+    return None
+
+
+def _block_segment_id(block: TextBlock, segments: list[Segment]) -> str | None:
+    """Return the segment id that contains the text block's bbox center."""
+    if not segments:
+        return None
+    cx = block.bbox.x + block.bbox.width / 2.0
+    cy = block.bbox.y + block.bbox.height / 2.0
+    for seg in segments:
+        if seg.page != block.page:
+            continue
+        if (seg.bbox.x <= cx <= seg.bbox.x + seg.bbox.width
+                and seg.bbox.y <= cy <= seg.bbox.y + seg.bbox.height):
+            return seg.id
+    return None
+
+
+_CROSS_SEGMENT_PENALTY = 1.5
+
+
 def _build_map_user(
     fields: list[FormField],
     text_blocks: list[TextBlock],
     confirmed_annotations: list[Annotation],
     top_k: int,
     heuristic_maps: list | None = None,
+    segments: list[Segment] | None = None,
 ) -> str:
-    """Build the Map mode user prompt with spatial candidate data in IVB format."""
+    """Build the Map mode user prompt with spatial candidate data in IVB format.
+
+    When segments are available, fields are grouped by segment and
+    cross-segment candidates receive a scoring penalty.
+    """
+    segments = segments or []
+
+    # Pre-compute segment assignments
+    field_seg: dict[str, str | None] = {}
+    block_seg: dict[str, str | None] = {}
+    seg_title: dict[str, str | None] = {}
+
+    if segments:
+        for f in fields:
+            field_seg[f.id] = _field_segment_id(f, segments)
+        for b in text_blocks:
+            block_seg[b.id] = _block_segment_id(b, segments)
+        for s in segments:
+            seg_title[s.id] = s.title
+
     pages: dict[int, list[FormField]] = {}
     for f in fields:
         pages.setdefault(f.page, []).append(f)
@@ -56,36 +110,60 @@ def _build_map_user(
     for page_num in sorted(pages.keys()):
         lines.append(f"--- Page {page_num} ---")
         page_blocks = blocks_by_page.get(page_num, [])
+        page_fields = pages[page_num]
 
-        for field in pages[page_num]:
-            if field.bbox is None:
-                continue
-            fb = (field.bbox.x, field.bbox.y,
-                  field.bbox.width, field.bbox.height)
-            f_ivb = _to_ivb(fb)
-            lines.append(
-                f"{field.id} [{f_ivb[0]},{f_ivb[1]},{f_ivb[2]},{f_ivb[3]}] type={field.field_type.value}")
+        # Group fields by segment for display
+        if segments:
+            seg_groups: dict[str | None, list[FormField]] = {}
+            for f in page_fields:
+                sid = field_seg.get(f.id)
+                seg_groups.setdefault(sid, []).append(f)
+            ordered_groups = list(seg_groups.items())
+        else:
+            ordered_groups = [(None, page_fields)]
 
-            scored: list[tuple[float, str, TextBlock]] = []
-            for block in page_blocks:
-                bb = (block.bbox.x, block.bbox.y,
-                      block.bbox.width, block.bbox.height)
-                score, direction = _direction_score(fb, bb)
-                scored.append((score, direction, block))
+        for seg_id, group_fields in ordered_groups:
+            if seg_id and seg_title.get(seg_id):
+                lines.append(f'## Segment: "{seg_title[seg_id]}"')
 
-            scored.sort(key=lambda t: t[0])
-            top = scored[:top_k]
+            for field in group_fields:
+                if field.bbox is None:
+                    continue
+                fb = (field.bbox.x, field.bbox.y,
+                      field.bbox.width, field.bbox.height)
+                f_ivb = _to_ivb(fb)
+                lines.append(
+                    f"{field.id} [{f_ivb[0]},{f_ivb[1]},{f_ivb[2]},{f_ivb[3]}] type={field.field_type.value}")
 
-            if top:
-                parts = []
-                for score, direction, block in top:
-                    b_ivb = _to_ivb((block.bbox.x, block.bbox.y,
-                                    block.bbox.width, block.bbox.height))
-                    parts.append(
-                        f'"{block.text}"[{b_ivb[0]},{b_ivb[1]},{b_ivb[2]},{b_ivb[3]}] {direction}')
-                lines.append(f"  candidates: {' | '.join(parts)}")
-            else:
-                lines.append("  candidates: (none)")
+                f_seg_id = field_seg.get(field.id)
+
+                scored: list[tuple[float, str, TextBlock]] = []
+                for block in page_blocks:
+                    bb = (block.bbox.x, block.bbox.y,
+                          block.bbox.width, block.bbox.height)
+                    score, direction = _direction_score(fb, bb)
+
+                    # Penalise cross-segment candidates
+                    if segments and f_seg_id is not None:
+                        b_seg_id = block_seg.get(block.id)
+                        if b_seg_id is not None and b_seg_id != f_seg_id:
+                            score *= _CROSS_SEGMENT_PENALTY
+
+                    scored.append((score, direction, block))
+
+                scored.sort(key=lambda t: t[0])
+                top = scored[:top_k]
+
+                if top:
+                    parts = []
+                    for score, direction, block in top:
+                        b_ivb = _to_ivb((block.bbox.x, block.bbox.y,
+                                        block.bbox.width, block.bbox.height))
+                        parts.append(
+                            f'"{block.text}"[{b_ivb[0]},{b_ivb[1]},{b_ivb[2]},{b_ivb[3]}] {direction}')
+                    lines.append(f"  candidates: {' | '.join(parts)}")
+                else:
+                    lines.append("  candidates: (none)")
 
     if confirmed_annotations:
         lines.append(
@@ -204,7 +282,14 @@ Do not guess or fabricate values not present in the input."""
 
         lines.append("\nform_schema")
         index_to_field_id: list[str] = []
+        current_segment: str | None = object()  # sentinel: no segment header emitted yet
         for i, f in enumerate(ctx.fields):
+            # Emit segment header when segment changes
+            if f.segment_title != current_segment:
+                current_segment = f.segment_title
+                if current_segment:
+                    lines.append(f"## {current_segment}")
+
             parts = [str(i), f.label or "", f.semantic_key or ""]
             if f.type != "text" or f.options:
                 parts.append(f.type)
@@ -280,6 +365,11 @@ Return ONLY a JSON object. No markdown, no explanation, no code fences.
 - confidence: 0-100 integer (90-100: directly adjacent; 70-89: nearby; 50-69: inferred; 0-49: weak/no match)
 - field_type: (optional) only include when the field's current type is "text" or "unknown" AND you can confidently determine a more specific type from the label or semantic key. Valid values: text | checkbox | radio | select | date | number | name | address | signature. Omit this key entirely when the existing type is already reliable (checkbox, radio, select, date, signature).
 
+## Segments
+Fields may be grouped by visual segment (section). Prefer labels from the
+same segment as the field. Segment headings provide context about what the
+fields in that segment represent.
+
 ## Rules
 - Process ALL fields. For fields with no meaningful label nearby, return label=null and confidence=0.
 - For each field, return exactly one result.
@@ -291,6 +381,7 @@ Return ONLY a JSON object. No markdown, no explanation, no code fences.
             ctx.fields, ctx.text_blocks,
             ctx.confirmed_annotations, ctx.top_k,
             heuristic_maps=ctx.heuristic_maps,
+            segments=ctx.segments,
         )
         return Prompt(system=MapPrompt.SYSTEM, user=user)
 

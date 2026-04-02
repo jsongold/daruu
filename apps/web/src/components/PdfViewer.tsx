@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from "react"
-import type { FormField, TextBlock, Mode, BBox } from "../api/formClient"
+import type { FormField, TextBlock, Mode, BBox, Segment } from "../api/formClient"
 
 interface Props {
   imageUrl: string | null
   fields: FormField[]
   textBlocks: TextBlock[]
+  segments: Segment[]
   mode: Mode
   selectedLabelId: string | null
   selectedFieldId: string | null
@@ -32,6 +33,7 @@ export function PdfViewer({
   imageUrl,
   fields,
   textBlocks,
+  segments,
   mode,
   selectedLabelId,
   selectedFieldId,
@@ -69,6 +71,7 @@ export function PdfViewer({
 
   const currentPageFields = fields.filter((f) => f.page === page)
   const currentPageBlocks = textBlocks.filter((b) => b.page === page)
+  const currentPageSegments = segments.filter((s) => s.page === page)
 
   return (
     <div className="flex flex-col h-full">
@@ -216,6 +219,22 @@ export function PdfViewer({
                 />
               )
             })}
+
+          {/* Segment overlays */}
+          {resolvedUrl &&
+            currentPageSegments.map((seg) => (
+              <div
+                key={seg.id}
+                className="absolute border-2 border-dashed border-teal-500/70 bg-teal-50/10 pointer-events-none"
+                style={bboxStyle(seg.bbox)}
+              >
+                {seg.title && (
+                  <span className="absolute -top-5 left-0 text-[9px] bg-teal-100 text-teal-800 px-1.5 py-0.5 rounded-sm whitespace-nowrap max-w-[200px] truncate">
+                    {seg.title}
+                  </span>
+                )}
+              </div>
+            ))}
         </div>
       </div>
 

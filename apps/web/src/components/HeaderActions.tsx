@@ -6,8 +6,10 @@ interface Props {
   isAsking: boolean
   isMapping: boolean
   isUnderstanding: boolean
+  isSegmenting: boolean
   error: string | null
   onUnderstand: () => void
+  onSegment: () => void
   onMap: () => void
   onAsk: () => void
   onFill: () => void
@@ -22,9 +24,9 @@ function Spinner() {
 
 export function HeaderActions({
   formId, conversationId,
-  isLoading, isFilling, isAsking, isMapping, isUnderstanding,
+  isLoading, isFilling, isAsking, isMapping, isUnderstanding, isSegmenting,
   error,
-  onUnderstand, onMap, onAsk, onFill, onUploadClick,
+  onUnderstand, onSegment, onMap, onAsk, onFill, onUploadClick,
 }: Props) {
   const busy = isLoading || isFilling
 
@@ -50,6 +52,14 @@ export function HeaderActions({
       >
         {isMapping && <Spinner />}
         {isMapping ? "Mapping..." : "Map"}
+      </button>
+      <button
+        onClick={onSegment}
+        disabled={isSegmenting || busy || !formId}
+        className="px-3 py-1.5 text-xs bg-teal-600 text-white rounded hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+      >
+        {isSegmenting && <Spinner />}
+        {isSegmenting ? "Segmenting..." : "Segment"}
       </button>
       <button
         onClick={onAsk}
