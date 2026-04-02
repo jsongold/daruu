@@ -29,6 +29,7 @@ from app.models import (
     Form,
     FormField,
     FormRules,
+    GeneralRules,
     FormSchema,
     FormSchemaField,
     HistoryMessage,
@@ -656,6 +657,7 @@ class UnderstandService:
     def __init__(self) -> None:
         self._conversation_service = ConversationService()
         self._form_service = FormService()
+        self._general_rules_service = GeneralRulesService()
 
     def understand(self, conversation_id: str) -> None:
         """Run LLM analysis on the form and persist extracted rules to the conversation."""
@@ -669,8 +671,11 @@ class UnderstandService:
         if not ctx.form_id:
             raise ValueError("Conversation has no associated form")
 
+        # Fetch all general rules (country/category resolution TBD)
+        general_rule_items = self._general_rules_service.resolve_all()
+
         fields, text_blocks = self._form_service.get_fields_and_text_blocks(ctx.form_id)
-        rules_ctx = RulesContext(fields=fields, text_blocks=text_blocks)
+        rules_ctx = RulesContext(fields=fields, text_blocks=text_blocks, general_rules=general_rule_items)
         prompt = RulesPrompt.build(rules_ctx)
 
         from openai import OpenAI
@@ -977,6 +982,7 @@ class MapService:
                 semantic_key=item.get("semantic_key"),
                 confidence=int(item.get("confidence", 0)),
                 source="auto",
+                inferred_field_type=item.get("field_type") or None,
                 created_at=now,
             ))
 
@@ -1227,6 +1233,137 @@ class MessageService:
             except Exception as e:
                 logger.warning("Failed to parse message row %s: %s", row.get("id"), e)
         return messages
+
+
+class GeneralRulesService:
+    """Manages the general_rules table (reusable rules by country/category)."""
+
+    def _parse_rules(self, raw: list) -> list[RuleItem]:
+        items: list[RuleItem] = []
+        for r in raw:
+            try:
+                items.append(RuleItem(
+                    type=RuleType(r.get("type", "format")),
+                    rule_text=str(r.get("rule_text", "")),
+                    field_ids=[str(fid) for fid in r.get("field_ids", [])],
+                    question=r.get("question"),
+                    options=[str(o) for o in r.get("options", [])],
+                ))
+            except Exception as e:
+                logger.warning("Failed to parse general_rules rule: %s", e)
+        return items
+
+    def _row_to_model(self, row: dict) -> GeneralRules:
+        return GeneralRules(
+            id=row["id"],
+            country=row.get("country", "GLOBAL"),
+            category=row.get("category", "GLOBAL"),
+            rules=self._parse_rules(row.get("rules", [])),
+            created_at=datetime.fromisoformat(row["created_at"]) if row.get("created_at") else None,
+            updated_at=datetime.fromisoformat(row["updated_at"]) if row.get("updated_at") else None,
+        )
+
+    def upsert(
+        self,
+        country: str,
+        category: str,
+        rule_items: list[RuleItem],
+    ) -> GeneralRules:
+        """Create or update general rules for a scope."""
+        supabase = get_supabase_client()
+        rules_json = [r.model_dump() for r in rule_items]
+        now = datetime.now(timezone.utc).isoformat()
+
+        existing = self.get(country, category)
+        if existing:
+            supabase.table("general_rules").update({
+                "rules": rules_json,
+                "updated_at": now,
+            }).eq("id", existing.id).execute()
+            return GeneralRules(
+                id=existing.id,
+                country=country,
+                category=category,
+                rules=rule_items,
+            )
+
+        row_id = str(uuid4())
+        supabase.table("general_rules").insert({
+            "id": row_id,
+            "country": country,
+            "category": category,
+            "rules": rules_json,
+            "created_at": now,
+            "updated_at": now,
+        }).execute()
+        return GeneralRules(
+            id=row_id,
+            country=country,
+            category=category,
+            rules=rule_items,
+        )
+
+    def get(self, country: str, category: str) -> GeneralRules | None:
+        """Read general rules for a specific scope."""
+        supabase = get_supabase_client()
+        result = (
+            supabase.table("general_rules")
+            .select("*")
+            .eq("country", country)
+            .eq("category", category)
+            .execute()
+        )
+        rows = result.data if hasattr(result, "data") else []
+        if not rows:
+            return None
+        return self._row_to_model(rows[0])
+
+    def resolve(self, country: str, category: str) -> list[RuleItem]:
+        """Resolve general rules for a scope with fallback chain.
+
+        Returns merged rules from most general to most specific:
+        GLOBAL/GLOBAL -> country/GLOBAL -> country/category
+        """
+        scopes = [("GLOBAL", "GLOBAL")]
+        if country != "GLOBAL":
+            scopes.append((country, "GLOBAL"))
+        if country != "GLOBAL" and category != "GLOBAL":
+            scopes.append((country, category))
+
+        merged: list[RuleItem] = []
+        for c, cat in scopes:
+            gr = self.get(c, cat)
+            if gr:
+                merged.extend(gr.rules)
+        return merged
+
+    def resolve_all(self) -> list[RuleItem]:
+        """Return all general rules merged (used when country/category is unknown)."""
+        all_rows = self.list_all()
+        merged: list[RuleItem] = []
+        for row in all_rows:
+            merged.extend(row.rules)
+        return merged
+
+    def list_all(self) -> list[GeneralRules]:
+        """List all general rules rows."""
+        supabase = get_supabase_client()
+        result = supabase.table("general_rules").select("*").order("country").execute()
+        rows = result.data if hasattr(result, "data") else []
+        return [self._row_to_model(row) for row in rows]
+
+    def delete(self, country: str, category: str) -> bool:
+        """Delete general rules for a specific scope."""
+        supabase = get_supabase_client()
+        result = (
+            supabase.table("general_rules")
+            .delete()
+            .eq("country", country)
+            .eq("category", category)
+            .execute()
+        )
+        rows = result.data if hasattr(result, "data") else []
+        return len(rows) > 0
 
 
 class FormRulesService:
@@ -1500,6 +1637,10 @@ class FormSchemaService:
                     updates["label_text"] = m.label_text or existing.label_text
                     updates["label_source"] = source
 
+                # Apply LLM-inferred field_type only when current type is ambiguous
+                if m.inferred_field_type and existing.field_type in ("text", "unknown"):
+                    updates["field_type"] = m.inferred_field_type
+
                 existing_by_id[m.field_id] = FormSchemaField(
                     **{**existing.model_dump(), **updates}
                 )
@@ -1609,10 +1750,14 @@ class FillService:
         self._mapping_service = MappingService()
         self._map_service = MapService()
         self._context_service = ContextService()
+        self._general_rules_service = GeneralRulesService()
 
     def _build_context(self, ctx: ContextWindow, ask_answers: dict[str, str] | None = None):
         """Gather all data and delegate to ContextService."""
         form_id = ctx.form_id or ""
+
+        # Resolve all general rules (country/category resolution TBD)
+        general_rule_items = self._general_rules_service.resolve_all()
 
         # Read from global form_schema (single source of truth)
         schema_service = FormSchemaService()
@@ -1624,6 +1769,7 @@ class FillService:
                 user_info=ctx.user_info.data,
                 rules=list(ctx.rules.items),
                 ask_answers=ask_answers,
+                general_rules=general_rule_items,
             )
 
         # Fallback: no form_schema yet, use legacy path

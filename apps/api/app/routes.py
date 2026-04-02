@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from app.models import (
     Annotation,
+    GeneralRules,
     Message,
     ContextWindow,
     CreateAnnotationRequest,
@@ -20,10 +21,13 @@ from app.models import (
     MapResult,
     MapRun,
     RuleItem,
+    Segment,
+    SegmentationResponse,
     UploadFormResponse,
 )
 from app.services import (
     AnnotationService,
+    GeneralRulesService,
     MessageService,
     FormSchemaService,
     FormService,
@@ -45,6 +49,7 @@ fill_service = FillService()
 understand_service = UnderstandService()
 message_service = MessageService()
 form_schema_service = FormSchemaService()
+general_rules_service = GeneralRulesService()
 
 
 class UpdateFieldValueRequest(BaseModel):
@@ -97,6 +102,29 @@ async def get_form_fields(form_id: str) -> FieldsResponse:
         logger.error("Failed to extract fields for form %s: %s", form_id, e)
         raise HTTPException(status_code=500, detail=str(e)) from e
     return FieldsResponse(form_id=form_id, fields=fields, text_blocks=text_blocks, page_count=page_count)
+
+
+@router.post("/forms/{form_id}/segmentation", response_model=SegmentationResponse)
+async def run_segmentation(
+    form_id: str,
+    method: str = Query("fitz", regex="^(fitz|docling)$"),
+) -> SegmentationResponse:
+    """Extract visual segments from a PDF form."""
+    try:
+        fields, text_blocks = doc_service.get_fields_and_text_blocks(form_id)
+        pdf_path = str(doc_service._get_file_path(form_id))
+        if method == "docling":
+            from app.segmentation_docling import extract_segments_docling
+            segments = extract_segments_docling(pdf_path, fields, text_blocks)
+        else:
+            from app.segmentation_fitz import extract_segments_fitz
+            segments = extract_segments_fitz(pdf_path, fields, text_blocks)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        logger.error("Segmentation failed for form %s: %s", form_id, e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    return SegmentationResponse(form_id=form_id, method=method, segments=segments)
 
 
 @router.post("/conversations", response_model=ContextWindow)
@@ -356,3 +384,42 @@ async def ask(req: FillRequest) -> dict:
     except Exception as e:
         logger.error("Ask error for conversation %s: %s", req.conversation_id, e)
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# ── General Rules ────────────────────────────────────────────────────
+
+
+class UpsertGeneralRulesRequest(BaseModel):
+    country: str = "GLOBAL"
+    category: str = "GLOBAL"
+    items: list[RuleItem]
+
+
+@router.get("/general-rules")
+async def list_general_rules() -> list[GeneralRules]:
+    """List all general rules."""
+    return general_rules_service.list_all()
+
+
+@router.get("/general-rules/{country}/{category}")
+async def get_general_rules(country: str, category: str) -> GeneralRules:
+    """Get general rules for a specific scope."""
+    result = general_rules_service.get(country, category)
+    if not result:
+        raise HTTPException(status_code=404, detail=f"No general rules for {country}/{category}")
+    return result
+
+
+@router.put("/general-rules")
+async def upsert_general_rules(req: UpsertGeneralRulesRequest) -> GeneralRules:
+    """Create or update general rules for a scope."""
+    return general_rules_service.upsert(req.country, req.category, req.items)
+
+
+@router.delete("/general-rules/{country}/{category}")
+async def delete_general_rules(country: str, category: str) -> dict:
+    """Delete general rules for a specific scope."""
+    deleted = general_rules_service.delete(country, category)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"No general rules for {country}/{category}")
+    return {"deleted": True}
